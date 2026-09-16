@@ -10,7 +10,6 @@ export async function registerPwa(){
  if(!('serviceWorker' in navigator)||!import.meta.env.PROD)return;
  try{
   const registration=await navigator.serviceWorker.register('/sw.js');
-  // The new worker replaces the original site's root worker, which cached the old lock screen.
   registration.addEventListener('updatefound',()=>{const worker=registration.installing;worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller){const el=dialog('A new version is ready.','<p>Save your work, then reload to use the latest version.</p><button class="primary" id="reload-app">Reload app</button>');el.querySelector('#reload-app')!.addEventListener('click',()=>location.reload());}});});
  }catch{ /* The app remains usable when installation is unavailable. */ }
 }
