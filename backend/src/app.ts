@@ -14,7 +14,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   const app=express();
   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
   app.use(helmet());
-  app.use(cors({origin(origin,cb){ cb(origin && !config.origins.includes(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type']}));
+  app.use(cors());
   app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));
   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
