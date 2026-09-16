@@ -4,7 +4,7 @@
 begin;
 do $$
 declare
- ivan_email text := 'REPLACE_IVAN_EMAIL';
+ ivan_email text := 'ivanlloydr15@gmail.com';
  loraine_email text := 'REPLACE_LORAINE_EMAIL';
  ivan_id uuid;
  loraine_id uuid;
