@@ -1,0 +1,170 @@
+:root {
+    --background-color: #1d1e20;
+      --text-color: #e0e0e0;
+        --accent-color: #ff6b6b;
+          --secondary-bg: #252525;
+            --background-opacity: 0.9;
+            }
+
+            .theme-dark {
+              background-color: var(--background-color);
+                color: var(--text-color);
+                }
+
+                .chat-container {
+                  max-width: 1200px;
+                    margin: 0 auto;
+                      height: 100vh;
+                        display: flex;
+                          flex-direction: column;
+                            background: rgba(29, 30, 32, var(--background-opacity));
+                              border-radius: 10px;
+                                overflow: hidden;
+                                  box-shadow: 0 0 20px rgba(29, 30, 32, 0.5);
+                                  }
+
+                                  .chat-header {
+                                    padding: 15px;
+                                      background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+                                        display: flex;
+                                          justify-content: space-between;
+                                            align-items: center;
+                                              border-bottom: 1px solid var(--accent-color);
+                                              }
+
+                                              .chat-messages {
+                                                flex: 1;
+                                                  padding: 20px;
+                                                    overflow-y: auto;
+                                                      scrollbar-width: thin;
+                                                        scrollbar-color: var(--accent-color) #333;
+                                                        }
+
+                                                        .chat-messages::-webkit-scrollbar {
+                                                          width: 8px;
+                                                          }
+
+                                                          .chat-messages::-webkit-scrollbar-thumb {
+                                                            background: var(--accent-color);
+                                                              border-radius: 4px;
+                                                              }
+
+                                                              .message {
+                                                                margin: 10px 0;
+                                                                  padding: 10px 15px;
+                                                                    border-radius: 8px;
+                                                                      max-width: 70%;
+                                                                        animation: fadeIn 0.3s ease-in;
+                                                                        }
+
+                                                                        .message.user {
+                                                                          background: var(--accent-color);
+                                                                            margin-left: auto;
+                                                                              color: #fff;
+                                                                              }
+
+                                                                              .message.bot {
+                                                                                background: var(--secondary-bg);
+                                                                                  margin-right: auto;
+                                                                                  }
+
+                                                                                  .chat-input-section {
+                                                                                    padding: 15px;
+                                                                                      background: var(--secondary-bg);
+                                                                                        border-top: 1px solid var(--accent-color);
+                                                                                        }
+
+                                                                                        .chat-input {
+                                                                                          width: 100%;
+                                                                                            padding: 10px;
+                                                                                              border: 1px solid var(--accent-color);
+                                                                                                border-radius: 5px;
+                                                                                                  background: #333;
+                                                                                                    color: var(--text-color);
+                                                                                                      resize: none;
+                                                                                                        font-family: 'Roboto', sans-serif;
+                                                                                                        }
+
+                                                                                                        .chat-input:focus {
+                                                                                                          outline: none;
+                                                                                                            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+                                                                                                            }
+
+                                                                                                            .send-btn {
+                                                                                                              padding: 10px 20px;
+                                                                                                                background: var(--accent-color);
+                                                                                                                  border: none;
+                                                                                                                    border-radius: 5px;
+                                                                                                                      color: #fff;
+                                                                                                                        cursor: pointer;
+                                                                                                                          transition: transform 0.2s, box-shadow 0.2s;
+                                                                                                                          }
+
+                                                                                                                          .send-btn:hover {
+                                                                                                                            transform: scale(1.05);
+                                                                                                                              box-shadow: 0 0 15px rgba(255, 107, 107, 0.5);
+                                                                                                                              }
+
+                                                                                                                              .suggestions {
+                                                                                                                                display: flex;
+                                                                                                                                  gap: 10px;
+                                                                                                                                    margin-top: 10px;
+                                                                                                                                      flex-wrap: wrap;
+                                                                                                                                      }
+
+                                                                                                                                      .suggestion-btn {
+                                                                                                                                        padding: 8px 12px;
+                                                                                                                                          background: rgba(255, 107, 107, 0.2);
+                                                                                                                                            border: 1px solid var(--accent-color);
+                                                                                                                                              border-radius: 5px;
+                                                                                                                                                color: var(--text-color);
+                                                                                                                                                  cursor: pointer;
+                                                                                                                                                    transition: background 0.2s;
+                                                                                                                                                    }
+
+                                                                                                                                                    .suggestion-btn:hover {
+                                                                                                                                                      background: rgba(255, 107, 107, 0.4);
+                                                                                                                                                      }
+
+                                                                                                                                                      @keyframes fadeIn {
+                                                                                                                                                        from { opacity: 0; transform: translateY(10px); }
+                                                                                                                                                          to { opacity: 1; transform: translateY(0); }
+                                                                                                                                                          }
+
+                                                                                                                                                          @media (max-width: 768px) {
+                                                                                                                                                            .chat-container {
+                                                                                                                                                                border-radius: 0;
+                                                                                                                                                                    height: 100vh;
+                                                                                                                                                                      }
+
+                                                                                                                                                                        .chat-header {
+                                                                                                                                                                            padding: 10px;
+                                                                                                                                                                              }
+
+                                                                                                                                                                                .chat-messages {
+                                                                                                                                                                                    padding: 10px;
+                                                                                                                                                                                      }
+
+                                                                                                                                                                                        .message {
+                                                                                                                                                                                            max-width: 85%;
+                                                                                                                                                                                              }
+
+                                                                                                                                                                                                .chat-input {
+                                                                                                                                                                                                    padding: 8px;
+                                                                                                                                                                                                        font-size: 14px;
+                                                                                                                                                                                                          }
+
+                                                                                                                                                                                                            .send-btn {
+                                                                                                                                                                                                                padding: 8px 15px;
+                                                                                                                                                                                                                  }
+
+                                                                                                                                                                                                                    .suggestions {
+                                                                                                                                                                                                                        gap: 5px;
+                                                                                                                                                                                                                          }
+
+                                                                                                                                                                                                                            .suggestion-btn {
+                                                                                                                                                                                                                                padding: 6px 10px;
+                                                                                                                                                                                                                                    font-size: 12px;
+                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                      }
+}
