@@ -1,4 +1,4 @@
-# Ivraine — Our Little Scrapbook, v2
+# Ivraine — Our Little Space, v2
 
 A private, mobile-first scrapbook for Ivan & Loraine. Official date: September 2, 2026.
 
