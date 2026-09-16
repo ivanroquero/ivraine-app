@@ -1,0 +1,1393 @@
+diff --git a/PUSH-SETUP.md b/PUSH-SETUP.md
+new file mode 100644
+--- /dev/null
++++ b/PUSH-SETUP.md
+@@ -0,0 +1,126 @@
++# Ivraine push + 3D heart update
++
++This update was prepared against the exact source of the previous Ivraine ZIP. The connected GitHub account returned **404** for `ivanroquero/ivraine`; the current GitHub files and live deployment settings could not be read or changed. Apply the patch only if it matches your checkout. It deliberately fails instead of overwriting unrelated changes.
++
++## Apply the code
++
++Extract the update bundle **outside your repository**. From your Ivraine repository root:
++
++```bash
++git apply --check ../ivraine-push-update/ivraine-push.patch
++git apply ../ivraine-push-update/ivraine-push.patch
++npm ci
++npm run typecheck
++npm test
++npm run build
++git add .
++git commit -m "Add durable Web Push and 3D miss-you hearts"
++git push origin main
++```
++
++Adjust only the path to the extracted `.patch` file. If `git apply --check` reports conflicts, do not force it. Your repository differs from the original package; use the patch's file paths and exact changed blocks to merge those edits. `CHANGES.md` lists the files and anchors. No full replacement of your current app is required.
++
++## Fix the post-login Failed to fetch error
++
++Supabase sign-in happens directly against Supabase. After sign-in, `/api/book` and `/api/entries` are requested from Railway. Success at the first step does not verify the second service.
++
++**Vercel → Environment Variables** — replace `VITE_API_URL` with the actual public HTTPS domain of the Railway API, then redeploy:
++
++```dotenv
++VITE_API_URL=https://YOUR_ACTUAL_RAILWAY_DOMAIN
++```
++
++**Railway → Variables** — replace `FRONTEND_ORIGINS` with the exact Vercel/custom origin you open in your browser, then redeploy:
++
++```dotenv
++FRONTEND_ORIGINS=https://YOUR_ACTUAL_VERCEL_DOMAIN
++TRUST_PROXY_HOPS=1
++NODE_ENV=production
++```
++
++Multiple trusted origins are comma-separated. Never use `*` or allow all Vercel projects. The API now normalizes trailing slashes and preflight origins. The client normalizes an accidental `/api/` suffix, rejects localhost from a published app, rejects HTTPS→HTTP mixed content, detects an HTML response from a wrong destination, and gives specific network/configuration errors.
++
++Open `https://YOUR_ACTUAL_RAILWAY_DOMAIN/health`; it must return JSON with `status: ok`. If that address is down, fix the Railway deployment/startup logs before trying login again. This patch cannot make an undeployed or unreachable Railway service reachable. The exact cause in your deployment is not confirmed because its configuration was unavailable.
++
++Keep the existing Supabase URL and publishable-key settings in both services. Do not replace them with the database connection string or private VAPID key.
++
++## Database setup for hearts and push
++
++Run this file once in the **same Supabase project's SQL Editor** after your existing `database/setup.sql`:
++
++`supabase/migrations/20260916205359_push_notifications.sql`
++
++It creates `ivraine_private.push_subscriptions`, `heart_events`, and `push_deliveries`, with RLS and no client grants. The private schema is not exposed through the Supabase Data API. The API still verifies the bearer token and book membership before using the server-only PostgreSQL connection. This is a deliberately privileged backend connection; never put it in a browser variable.
++
++The PostgreSQL database should have exactly two `ivraine_members` rows for the scrapbook. The heart endpoint rejects other group sizes rather than guessing whom to notify.
++
++## Railway secrets for push
++
++Generate one VAPID pair on your own machine, once, from the repository root:
++
++```bash
++npm run push:keys -w backend
++```
++
++Save its public and private values securely. Do not regenerate them on each deploy; rotation requires devices to re-enable notifications.
++
++Add these **Railway server variables**:
++
++```dotenv
++PUSH_DATABASE_URL=YOUR_SUPABASE_POSTGRES_SESSION_POOLER_CONNECTION_STRING
++VAPID_PUBLIC_KEY=YOUR_GENERATED_PUBLIC_KEY
++VAPID_PRIVATE_KEY=YOUR_GENERATED_PRIVATE_KEY
++VAPID_SUBJECT=mailto:YOUR_REAL_CONTACT_EMAIL
++```
++
++For `PUSH_DATABASE_URL`, open Supabase **Connect → Session pooler** and copy the complete connection string. Replace its password placeholder with the percent-encoded database password. Use the provided host and username, not a guessed hostname. Session pooling works on IPv4-only networks. Use the database from this scrapbook's Supabase project, not a separate Railway database.
++
++The connection verifies TLS certificates. If your project's certificate chain needs its CA, add `PUSH_DATABASE_CA` containing the PEM certificate from Supabase; literal `\n` line breaks are supported. Never disable certificate validation.
++
++Keep `VAPID_PRIVATE_KEY`, `PUSH_DATABASE_URL`, and `PUSH_DATABASE_CA` off Vercel's frontend variables and out of Git. No `VITE_VAPID_*` value is needed: the authenticated API returns the public key.
++
++Redeploy Railway, with app sleeping/serverless suspension **disabled** so the persistent worker can drain its queue. The normal API Dockerfile and start command are unchanged. Existing API behavior works when these optional push variables are omitted; heart sharing requires the database variable, and Web Push requires all three VAPID variables as well.
++
++## Enable each device
++
++1. Sign in as Ivan on Ivan's device and Loraine on Loraine's device.
++2. Open **Our story** and tap **Enable notifications** on each device.
++3. Accept the browser/OS permission prompt. Permission is only requested from a button tap.
++4. Tap the 3D **I miss you** button. A heart is saved for the other member, with one send per minute.
++5. Close the recipient's app and send another heart after the cooldown to verify background push delivery on that device.
++
++The enable/disable controls apply to the current account/device. **Remove all my devices** revokes every subscription belonging to that account. Subscriptions remain registered when the user locks the scrapbook so hearts can still arrive; use the notification controls to stop them. Lock-screen notification text is generic and opening it still requires app authentication. When switching accounts on a shared browser, enabling notifications renews the browser subscription so it cannot be reassigned to the other account silently.
++
++## Browser support and truthful delivery states
++
++- Android/Desktop browsers that expose the standard Push, Notifications, and Service Worker APIs can enroll; HTTPS and permission are required.
++- iPhone/iPad: iOS/iPadOS **16.4+**, install to the Home Screen and open the installed app before enabling push.
++- Embedded social browsers, private-browsing restrictions, permission denial, unsupported versions, OS battery/Focus settings, and offline devices can prevent or delay push. The app explains unsupported/blocked states and continues to save hearts in-app.
++- Supported destination services are Google's FCM, Mozilla Push, Apple's Web Push, and Windows notification endpoints. Custom browser push providers need an explicitly reviewed allowlist update.
++- The app polls in-app hearts every 15 seconds while visible and refreshes immediately on a service-worker message.
++- A heart is **saved** before push delivery is queued. A provider accepting a request is **not proof of device display or human reading**. The UI uses “queued” and “push service accepted,” never “your partner saw it.”
++- The worker retries transient failures up to five attempts with increasing delays. Jobs expire after one hour. It removes 404/410 expired subscriptions and checks both memberships before delivery.
++- A persisted request ID prevents duplicate hearts when the same send is retried after a lost response. Leased jobs recover after a Railway restart. Push systems can still deliver at least once; the notification tag reduces duplicate display for the same heart.
++- There is no scheduling, email, SMS, location tracking, or notification broadcasting. This update specifically provides the requested miss-you heart notification.
++
++## Verification
++
++```bash
++npm run typecheck
++npm test
++npm run build
++npx playwright install chromium
++npm run test:push-browser
++git add .
++git commit -m "Verify Ivraine push notifications and connection configuration"
++git push origin main
++```
++
++The automated tests use the real API and PostgreSQL/RLS in a local fixture, with test authentication and simulated push transport. Browser enrollment is simulated in the browser test; no real partner received any test notification. VAPID/encrypted request generation and service-worker handlers are checked separately. Physical iPhone/Android delivery and live Railway/Supabase deployment must be tested after configuring your actual values.
++
++## Sources
++
++- [Apple/WebKit: Web Push for Home Screen web apps](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)
++- [MDN: PushManager.subscribe](https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe)
++- [Supabase: database connections and session pooling](https://supabase.com/docs/guides/database/connecting-to-postgres)
++- [web-push: VAPID and encrypted push requests](https://github.com/web-push-libs/web-push)
+diff --git a/backend/.env.example b/backend/.env.example
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -9,4 +9,15 @@
+ # Railway: set TRUST_PROXY_HOPS=1 behind its edge proxy; let Railway provide PORT.
+ NODE_ENV=development
+ # Railway: NODE_ENV=production
+-# No service-role secret and no DATABASE_URL are needed by this API.
++# Core scrapbook operations need no service-role secret. Optional push uses PUSH_DATABASE_URL below.
++
++# OPTIONAL: enable saved hearts and reliable push delivery (Railway secrets only).
++# Copy the session-pooler URL from Supabase Connect; percent-encode password characters.
++# PUSH_DATABASE_URL=postgresql://postgres.YOUR_REF:YOUR_ENCODED_PASSWORD@YOUR_POOLER_HOST:5432/postgres
++# Supply your database CA certificate as PEM if the TLS chain needs it. Never disable TLS checks.
++# PUSH_DATABASE_CA=-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----
++# Generate one pair once with: npm run push:keys -w backend
++# VAPID_PUBLIC_KEY=YOUR_GENERATED_PUBLIC_KEY
++# VAPID_PRIVATE_KEY=YOUR_GENERATED_PRIVATE_KEY
++# VAPID_SUBJECT=mailto:YOUR_REAL_CONTACT_EMAIL
++# To leave push disabled, OMIT all of these variables instead of using placeholders.
+diff --git a/backend/package.json b/backend/package.json
+--- a/backend/package.json
++++ b/backend/package.json
+@@ -1 +1,22 @@
+-{"name":"@ivraine/api","version":"2.0.0","private":true,"type":"module","scripts":{"dev":"tsx watch --env-file=.env src/server.ts","build":"tsc","start":"node dist/server.js"},"dependencies":{"@supabase/supabase-js":"2.116.0","cors":"2.8.6","express":"5.2.1","express-rate-limit":"8.7.0","helmet":"8.3.0","zod":"4.6.5"}}
+\ No newline at end of file
++{
++  "name": "@ivraine/api",
++  "version": "2.0.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "tsx watch --env-file=.env src/server.ts",
++    "build": "tsc",
++    "start": "node dist/server.js",
++    "push:keys": "web-push generate-vapid-keys --json"
++  },
++  "dependencies": {
++    "@supabase/supabase-js": "2.116.0",
++    "cors": "2.8.6",
++    "express": "5.2.1",
++    "express-rate-limit": "8.7.0",
++    "helmet": "8.3.0",
++    "pg": "8.23.0",
++    "web-push": "3.6.7",
++    "zod": "4.6.5"
++  }
++}
+diff --git a/backend/src/app.ts b/backend/src/app.ts
+--- a/backend/src/app.ts
++++ b/backend/src/app.ts
+@@ -5,8 +5,10 @@
+ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+ import { z } from 'zod';
+ import { randomUUID } from 'node:crypto';
++import { pushRouter, type PushServices } from './push/routes.js';
++import { PushError } from './push/store.js';
+ import { entrySchema, patchSchema, idSchema, imageExtension } from './validation.js';
+-export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; }
++export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; push?:PushServices; }
+ export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
+ const bucket = 'ivraine-photos';
+ function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'The scrapbook service could not complete this request. Please retry.'); return r.data; }
+@@ -14,7 +16,8 @@
+   const app=express();
+   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
+   app.use(helmet());
+-  app.use(cors({origin(origin,cb){ cb(origin && !config.origins.includes(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type']}));
++  const allowedOrigins=new Set(config.origins.map(origin=>new URL(origin.trim()).origin));
++  app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
+   app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
+   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));
+   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
+@@ -29,6 +32,7 @@
+     res.locals.db=db;res.locals.userId=data.user.id;res.locals.member=membership;next();
+   });
+   app.use(express.json({limit:'64kb'}));
++  app.use('/api/notifications',pushRouter(config.push??{store:null,publicKey:null,keyId:null}));
+   app.get('/api/book',async(_req,res)=>{
+     const db=res.locals.db as SupabaseClient;
+     const book=result(await db.from('ivraine_books').select('*').eq('id',res.locals.member.book_id).single());
+@@ -82,6 +86,7 @@
+   });
+   app.use((_req,_res,next)=>next(new HttpError(404,'Endpoint not found.')));
+   const handler:ErrorRequestHandler=(err,_req,res,_next)=>{
++    if(err instanceof PushError){if(err.retryAfter)res.set('Retry-After',String(err.retryAfter));res.status(err.status).json({error:err.message});return;}
+     if(err instanceof z.ZodError){res.status(400).json({error:'Check your input.',details:err.issues.map(i=>`${i.path.join('.')}: ${i.message}`)});return;}
+     const status=err instanceof HttpError?err.status:err.type==='entity.too.large'?413:err.type==='entity.parse.failed'?400:500;
+     if(status===500) console.error('request_failed',err instanceof Error?err.name:'Unknown');
+diff --git a/backend/src/push/routes.ts b/backend/src/push/routes.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/routes.ts
+@@ -0,0 +1,36 @@
++import { Router } from 'express';
++import { z } from 'zod';
++import { PushStore, PushError } from './store.js';
++import { heartSchema, subscriptionSchema } from './validation.js';
++export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;}
++export function pushRouter(services:PushServices){
++ const router=Router();
++ router.get('/state',async(_req,res)=>{
++  if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0});return;}
++  const state=await services.store.state(res.locals.userId,res.locals.member.book_id);
++  res.json({enabled:true,pushEnabled:!!services.publicKey,publicKey:services.publicKey,...state});
++ });
++ router.post('/subscriptions',async(req,res)=>{
++  if(!services.store||!services.publicKey||!services.keyId)throw new PushError(503,'Push notifications need server setup.');
++  const sub=subscriptionSchema.parse(req.body);
++  await services.store.subscribe(res.locals.userId,res.locals.member.book_id,sub,services.keyId);
++  res.status(201).json({subscribed:true});
++ });
++ router.post('/subscriptions/check',async(req,res)=>{const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);res.json({active:services.store?await services.store.subscriptionActive(res.locals.userId,endpoint,services.keyId):false});});
++ router.delete('/subscriptions',async(req,res)=>{
++  if(!services.store)throw new PushError(503,'Notification storage is not configured.');
++  const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);
++  await services.store.unsubscribe(res.locals.userId,endpoint);res.json({subscribed:false});
++ });
++ router.delete('/devices',async(_req,res)=>{
++  if(!services.store)throw new PushError(503,'Notification storage is not configured.');
++  await services.store.unsubscribeAll(res.locals.userId);res.json({subscribed:false});
++ });
++ router.post('/hearts',async(req,res)=>{
++  if(!services.store)throw new PushError(503,'Heart sharing needs the notification database setup.');
++  const {requestId}=heartSchema.parse(req.body);
++  const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId);
++  res.status(saved.duplicate?200:201).json({saved:true,...saved});
++ });
++ return router;
++}
+diff --git a/backend/src/push/runtime.ts b/backend/src/push/runtime.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/runtime.ts
+@@ -0,0 +1,28 @@
++import { Pool } from 'pg';
++import webpush from 'web-push';
++import { createHash } from 'node:crypto';
++import { PushStore } from './store.js';
++import { startPushWorker } from './worker.js';
++import type { PushServices } from './routes.js';
++export function createPushRuntime(env:NodeJS.ProcessEnv):{services:PushServices;stop:()=>Promise<void>}{
++ const services:PushServices={store:null,publicKey:null,keyId:null};
++ if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{}};
++ const database=new URL(env.PUSH_DATABASE_URL);
++ if(!['postgres:','postgresql:'].includes(database.protocol))throw new Error('PUSH_DATABASE_URL must be a PostgreSQL connection string.');
++ // Enforce verified TLS rather than allowing URL flags to disable certificate validation.
++ for(const name of ['sslmode','sslcert','sslkey','sslrootcert'])database.searchParams.delete(name);
++ const pool=new Pool({connectionString:database.toString(),max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,statement_timeout:15000,ssl:{rejectUnauthorized:true,...(env.PUSH_DATABASE_CA?{ca:env.PUSH_DATABASE_CA.replace(/\\n/g,'\n')}:{})}});
++ pool.on('error',()=>console.error('push_database_connection_error'));
++ services.store=new PushStore(pool);
++ let stopWorker=async()=>{};
++ const configured=[env.VAPID_PUBLIC_KEY,env.VAPID_PRIVATE_KEY,env.VAPID_SUBJECT].filter(Boolean).length;
++ if(configured>0&&configured<3)throw new Error('Set all three VAPID variables together.');
++ if(configured===3){
++  if(!/^(mailto:|https:\/\/)/.test(env.VAPID_SUBJECT!))throw new Error('VAPID_SUBJECT must be a contact mailto: or HTTPS URL.');
++  webpush.setVapidDetails(env.VAPID_SUBJECT!,env.VAPID_PUBLIC_KEY!,env.VAPID_PRIVATE_KEY!);
++  services.publicKey=env.VAPID_PUBLIC_KEY!;
++  services.keyId=createHash('sha256').update(services.publicKey).digest('hex');
++  stopWorker=startPushWorker(services.store,(subscription,payload)=>webpush.sendNotification(subscription,payload,{TTL:3600,urgency:'normal',timeout:10000}),services.keyId);
++ }
++ return {services,stop:async()=>{await stopWorker();await pool.end();}};
++}
+diff --git a/backend/src/push/store.ts b/backend/src/push/store.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/store.ts
+@@ -0,0 +1,74 @@
++import type { PushSubscription } from 'web-push';
++export interface SqlResult { rows:Record<string,any>[]; rowCount?:number|null; }
++export interface SqlConnection {query:(sql:string,values?:any[])=>Promise<SqlResult>;release:()=>void;}
++export interface SqlPool {query:(sql:string,values?:any[])=>Promise<SqlResult>;connect:()=>Promise<SqlConnection>;}
++export class PushError extends Error {constructor(public status:number,message:string,public retryAfter=0){super(message);}}
++export class PushStore {
++ constructor(readonly pool:SqlPool){}
++ async transaction<T>(fn:(sql:SqlConnection)=>Promise<T>):Promise<T>{const db=await this.pool.connect();try{await db.query('begin');const value=await fn(db);await db.query('commit');return value;}catch(error){await db.query('rollback').catch(()=>undefined);throw error;}finally{db.release();}}
++ async subscribe(userId:string,bookId:string,subscription:PushSubscription,keyId:string){
++  await this.transaction(async db=>{
++   await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[userId]);
++   const member=await db.query('select 1 from public.ivraine_members where user_id=$1 and book_id=$2',[userId,bookId]);
++   if(!member.rows.length)throw new PushError(403,'This account is no longer part of the scrapbook.');
++   const existing=await db.query('select user_id from ivraine_private.push_subscriptions where endpoint=$1',[subscription.endpoint]);
++   if(existing.rows[0] && existing.rows[0].user_id!==userId)throw new PushError(409,'This browser subscription belongs to another account. Disable notifications, then enable them again.');
++   await db.query('delete from ivraine_private.push_subscriptions where user_id=$1 and key_id<>$2',[userId,keyId]);
++   if(!existing.rows.length){const count=await db.query('select count(*)::int as n from ivraine_private.push_subscriptions where user_id=$1',[userId]);if(count.rows[0].n>=5)throw new PushError(409,'You already have five notification devices. Remove an old device first.');}
++   await db.query(`insert into ivraine_private.push_subscriptions(user_id,book_id,endpoint,p256dh,auth,key_id) values($1,$2,$3,$4,$5,$6)
++   on conflict(endpoint) do update set book_id=excluded.book_id,p256dh=excluded.p256dh,auth=excluded.auth,key_id=excluded.key_id,updated_at=now() where ivraine_private.push_subscriptions.user_id=excluded.user_id`,[userId,bookId,subscription.endpoint,subscription.keys.p256dh,subscription.keys.auth,keyId]);
++  });
++ }
++ async subscriptionActive(userId:string,endpoint:string,keyId:string|null){const {rows}=await this.pool.query('select 1 from ivraine_private.push_subscriptions where user_id=$1 and endpoint=$2 and key_id=$3',[userId,endpoint,keyId]);return rows.length>0;}
++ async unsubscribe(userId:string,endpoint:string){await this.pool.query('delete from ivraine_private.push_subscriptions where user_id=$1 and endpoint=$2',[userId,endpoint]);}
++ async unsubscribeAll(userId:string){await this.pool.query('delete from ivraine_private.push_subscriptions where user_id=$1',[userId]);}
++ async sendHeart(userId:string,bookId:string,requestId:string,keyId:string|null){
++  return this.transaction(async db=>{
++   await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[userId]);
++   const member=await db.query('select 1 from public.ivraine_members where user_id=$1 and book_id=$2',[userId,bookId]);if(!member.rows.length)throw new PushError(403,'You no longer belong to this scrapbook.');
++   const existing=await db.query(`select id,created_at from ivraine_private.heart_events where sender_id=$1 and request_id=$2`,[userId,requestId]);
++   if(existing.rows.length){const e=existing.rows[0];const devices=await db.query('select count(*)::int as n from ivraine_private.push_deliveries where event_id=$1',[e.id]);return {eventId:e.id,queuedDevices:devices.rows[0].n,nextAllowedAt:new Date(new Date(e.created_at).getTime()+60000).toISOString(),duplicate:true};}
++   const latest=await db.query(`select greatest(0,ceil(extract(epoch from (created_at+interval '60 seconds'-now()))))::int as remaining from ivraine_private.heart_events where sender_id=$1 order by created_at desc limit 1`,[userId]);
++   if(latest.rows[0]?.remaining>0)throw new PushError(429,'Your heart is on its way. Give it a moment before sending another.',latest.rows[0].remaining);
++   const partner=await db.query('select user_id from public.ivraine_members where book_id=$1 and user_id<>$2',[bookId,userId]);
++   if(partner.rows.length!==1)throw new PushError(409,'Heart sharing requires exactly two members in this scrapbook.');
++   const recipient=partner.rows[0].user_id;
++   const {rows:[event]}=await db.query('insert into ivraine_private.heart_events(book_id,sender_id,recipient_id,request_id) values($1,$2,$3,$4) returning id,created_at',[bookId,userId,recipient,requestId]);
++   const {rows:devices}=await db.query(`insert into ivraine_private.push_deliveries(event_id,subscription_id)
++     select $1,id from ivraine_private.push_subscriptions where book_id=$2 and user_id=$3 and key_id=$4 returning id`,[event.id,bookId,recipient,keyId]);
++   return {eventId:event.id,queuedDevices:devices.length,nextAllowedAt:new Date(new Date(event.created_at).getTime()+60000).toISOString(),duplicate:false};
++  });
++ }
++ async state(userId:string,bookId:string){
++  const result=await this.pool.query(`select e.id,e.sender_id as "senderId",m.display_name as "senderName",e.created_at as "createdAt"
++   from ivraine_private.heart_events e join public.ivraine_members m on m.user_id=e.sender_id and m.book_id=e.book_id
++   where e.recipient_id=$1 and e.book_id=$2 order by e.created_at desc limit 10`,[userId,bookId]);
++  const sent=await this.pool.query(`select e.id,e.created_at+interval '60 seconds' as "nextAllowedAt",
++   count(d.id) filter(where d.status='accepted')::int as accepted,
++   count(d.id) filter(where d.status in ('pending','sending'))::int as pending,
++   count(d.id) filter(where d.status='failed')::int as failed
++   from ivraine_private.heart_events e left join ivraine_private.push_deliveries d on d.event_id=e.id
++   where e.sender_id=$1 and e.book_id=$2 group by e.id order by e.created_at desc limit 1`,[userId,bookId]);
++  const device=await this.pool.query('select count(*)::int as count from ivraine_private.push_subscriptions where user_id=$1 and book_id=$2',[userId,bookId]);
++  return {received:result.rows,lastSent:sent.rows[0]??null,deviceCount:device.rows[0].count};
++ }
++ async claim(){
++  return this.transaction(async db=>{
++   await db.query(`update ivraine_private.push_deliveries set status='failed',last_error='expired',locked_until=null where status in ('pending','sending') and (created_at<now()-interval '1 hour' or (attempts>=5 and (locked_until is null or locked_until<now())))`);
++   const {rows}=await db.query(`with candidate as (
++     select d.id from ivraine_private.push_deliveries d where ((d.status='pending' and d.next_attempt_at<=now()) or (d.status='sending' and d.locked_until<now())) and d.attempts<5
++     order by d.created_at for update skip locked limit 1
++   ) update ivraine_private.push_deliveries d set status='sending',attempts=attempts+1,locked_until=now()+interval '60 seconds',lease_id=gen_random_uuid()
++     from candidate where d.id=candidate.id returning d.*`);
++   const job=rows[0];if(!job)return null;
++   const {rows:targets}=await db.query(`select s.endpoint,s.p256dh,s.auth,s.key_id,e.id as event_id,e.created_at,
++    exists(select 1 from public.ivraine_members m where m.user_id=e.sender_id and m.book_id=e.book_id) and
++    exists(select 1 from public.ivraine_members m where m.user_id=e.recipient_id and m.book_id=e.book_id) as allowed
++    from ivraine_private.push_subscriptions s join ivraine_private.heart_events e on e.id=$1 where s.id=$2 and s.user_id=e.recipient_id and s.book_id=e.book_id`,[job.event_id,job.subscription_id]);
++   if(!targets.length || !targets[0].allowed){await db.query("update ivraine_private.push_deliveries set status='failed',last_error='membership_removed',locked_until=null where id=$1",[job.id]);return null;}
++   return {...job,...targets[0]};
++  });
++ }
++ async finish(id:string,lease:string,status:'accepted'|'failed'|'pending',error:string|null,delay=0){await this.pool.query(`update ivraine_private.push_deliveries set status=$3,last_error=$4,locked_until=null,next_attempt_at=now()+($5::int*interval '1 second') where id=$1 and lease_id=$2`,[id,lease,status,error,delay]);}
++ async removeExpired(subscriptionId:string){await this.transaction(async db=>{await db.query("update ivraine_private.push_deliveries set status='failed',last_error='subscription_expired',locked_until=null where subscription_id=$1 and status in ('pending','sending')",[subscriptionId]);await db.query('delete from ivraine_private.push_subscriptions where id=$1',[subscriptionId]);});}
++}
+diff --git a/backend/src/push/validation.ts b/backend/src/push/validation.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/validation.ts
+@@ -0,0 +1,12 @@
++import { z } from 'zod';
++export function trustedPushEndpoint(value: string): boolean {
++  try {
++    const u=new URL(value),h=u.hostname;
++    return u.protocol==='https:' && !u.port && !u.username && !u.password && !u.hash && (
++      h==='fcm.googleapis.com' || h==='updates.push.services.mozilla.com' || h==='push.services.mozilla.com' || h.endsWith('.push.services.mozilla.com') || h.endsWith('.push.apple.com') || h.endsWith('.notify.windows.com')
++    );
++  } catch { return false; }
++}
++const encoded=(length:number)=>z.string().regex(/^[A-Za-z0-9_-]+={0,2}$/).refine(value=>Buffer.from(value,'base64url').length===length,'Invalid subscription key');
++export const subscriptionSchema=z.object({endpoint:z.string().max(4096).refine(trustedPushEndpoint,'Unsupported push-service endpoint'),expirationTime:z.number().nullable().optional(),keys:z.object({p256dh:encoded(65),auth:encoded(16)}).strict()}).strict();
++export const heartSchema=z.object({requestId:z.uuid()}).strict();
+diff --git a/backend/src/push/worker.ts b/backend/src/push/worker.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/worker.ts
+@@ -0,0 +1,26 @@
++import type { PushSubscription } from 'web-push';
++import { PushStore } from './store.js';
++import { trustedPushEndpoint } from './validation.js';
++export type Deliver=(subscription:PushSubscription,payload:string)=>Promise<unknown>;
++export async function deliverNext(store:PushStore,deliver:Deliver,keyId:string):Promise<boolean>{
++ const job=await store.claim();if(!job)return false;
++ if(job.key_id!==keyId || !trustedPushEndpoint(job.endpoint)){await store.finish(job.id,job.lease_id,'failed','invalid_subscription');return true;}
++ try{
++  await deliver({endpoint:job.endpoint,keys:{p256dh:job.p256dh,auth:job.auth}},JSON.stringify({title:'Ivraine',body:'A little “I miss you” is waiting in your private scrapbook. ♡',eventId:job.event_id,url:'/#story',tag:`ivraine-heart-${job.event_id}`}));
++  await store.finish(job.id,job.lease_id,'accepted',null);
++ }catch(error){
++  const status=typeof error==='object'&&error!==null&&'statusCode' in error?Number(error.statusCode):0;
++  if(status===404||status===410){await store.removeExpired(job.subscription_id);return true;}
++  const retryable=status===0||status===408||status===429||status>=500;
++  if(status===401||status===403)console.error('push_vapid_rejected: verify the VAPID key pair and subject');
++  const retry=retryable&&job.attempts<5;
++  await store.finish(job.id,job.lease_id,retry?'pending':'failed',status?`push_http_${status}`:'push_network_error',Math.min(900,15*2**(job.attempts-1)));
++ }
++ return true;
++}
++export function startPushWorker(store:PushStore,deliver:Deliver,keyId:string){
++ let stopped=false,busy=false,active:Promise<void>=Promise.resolve();
++ const tick=()=>{if(stopped||busy)return;busy=true;active=(async()=>{try{for(let i=0;i<10&&!stopped;i++){if(!await deliverNext(store,deliver,keyId))break;}}catch{console.error('push_worker_failed: verify database connectivity and notification migration');}finally{busy=false;}})();};
++ const timer=setInterval(tick,5000);timer.unref();tick();
++ return async()=>{stopped=true;clearInterval(timer);await active;};
++}
+diff --git a/backend/src/server.ts b/backend/src/server.ts
+--- a/backend/src/server.ts
++++ b/backend/src/server.ts
+@@ -1,8 +1,10 @@
+ import { z } from 'zod';
+ import { createApp } from './app.js';
++import { createPushRuntime } from './push/runtime.js';
+ const env=z.object({SUPABASE_URL:z.url(),SUPABASE_PUBLISHABLE_KEY:z.string().min(20),FRONTEND_ORIGINS:z.string().min(1),PORT:z.coerce.number().int().min(1).max(65535).default(3001),TRUST_PROXY_HOPS:z.coerce.number().int().min(0).max(3).default(0)}).parse(process.env);
+ const origins=env.FRONTEND_ORIGINS.split(',').map(s=>new URL(s.trim()).origin);
+-const app=createApp({supabaseUrl:env.SUPABASE_URL,supabaseKey:env.SUPABASE_PUBLISHABLE_KEY,origins,trustProxy:env.TRUST_PROXY_HOPS});
++const pushRuntime=createPushRuntime(process.env);
++const app=createApp({supabaseUrl:env.SUPABASE_URL,supabaseKey:env.SUPABASE_PUBLISHABLE_KEY,origins,trustProxy:env.TRUST_PROXY_HOPS,push:pushRuntime.services});
+ const server=app.listen(env.PORT,'0.0.0.0',()=>console.log(`Ivraine API listening on ${env.PORT}`));
+ server.requestTimeout=30000;server.headersTimeout=15000;
+-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>{server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),10000).unref();});
++for(const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>{server.close(()=>{void pushRuntime.stop().then(()=>process.exit(0)).catch(()=>process.exit(1));});setTimeout(()=>process.exit(1),20000).unref();});
+diff --git a/frontend/public/sw.js b/frontend/public/sw.js
+--- a/frontend/public/sw.js
++++ b/frontend/public/sw.js
+@@ -1,5 +1,28 @@
+ /* Cache only a non-private offline page; never cache sessions, API, or photo data. */
+-const CACHE='ivraine-offline-v2';
++const CACHE='ivraine-offline-v3';
+ self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['/offline.html','/offline.css'])).then(()=>self.skipWaiting()));});
+ self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
+ self.addEventListener('fetch',event=>{if(new URL(event.request.url).pathname==='/offline.css'){event.respondWith(caches.match('/offline.css'));return;}if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/offline.html')));}});
++self.addEventListener('push',event=>{
++ event.waitUntil((async()=>{
++  let payload={};try{payload=event.data?.json()||{};}catch{}
++  const eventId=typeof payload.eventId==='string'?payload.eventId.slice(0,80):'new';
++  await self.registration.showNotification('Ivraine',{
++   body:'A little “I miss you” is waiting in your private scrapbook. ♡',
++   icon:'/icons/couple-192.png',
++   tag:`ivraine-heart-${eventId}`,
++   data:{url:'/#story',eventId}
++  });
++  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
++  for(const client of windows)client.postMessage({type:'ivraine-heart'});
++ })());
++});
++self.addEventListener('notificationclick',event=>{
++ event.notification.close();
++ event.waitUntil((async()=>{
++  const target=new URL('/#story',self.location.origin);
++  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
++  for(const client of windows){if(new URL(client.url).origin===target.origin){await client.navigate(target.href);await client.focus();return;}}
++  await self.clients.openWindow(target.href);
++ })());
++});
+diff --git a/frontend/src/api-config.ts b/frontend/src/api-config.ts
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/api-config.ts
+@@ -0,0 +1,15 @@
++export function normalizeApiUrl(raw: string, pageOrigin: string): string {
++  const value = raw.trim();
++  if (!value) throw new Error('Set VITE_API_URL to your Railway HTTPS public URL, then redeploy Vercel.');
++  let url: URL;
++  try { url = new URL(value); } catch { throw new Error('VITE_API_URL must be a complete URL, such as https://your-service.up.railway.app.'); }
++  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
++    throw new Error('VITE_API_URL must be an HTTP(S) URL without credentials, query parameters, or fragments.');
++  }
++  const page = new URL(pageOrigin);
++  const local = (host: string) => ['localhost', '127.0.0.1', '[::1]'].includes(host);
++  if (!local(page.hostname) && local(url.hostname)) throw new Error('The published app is pointing to localhost. Set VITE_API_URL to Railway’s public URL and rebuild Vercel.');
++  if (page.protocol === 'https:' && url.protocol !== 'https:') throw new Error('The published app requires an HTTPS API URL. Enable Railway’s public HTTPS domain and rebuild Vercel.');
++  url.pathname = url.pathname.replace(/\/+$/, '').replace(/\/api$/, '') + '/api';
++  return url.toString().replace(/\/$/, '');
++}
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -1,16 +1,27 @@
+ import { createClient } from '@supabase/supabase-js';
++import { normalizeApiUrl } from './api-config';
+ const url=import.meta.env.VITE_SUPABASE_URL;
+ const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+ const apiUrl=import.meta.env.VITE_API_URL;
+ export const configured=!!(url && key && apiUrl && !url.includes('YOUR_') && !key.includes('YOUR_') && !apiUrl.includes('YOUR_'));
+ export const supabase=configured?createClient(url,key,{global:{fetch:(input,init)=>fetch(input,{...init,signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)})},auth:{storageKey:'ivraine-auth-v2',persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true,flowType:'pkce'}}):null;
++export class ApiError extends Error { constructor(message:string,public status:number,public retryAfter:number=0){super(message);} }
+ export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
+  if(!supabase) throw new Error('The app is not connected yet. Follow README.md to configure it.');
+  const {data:{session}}=await supabase.auth.getSession();
+  if(!session) throw new Error('Please sign in again.');
+  const raw=body instanceof Blob;
+- const response=await fetch(`${apiUrl.replace(/\/$/,'')}/api${path}`,{method,headers:{Authorization:`Bearer ${session.access_token}`,...(body?{'Content-Type':raw?body.type:'application/json'}:{})},body:body?(raw?body:JSON.stringify(body)):undefined,signal:AbortSignal.timeout(45000),cache:'no-store'});
++ const endpoint=normalizeApiUrl(apiUrl,location.origin);
++ let response:Response;
++ try {
++   response=await fetch(`${endpoint}${path}`,{method,headers:{Authorization:`Bearer ${session.access_token}`,...(body?{'Content-Type':raw?body.type:'application/json'}:{})},body:body?(raw?body:JSON.stringify(body)):undefined,signal:AbortSignal.timeout(45000),cache:'no-store'});
++ } catch(error) {
++   if(!navigator.onLine)throw new Error('You are offline. Reconnect and try again.');
++   if(error instanceof DOMException && ['TimeoutError','AbortError'].includes(error.name))throw new Error('The API timed out. Check that the Railway service is running, then try again.');
++   throw new Error(`Cannot reach ${new URL(endpoint).origin}. Check Railway /health, VITE_API_URL, and FRONTEND_ORIGINS=${location.origin}. Redeploy after changing environment values.`);
++ }
++ if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('The API returned a webpage instead of JSON. VITE_API_URL must point to the Railway API service, not the Vercel frontend.');
+  const payload=await response.json().catch(()=>({error:'The server returned an unreadable response.'}));
+- if(!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
++ if(!response.ok) throw new ApiError(payload.error || `Request failed (${response.status})`,response.status,Number(response.headers.get('retry-after'))||0);
+  return payload as T;
+ }
+diff --git a/frontend/src/connection.css b/frontend/src/connection.css
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/connection.css
+@@ -0,0 +1 @@
++.connection-card{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px 32px;padding:32px;margin:24px 0;border:1px solid #e9cad7;border-radius:24px;background:radial-gradient(ellipse at 85% 25%,#f3c7df80,transparent 50%),linear-gradient(130deg,#fff9f9,#f3e5ee);overflow:hidden}.connection-copy{align-self:center;min-width:0}.connection-copy .eyebrow{color:#854a64}.connection-copy h2{font-size:34px;line-height:1.1;margin:12px 0}.connection-copy>p{font-size:12px;color:#745365}.connection-copy .heart-received{font-size:12px;color:#793b57;margin-top:16px;font-weight:600}.heart-status{min-height:38px;margin-top:8px!important;font-size:11px!important;overflow-wrap:anywhere}.heart-stage{position:relative;perspective:750px;display:flex;align-items:center;justify-content:center;flex-direction:column;align-self:center;min-height:216px}.heart-button{position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;width:166px;height:166px;flex-shrink:0;background:linear-gradient(145deg,#fff,#efd6e2);border:1px solid #fff;border-radius:50%;box-shadow:0 10px 0 #d9aabd,0 15px 0 #bc7e96,0 28px 32px #86335526,inset 0 3px 7px #fff,inset 0 -5px 15px #d9aec266;transform:rotateX(10deg);transform-style:preserve-3d;transition:transform .22s,box-shadow .22s}.heart-button:not(:disabled):hover{transform:rotateX(15deg) translateY(-5px);box-shadow:0 14px 0 #d9aabd,0 19px 0 #bc7e96,0 33px 36px #86335533,inset 0 3px 8px #fff}.heart-button:not(:disabled):active{transform:rotateX(10deg) translateY(9px);box-shadow:0 3px 0 #d9aabd,0 6px 0 #bc7e96,0 15px 22px #86335526}.heart-gem{width:94px;height:94px;overflow:visible;filter:drop-shadow(0 5px 3px #64163735);transform:translateZ(14px);animation:heart-breathe 3s ease-in-out infinite}.heart-depth{fill:#861d4a;transform:translateY(3px)}.heart-button-label{position:relative;font-size:12px;font-weight:750;color:#622542;transform:translateZ(15px);margin-top:1px}.heart-orbit{position:absolute;inset:-12px;border:1px solid #c686a044;border-radius:50%;transform:translateZ(-10px)}.heart-orbit:after{content:"";position:absolute;top:14px;right:18px;width:7px;height:7px;background:#c9789a;border:2px solid #fff5;border-radius:50%}.heart-hint{font-size:10px;letter-spacing:1px;color:#804b64;margin-top:32px}.heart-button:disabled{opacity:1;cursor:default}.heart-button:disabled .heart-gem{animation:none}.heart-button:disabled:not(.is-sent){filter:grayscale(.4);opacity:.65}.heart-button.is-sent{background:linear-gradient(145deg,#fff5f9,#e6c1d3)}.notification-row{grid-column:1/-1;display:flex;gap:16px;align-items:center;justify-content:space-between;padding-top:20px;border-top:1px solid #d8b9c866}.notification-row>span{font-size:11px;color:#715367;max-width:360px;line-height:1.6}.notification-row>div{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.notification-button{padding:10px 16px;border-radius:12px;background:#69334c;color:white;border:1px solid #69334c;font-size:11px;font-weight:600;min-height:44px}.notification-row [hidden]{display:none}.notification-row .text-button{font-size:10px;color:#63374c}.notification-row .notification-button:hover:not(:disabled){background:#512239}@keyframes heart-breathe{0%,100%{transform:translateZ(14px) scale(1)}50%{transform:translateZ(20px) scale(1.06)}}@media(max-width:760px){.connection-card{grid-template-columns:minmax(0,1fr) 140px;gap:12px;padding:24px 20px}.connection-copy h2{font-size:27px}.connection-copy .eyebrow{font-size:8px;letter-spacing:1.5px}.connection-copy>p{font-size:11px}.connection-copy .heart-received{font-size:10px}.heart-stage{min-height:180px}.heart-button{width:124px;height:124px}.heart-gem{width:73px;height:73px}.heart-button-label{font-size:10px}.heart-hint{font-size:8px;letter-spacing:.4px}.notification-row{flex-direction:column;align-items:flex-start;gap:12px}.notification-row>div{justify-content:flex-start}.notification-row>span{font-size:10px}.heart-status{font-size:10px!important}}@media(max-width:380px){.connection-card{grid-template-columns:1fr;text-align:center}.heart-stage{grid-row:2;margin:8px 0}.notification-row{align-items:center}.notification-row>div{justify-content:center}}@media(prefers-reduced-motion:reduce){.heart-gem{animation:none}.heart-button{transition:none}.heart-button:not(:disabled):hover{transform:rotateX(10deg)}}
+diff --git a/frontend/src/connection.ts b/frontend/src/connection.ts
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/connection.ts
+@@ -0,0 +1,83 @@
++import { api, ApiError } from './api';
++interface Heart {id:string;senderId:string;senderName:string;createdAt:string;}
++interface ConnectionState {enabled:boolean;pushEnabled:boolean;publicKey:string|null;received:Heart[];lastSent:{nextAllowedAt:string;accepted:number;pending:number;failed:number}|null;deviceCount:number;}
++let state:ConnectionState|null=null,userId:string|null=null,epoch=0,loading=false,sending=false,enabling=false,localSubscribed=false;
++let issue='',status='',poll:ReturnType<typeof setInterval>|undefined,clock:ReturnType<typeof setInterval>|undefined;
++let notify:(s:string)=>void=()=>{};
++export function connectionMarkup(){return `<section class="connection-card" aria-labelledby="connection-title"><div class="connection-copy"><span class="eyebrow">A LITTLE CLOSER</span><h2 id="connection-title">Same feeling.<br>Different places.</h2><p>One little heart to say <em>“I’m thinking of you.”</em></p><p class="heart-received" id="heart-received"></p><p class="heart-status" id="heart-status" role="status" aria-live="polite"></p></div><div class="heart-stage"><button class="heart-button" data-heart-action="send" aria-label="Send I miss you to my partner" disabled><span class="heart-orbit" aria-hidden="true"></span><svg class="heart-gem" viewBox="0 0 120 110" aria-hidden="true"><defs><linearGradient id="heart-face" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffcbdc"/><stop offset=".35" stop-color="#ed729b"/><stop offset=".72" stop-color="#b73165"/><stop offset="1" stop-color="#6c1745"/></linearGradient><linearGradient id="heart-shine" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path class="heart-depth" d="M60 101 12 57C-16 28 24-10 60 23 95-10 136 28 108 57Z"/><path fill="url(#heart-face)" d="M60 95 12 51C-16 22 24-16 60 17 95-16 136 22 108 51Z"/><path fill="url(#heart-shine)" d="M16 39C9 19 35 6 51 22 33 14 20 26 16 39Z"/></svg><span class="heart-button-label" id="heart-button-label">I miss you</span></button><span class="heart-hint" id="heart-hint">Send a little love</span></div><div class="notification-row"><span id="push-device-status">Checking this device…</span><div><button class="notification-button" data-heart-action="enable">Enable notifications</button><button class="text-button" data-heart-action="disable" hidden>Turn off on this device</button><button class="text-button" data-heart-action="all-off" hidden>Remove all my devices</button><button class="text-button" data-heart-action="retry" hidden>Retry connection</button></div></div></section>`;}
++function supported(){return window.isSecureContext&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
++function iosNeedsInstall(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1?!(matchMedia('(display-mode: standalone)').matches||(navigator as Navigator&{standalone?:boolean}).standalone):false;}
++function permission(){return 'Notification' in window?Notification.permission:'unsupported';}
++export function paintConnection(){
++ const root=document.querySelector('.connection-card');if(!root)return;
++ const remaining=state?.lastSent?Math.max(0,Math.ceil((Date.parse(state.lastSent.nextAllowedAt)-Date.now())/1000)):0;
++ const button=root.querySelector<HTMLButtonElement>('[data-heart-action=send]')!;button.disabled=!state?.enabled||sending||remaining>0;button.classList.toggle('is-sent',remaining>0);button.setAttribute('aria-busy',String(sending));
++ root.querySelector('#heart-button-label')!.textContent=sending?'Sending…':remaining?'Heart sent':'I miss you';
++ root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
++ const latest=state?.received[0];root.querySelector('#heart-received')!.textContent=latest?`${latest.senderName} sent you a heart · ${new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(latest.createdAt))}`:'Our little way to feel close.';
++ const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your scrapbook. Push could not be delivered.':'';
++ root.querySelector('#heart-status')!.textContent=issue||status||delivery||(!state?'Connecting…':!state.enabled?'Heart sharing needs the notification database setup.':'Hearts stay in our scrapbook, even when notifications are off.');
++ const device=root.querySelector('#push-device-status')!;
++ device.textContent=iosNeedsInstall()?'On iPhone: add Ivraine to your Home Screen, then open it there.':!supported()?'This browser cannot receive Web Push. You can still exchange hearts here.':permission()==='denied'?'Notifications are blocked. Allow them in your browser or device settings.':!state?.pushEnabled?'Push notifications need server configuration.':localSubscribed?'Notifications enabled on this device.':'Enable notifications to receive hearts when the app is closed.';
++ const enable=root.querySelector<HTMLButtonElement>('[data-heart-action=enable]')!;enable.hidden=localSubscribed;enable.disabled=enabling||!supported()||iosNeedsInstall()||permission()==='denied'||!state?.pushEnabled;enable.textContent=enabling?'Enabling…':'Enable notifications';
++ const disable=root.querySelector<HTMLButtonElement>('[data-heart-action=disable]')!;disable.hidden=!localSubscribed;disable.disabled=enabling;
++ root.querySelector<HTMLButtonElement>('[data-heart-action=all-off]')!.hidden=!(state?.deviceCount);
++ root.querySelector<HTMLButtonElement>('[data-heart-action=retry]')!.hidden=!issue;
++}
++async function readLocalSubscription(){if(!supported())return null;return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription()??null;}
++async function load(){if(!userId||loading)return;loading=true;const current=epoch;
++ try{const next=await api<ConnectionState>('/notifications/state');if(current!==epoch)return;
++  const seen=state?.received[0]?.id;state=next;issue='';if(next.lastSent?.pending===0)status='';
++  if(seen&&next.received[0]&&seen!==next.received[0].id)notify(`${next.received[0].senderName} misses you. ♡`);
++  const sub=await readLocalSubscription();if(current!==epoch)return;localSubscribed=!!sub&&localStorage.getItem('ivraine-push-owner')===userId&&permission()==='granted';
++  if(localSubscribed&&sub){const {active}=await api<{active:boolean}>('/notifications/subscriptions/check','POST',{endpoint:sub.endpoint});if(current!==epoch)return;localSubscribed=active;}
++ }catch(error){if(current===epoch)issue=error instanceof Error?error.message:'Could not load heart sharing.';}finally{if(current===epoch){loading=false;paintConnection();}}
++}
++export function startConnection(id:string,toast:(message:string)=>void){notify=toast;if(userId===id){paintConnection();return;}stopConnection();userId=id;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
++export function stopConnection(){epoch++;userId=null;state=null;loading=false;sending=false;enabling=false;issue='';status='';localSubscribed=false;clearInterval(poll);clearInterval(clock);}
++function keyBytes(value:string):ArrayBuffer{const bytes=Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));return bytes.buffer;}
++async function enableNotifications(){
++ if(!state?.publicKey||!supported()||iosNeedsInstall())return;
++ const current=epoch,owner=userId!,publicKey=state.publicKey;enabling=true;issue='';paintConnection();
++ // Request synchronously from the tap handler, before fetching/registering anything.
++ const permissionRequest=Notification.requestPermission();
++ try{
++  if(await permissionRequest!=='granted')throw new Error('Notifications are not enabled. You can still send and receive hearts inside the app.');
++  if(current!==epoch)return;
++  await navigator.serviceWorker.register('/sw.js',{scope:'/'});
++  let timeout:ReturnType<typeof setTimeout>|undefined;
++  const registration=await Promise.race([navigator.serviceWorker.ready,new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Notification setup timed out. Reload the app and retry.')),15000);})]).finally(()=>clearTimeout(timeout));
++  let subscription=await registration.pushManager.getSubscription();
++  const boundKey=subscription?.options.applicationServerKey;const expected=new Uint8Array(keyBytes(publicKey));
++  const wrongKey=boundKey&&(!new Uint8Array(boundKey).every((value,i)=>value===expected[i])||boundKey.byteLength!==expected.byteLength);
++  if(subscription&&(localStorage.getItem('ivraine-push-owner')!==owner||wrongKey)){await subscription.unsubscribe();subscription=null;}
++  subscription??=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:expected.buffer});
++  if(current!==epoch){await subscription.unsubscribe();return;}
++  await api('/notifications/subscriptions','POST',subscription.toJSON());
++  if(current!==epoch)return;
++  localStorage.setItem('ivraine-push-owner',owner);localSubscribed=true;status='Notifications enabled. Your partner can now send you a heart.';notify(status);await load();
++ }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not enable notifications.';notify(issue);}}
++ finally{if(current===epoch){enabling=false;paintConnection();}}
++}
++async function disableNotifications(all=false){const current=epoch;enabling=true;paintConnection();try{
++ const subscription=await readLocalSubscription();
++ if(all)await api('/notifications/devices','DELETE');else if(subscription)await api('/notifications/subscriptions','DELETE',{endpoint:subscription.endpoint});
++ if(subscription&&localStorage.getItem('ivraine-push-owner')===userId)await subscription.unsubscribe();
++ if(current!==epoch)return;localStorage.removeItem('ivraine-push-owner');localSubscribed=false;status=all?'All your notification devices were removed.':'Notifications are off on this device.';issue='';await load();
++ }catch(error){if(current===epoch)issue=error instanceof Error?error.message:'Could not turn off notifications.';}finally{if(current===epoch){enabling=false;paintConnection();}}}
++async function sendHeart(){
++ if(!userId||!state?.enabled||sending)return;const current=epoch,storageKey=`ivraine-pending-heart:${userId}`;sending=true;issue='';status='';paintConnection();
++ const requestId=sessionStorage.getItem(storageKey)||crypto.randomUUID();sessionStorage.setItem(storageKey,requestId);
++ try{
++  const result=await api<{eventId:string;queuedDevices:number;nextAllowedAt:string}>('/notifications/hearts','POST',{requestId});
++  if(current!==epoch)return;sessionStorage.removeItem(storageKey);
++  state.lastSent={nextAllowedAt:result.nextAllowedAt,accepted:0,pending:result.queuedDevices,failed:0};
++  status=result.queuedDevices?'Heart saved. A notification is queued for your partner.':'Heart saved. Your partner can see it in the app; their device has no active push subscription.';
++  notify(result.queuedDevices?'A little love is on its way. ♡':'Heart saved in your scrapbook. ♡');
++  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate?.([20,30,20]);
++ }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not send your heart.';if(error instanceof ApiError&&error.status===429){sessionStorage.removeItem(storageKey);state.lastSent={nextAllowedAt:new Date(Date.now()+Math.max(1,error.retryAfter)*1000).toISOString(),accepted:0,pending:0,failed:0};}}}
++ finally{if(current===epoch){sending=false;paintConnection();}}
++}
++document.addEventListener('click',event=>{const button=(event.target as Element).closest<HTMLButtonElement>('[data-heart-action]');if(!button||button.disabled)return;switch(button.dataset.heartAction){case'send':void sendHeart();break;case'enable':void enableNotifications();break;case'disable':void disableNotifications();break;case'all-off':if(confirm('Turn off notifications on all your devices? You can enable them again on each device.'))void disableNotifications(true);break;case'retry':void load();break;}});
++window.addEventListener('online',()=>void load());
++navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='ivraine-heart')void load();});
+diff --git a/frontend/src/main.ts b/frontend/src/main.ts
+--- a/frontend/src/main.ts
++++ b/frontend/src/main.ts
+@@ -1,4 +1,6 @@
+ import './styles.css';
++import './connection.css';
++import { startConnection, stopConnection, paintConnection } from './connection';
+ import { api, configured, supabase } from './api';
+ import type { Entry, BookResponse, Kind } from './types';
+ import { login, shell, renderPage, pageKind, type Page, type Filters, navigation } from './views';
+@@ -14,7 +16,7 @@
+ function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
+ function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
+ function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
+-function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month);}
++function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month);paintConnection();}
+ async function fetchEntries(){const all:Entry[]=[];let offset:number|null=0;while(offset!==null){const r: {entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);all.push(...r.entries);offset=r.nextOffset;}return all;}
+ async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const rows=await fetchEntries();if(gen!==generation)return;entries=rows;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
+ async function boot(){const gen=++generation;
+@@ -22,7 +24,7 @@
+  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
+  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
+  app.innerHTML='<p class="loading">Opening our little world…</p>';
+- try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);}
++ try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startConnection(info.userId,toast);}
+  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
+ }
+ function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
+@@ -72,7 +74,7 @@
+  try{
+  switch(action){
+  case'retry':await boot();break;
+- case'logout':{generation++;signingOut=true;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());app.innerHTML='<p class="loading">Locking our little space…</p>';try{const {error}=await supabase!.auth.signOut({scope:'local'});if(error)toast('Locked on this device. Remote sign-out could not be confirmed.');}finally{sessionStorage.removeItem('ivraine-auth-v2');sessionStorage.removeItem('ivraine-auth-v2-code-verifier');signingOut=false;app.innerHTML=login(configured);}break;}
++ case'logout':{stopConnection();generation++;signingOut=true;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());app.innerHTML='<p class="loading">Locking our little space…</p>';try{const {error}=await supabase!.auth.signOut({scope:'local'});if(error)toast('Locked on this device. Remote sign-out could not be confirmed.');}finally{sessionStorage.removeItem('ivraine-auth-v2');sessionStorage.removeItem('ivraine-auth-v2-code-verifier');signingOut=false;app.innerHTML=login(configured);}break;}
+  case'reset':{const email=(document.querySelector<HTMLInputElement>('[name="email"]')?.value||'').trim();if(!email){toast('Enter your email above first.');return;}const {error}=await supabase!.auth.resetPasswordForEmail(email,{redirectTo:location.origin});if(error)throw error;toast('If this account exists, a password reset link is on its way.');break;}
+  case'add':openEditor(pageKind[page()]);break;
+  case'edit':if(entry)openEditor(entry.kind,entry);break;
+@@ -99,5 +101,5 @@
+ for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status)status.textContent=navigator.onLine?'Connected':'Offline';toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});
+ document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]'))void refresh(true);});
+ setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
+-if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
++if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
+ void boot();void registerPwa();
+diff --git a/frontend/src/views.ts b/frontend/src/views.ts
+--- a/frontend/src/views.ts
++++ b/frontend/src/views.ts
+@@ -1,3 +1,4 @@
++import { connectionMarkup } from './connection';
+ import type { Entry, BookResponse, Kind } from './types';
+ import { escapeHtml as h, daysTogether, dateLabel, today } from './utils';
+ import { monthEvents, nextEvent } from './calendar';
+@@ -30,5 +31,5 @@
+  else if(page==='letters')content=`<div class="letter-grid">${selected.map((e,i)=>`<article class="letter-card tone-${i%3}"><button class="envelope" data-action="letter" data-id="${e.id}"><span class="envelope-fold" aria-hidden="true"></span><span class="wax" aria-hidden="true">♡</span><small>OPEN WHEN…</small><h3>${h(e.title.replace(/^open when\s*/i,''))}</h3><span class="metadata">A little letter, just for you →</span></button>${controls(e)}</article>`).join('')}</div>`;
+  else if(page==='plans') content=`<div class="plan-summary"><span>${selected.filter(e=>e.completed).length} of ${selected.length} dreams checked off</span><progress value="${selected.filter(e=>e.completed).length}" max="${selected.length}" aria-label="Completed dreams"></progress></div><div class="plan-grid">${selected.map(e=>`<article class="plan-card ${e.completed?'completed':''}"><div class="plan-top"><button class="check-button" data-action="complete" data-id="${e.id}" aria-label="${e.completed?'Reopen':'Complete'} ${h(e.title)}" aria-pressed="${e.completed}">${e.completed?'✓':'○'}</button><span class="badge">${e.completed?'WE DID IT':'SOMEDAY WITH YOU'}</span></div><h3>${h(e.title)}</h3><p class="preserve">${h(e.body)}</p><p class="metadata">${h(dateLabel(e.event_date))}${e.location?' · '+h(e.location):''}</p>${e.completed?`<button class="secondary" data-action="convert" data-id="${e.id}">Make this a memory +</button>`:''}${controls(e)}</article>`).join('')}</div>`;
+  else content=`<div class="playlist">${selected.map((e,i)=>`<article class="song"><div class="record" aria-hidden="true"><span>♫</span></div><div class="song-copy"><span class="eyebrow">TRACK ${String(i+1).padStart(2,'0')}</span><h3>${h(e.title)}</h3><span class="metadata">${h(e.artist)}</span><p class="preserve">${h(e.body)}</p></div><div>${e.song_url?`<a class="play-button" href="${h(e.song_url)}" target="_blank" rel="noopener noreferrer" aria-label="Play ${h(e.title)}">▶ <span>Play song</span></a>`:''}${controls(e)}</div></article>`).join('')}</div>`;
+- return `${hero}${next?`<div class="next-date"><span>✧</span><p><strong>${h(next.title)}</strong><span>${h(dateLabel(next.date))}</span></p><span class="badge">${daysTogether(today(),next.date)===0?'Today':`In ${daysTogether(today(),next.date)} days`}</span><a href="#calendar">View calendar →</a></div>`:''}${heading}${toolbar}${content}<footer>Every little moment belongs here. <span>♡</span></footer>`;
++ return `${hero}${page==='story'?connectionMarkup():''}${next?`<div class="next-date"><span>✧</span><p><strong>${h(next.title)}</strong><span>${h(dateLabel(next.date))}</span></p><span class="badge">${daysTogether(today(),next.date)===0?'Today':`In ${daysTogether(today(),next.date)} days`}</span><a href="#calendar">View calendar →</a></div>`:''}${heading}${toolbar}${content}<footer>Every little moment belongs here. <span>♡</span></footer>`;
+ }
+diff --git a/package-lock.json b/package-lock.json
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -17,7 +17,9 @@
+         "@types/cors": "2.8.19",
+         "@types/express": "5.0.6",
+         "@types/node": "22.20.3",
++        "@types/pg": "8.23.1",
+         "@types/supertest": "7.2.1",
++        "@types/web-push": "3.6.4",
+         "agent-browser": "0.38.0",
+         "supertest": "7.2.2",
+         "tsx": "4.23.13",
+@@ -37,6 +39,8 @@
+         "express": "5.2.1",
+         "express-rate-limit": "8.7.0",
+         "helmet": "8.3.0",
++        "pg": "8.23.0",
++        "web-push": "3.6.7",
+         "zod": "4.6.5"
+       }
+     },
+@@ -994,6 +998,18 @@
+         "undici-types": "~6.21.0"
+       }
+     },
++    "node_modules/@types/pg": {
++      "version": "8.23.1",
++      "resolved": "https://registry.npmjs.org/@types/pg/-/pg-8.23.1.tgz",
++      "integrity": "sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*",
++        "pg-protocol": "*",
++        "pg-types": "^2.2.0"
++      }
++    },
+     "node_modules/@types/qs": {
+       "version": "6.15.1",
+       "resolved": "https://registry.npmjs.org/@types/qs/-/qs-6.15.1.tgz",
+@@ -1053,6 +1069,16 @@
+         "@types/superagent": "^8.1.0"
+       }
+     },
++    "node_modules/@types/web-push": {
++      "version": "3.6.4",
++      "resolved": "https://registry.npmjs.org/@types/web-push/-/web-push-3.6.4.tgz",
++      "integrity": "sha512-GnJmSr40H3RAnj0s34FNTcJi1hmWFV5KXugE0mYWnYhgTAHLJ/dJKAwDmvPJYMke0RplY2XE9LnM4hqSqKIjhQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
+     "node_modules/@typescript/typescript-aix-ppc64": {
+       "version": "7.0.2",
+       "resolved": "https://registry.npmjs.org/@typescript/typescript-aix-ppc64/-/typescript-aix-ppc64-7.0.2.tgz",
+@@ -1406,6 +1432,15 @@
+         "node": ">= 0.6"
+       }
+     },
++    "node_modules/agent-base": {
++      "version": "7.1.4",
++      "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz",
++      "integrity": "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 14"
++      }
++    },
+     "node_modules/agent-browser": {
+       "version": "0.38.0",
+       "resolved": "https://registry.npmjs.org/agent-browser/-/agent-browser-0.38.0.tgz",
+@@ -1428,11 +1463,29 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/asn1.js": {
++      "version": "5.4.1",
++      "resolved": "https://registry.npmjs.org/asn1.js/-/asn1.js-5.4.1.tgz",
++      "integrity": "sha512-+I//4cYPccV8LdmBLiX8CYvf9Sp3vQsrqu2QNXRcrbiWvcx/UdlFiqUJJzxRQxgsZmvhXhn4cSKeSmoFjVdupA==",
++      "license": "MIT",
++      "dependencies": {
++        "bn.js": "^4.0.0",
++        "inherits": "^2.0.1",
++        "minimalistic-assert": "^1.0.0",
++        "safer-buffer": "^2.1.0"
++      }
++    },
+     "node_modules/asynckit": {
+       "version": "0.4.0",
+       "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz",
+       "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
+       "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/bn.js": {
++      "version": "4.12.5",
++      "resolved": "https://registry.npmjs.org/bn.js/-/bn.js-4.12.5.tgz",
++      "integrity": "sha512-3aRg6/JxfffFD+OlOjOFR3Vo79l39ooBTFucxx+MT3dhCtzn3EmiUPQo+6/OZuI2jbXi3YKgmiTFBgChQMwIRQ==",
+       "license": "MIT"
+     },
+     "node_modules/body-parser": {
+@@ -1472,6 +1525,12 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/buffer-equal-constant-time": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
++      "integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==",
++      "license": "BSD-3-Clause"
++    },
+     "node_modules/bytes": {
+       "version": "3.1.2",
+       "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
+@@ -1666,6 +1725,15 @@
+       },
+       "engines": {
+         "node": ">= 0.4"
++      }
++    },
++    "node_modules/ecdsa-sig-formatter": {
++      "version": "1.0.11",
++      "resolved": "https://registry.npmjs.org/ecdsa-sig-formatter/-/ecdsa-sig-formatter-1.0.11.tgz",
++      "integrity": "sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "safe-buffer": "^5.0.1"
+       }
+     },
+     "node_modules/ee-first": {
+@@ -2095,6 +2163,15 @@
+         "url": "https://github.com/sponsors/EvanHahn"
+       }
+     },
++    "node_modules/http_ece": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/http_ece/-/http_ece-1.2.0.tgz",
++      "integrity": "sha512-JrF8SSLVmcvc5NducxgyOrKXe3EsyHMgBFgSaIUGmArKe+rwr0uphRkRXvwiom3I+fpIfoItveHrfudL8/rxuA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=16"
++      }
++    },
+     "node_modules/http-errors": {
+       "version": "2.0.1",
+       "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
+@@ -2115,6 +2192,19 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/https-proxy-agent": {
++      "version": "7.0.6",
++      "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-7.0.6.tgz",
++      "integrity": "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==",
++      "license": "MIT",
++      "dependencies": {
++        "agent-base": "^7.1.2",
++        "debug": "4"
++      },
++      "engines": {
++        "node": ">= 14"
++      }
++    },
+     "node_modules/iceberg-js": {
+       "version": "0.8.1",
+       "resolved": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+@@ -2169,6 +2259,27 @@
+       "resolved": "https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz",
+       "integrity": "sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==",
+       "license": "MIT"
++    },
++    "node_modules/jwa": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/jwa/-/jwa-2.0.1.tgz",
++      "integrity": "sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==",
++      "license": "MIT",
++      "dependencies": {
++        "buffer-equal-constant-time": "^1.0.1",
++        "ecdsa-sig-formatter": "1.0.11",
++        "safe-buffer": "^5.0.1"
++      }
++    },
++    "node_modules/jws": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/jws/-/jws-4.0.1.tgz",
++      "integrity": "sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==",
++      "license": "MIT",
++      "dependencies": {
++        "jwa": "^2.0.1",
++        "safe-buffer": "^5.0.1"
++      }
+     },
+     "node_modules/lightningcss": {
+       "version": "1.33.0",
+@@ -2513,6 +2624,21 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/minimalistic-assert": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/minimalistic-assert/-/minimalistic-assert-1.0.1.tgz",
++      "integrity": "sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A==",
++      "license": "ISC"
++    },
++    "node_modules/minimist": {
++      "version": "1.2.8",
++      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
++      "integrity": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
+     "node_modules/ms": {
+       "version": "2.1.3",
+       "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+@@ -2626,6 +2752,95 @@
+       "funding": {
+         "type": "opencollective",
+         "url": "https://opencollective.com/express"
++      }
++    },
++    "node_modules/pg": {
++      "version": "8.23.0",
++      "resolved": "https://registry.npmjs.org/pg/-/pg-8.23.0.tgz",
++      "integrity": "sha512-Ip2EQCngowJLGOfCwkFhPXU7/ljlhn6Rxlmy4XYfL2Y+vyRM59+8uR2xqRWKdYmbXmxCFOAmKxBuSUCdF34qLg==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-connection-string": "^2.14.0",
++        "pg-pool": "^3.14.0",
++        "pg-protocol": "^1.16.0",
++        "pg-types": "2.2.0",
++        "pgpass": "1.0.5"
++      },
++      "engines": {
++        "node": ">= 16.0.0"
++      },
++      "optionalDependencies": {
++        "pg-cloudflare": "^1.4.0"
++      },
++      "peerDependencies": {
++        "pg-native": ">=3.0.1"
++      },
++      "peerDependenciesMeta": {
++        "pg-native": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/pg-cloudflare": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.4.0.tgz",
++      "integrity": "sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==",
++      "license": "MIT",
++      "optional": true
++    },
++    "node_modules/pg-connection-string": {
++      "version": "2.14.0",
++      "resolved": "https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.14.0.tgz",
++      "integrity": "sha512-XwWDGcLRGCXAR8F/AM5bG7Q+A3Wm2s6QeEjlOKZLlH3UYcguiqCWKyWXVag5TLTIjR7oOJUY8kcADaZgWPyLeg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-int8": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz",
++      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
++      "license": "ISC",
++      "engines": {
++        "node": ">=4.0.0"
++      }
++    },
++    "node_modules/pg-pool": {
++      "version": "3.14.0",
++      "resolved": "https://registry.npmjs.org/pg-pool/-/pg-pool-3.14.0.tgz",
++      "integrity": "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "pg": ">=8.0"
++      }
++    },
++    "node_modules/pg-protocol": {
++      "version": "1.16.0",
++      "resolved": "https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.16.0.tgz",
++      "integrity": "sha512-sILXutLVjCLjcDuOmvhX5e2Z4cS5qG/6Bu3VkpFwdf/633ElGLpEh9bgmuI5I4sqKqkifQiGyiCcx1HdtrK7tg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-types": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz",
++      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-int8": "1.0.1",
++        "postgres-array": "~2.0.0",
++        "postgres-bytea": "~1.0.0",
++        "postgres-date": "~1.0.4",
++        "postgres-interval": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/pgpass": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
++      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
++      "license": "MIT",
++      "dependencies": {
++        "split2": "^4.1.0"
+       }
+     },
+     "node_modules/picocolors": {
+@@ -2704,6 +2919,45 @@
+       },
+       "engines": {
+         "node": "^10 || ^12 || >=14"
++      }
++    },
++    "node_modules/postgres-array": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz",
++      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/postgres-bytea": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz",
++      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-date": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz",
++      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-interval": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
++      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
++      "license": "MIT",
++      "dependencies": {
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
+       }
+     },
+     "node_modules/proxy-addr": {
+@@ -2817,6 +3071,26 @@
+         "node": ">= 18"
+       }
+     },
++    "node_modules/safe-buffer": {
++      "version": "5.2.1",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
++      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/feross"
++        },
++        {
++          "type": "patreon",
++          "url": "https://www.patreon.com/feross"
++        },
++        {
++          "type": "consulting",
++          "url": "https://feross.org/support"
++        }
++      ],
++      "license": "MIT"
++    },
+     "node_modules/safer-buffer": {
+       "version": "2.1.2",
+       "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
+@@ -2954,6 +3228,15 @@
+       "license": "BSD-3-Clause",
+       "engines": {
+         "node": ">=0.10.0"
++      }
++    },
++    "node_modules/split2": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/split2/-/split2-4.2.0.tgz",
++      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
++      "license": "ISC",
++      "engines": {
++        "node": ">= 10.x"
+       }
+     },
+     "node_modules/statuses": {
+@@ -3221,12 +3504,40 @@
+         }
+       }
+     },
++    "node_modules/web-push": {
++      "version": "3.6.7",
++      "resolved": "https://registry.npmjs.org/web-push/-/web-push-3.6.7.tgz",
++      "integrity": "sha512-OpiIUe8cuGjrj3mMBFWY+e4MMIkW3SVT+7vEIjvD9kejGUypv8GPDf84JdPWskK8zMRIJ6xYGm+Kxr8YkPyA0A==",
++      "license": "MPL-2.0",
++      "dependencies": {
++        "asn1.js": "^5.3.0",
++        "http_ece": "1.2.0",
++        "https-proxy-agent": "^7.0.0",
++        "jws": "^4.0.0",
++        "minimist": "^1.2.5"
++      },
++      "bin": {
++        "web-push": "src/cli.js"
++      },
++      "engines": {
++        "node": ">= 16"
++      }
++    },
+     "node_modules/wrappy": {
+       "version": "1.0.2",
+       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
+       "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+       "license": "ISC"
+     },
++    "node_modules/xtend": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
++      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4"
++      }
++    },
+     "node_modules/zod": {
+       "version": "4.6.5",
+       "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.5.tgz",
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,8 @@
+     "test": "node --import tsx --test tests/*.test.ts",
+     "dev:web": "npm run dev -w frontend",
+     "dev:api": "npm run dev -w backend",
+-    "test:browser": "node --import tsx tests/browser-check.ts"
++    "test:browser": "node --import tsx tests/browser-check.ts",
++    "test:push-browser": "node --import tsx tests/push-browser-check.ts"
+   },
+   "devDependencies": {
+     "@electric-sql/pglite": "0.5.8",
+@@ -24,7 +25,9 @@
+     "@types/cors": "2.8.19",
+     "@types/express": "5.0.6",
+     "@types/node": "22.20.3",
++    "@types/pg": "8.23.1",
+     "@types/supertest": "7.2.1",
++    "@types/web-push": "3.6.4",
+     "agent-browser": "0.38.0",
+     "supertest": "7.2.2",
+     "tsx": "4.23.13",
+diff --git a/supabase/migrations/20260916205359_push_notifications.sql b/supabase/migrations/20260916205359_push_notifications.sql
+new file mode 100644
+--- /dev/null
++++ b/supabase/migrations/20260916205359_push_notifications.sql
+@@ -0,0 +1,52 @@
++-- Apply after the original database/setup.sql. Private schema is not exposed via Data API.
++begin;
++create schema if not exists ivraine_private;
++revoke all on schema ivraine_private from public, anon, authenticated;
++create table ivraine_private.push_subscriptions (
++ id uuid primary key default gen_random_uuid(),
++ user_id uuid not null references auth.users(id) on delete cascade,
++ book_id uuid not null references public.ivraine_books(id) on delete cascade,
++ endpoint text not null unique check(length(endpoint)<=4096 and endpoint like 'https://%'),
++ p256dh text not null check(length(p256dh)<=100),
++ auth text not null check(length(auth)<=30),
++ key_id text not null check(length(key_id)=64),
++ created_at timestamptz not null default now(),
++ updated_at timestamptz not null default now()
++);
++create index push_subscriptions_recipient_idx on ivraine_private.push_subscriptions(book_id,user_id,key_id);
++create index push_subscriptions_user_idx on ivraine_private.push_subscriptions(user_id);
++create table ivraine_private.heart_events (
++ id uuid primary key default gen_random_uuid(),
++ book_id uuid not null references public.ivraine_books(id) on delete cascade,
++ sender_id uuid not null references auth.users(id) on delete cascade,
++ recipient_id uuid not null references auth.users(id) on delete cascade,
++ request_id uuid not null,
++ created_at timestamptz not null default now(),
++ check(sender_id<>recipient_id),
++ unique(sender_id,request_id)
++);
++create index heart_events_sender_time_idx on ivraine_private.heart_events(sender_id,created_at desc);
++create index heart_events_recipient_time_idx on ivraine_private.heart_events(recipient_id,book_id,created_at desc);
++create index heart_events_book_idx on ivraine_private.heart_events(book_id);
++create table ivraine_private.push_deliveries (
++ id uuid primary key default gen_random_uuid(),
++ event_id uuid not null references ivraine_private.heart_events(id) on delete cascade,
++ subscription_id uuid references ivraine_private.push_subscriptions(id) on delete set null,
++ status text not null default 'pending' check(status in ('pending','sending','accepted','failed')),
++ attempts integer not null default 0 check(attempts between 0 and 5),
++ next_attempt_at timestamptz not null default now(),
++ locked_until timestamptz,
++ lease_id uuid,
++ last_error text,
++ created_at timestamptz not null default now(),
++ unique(event_id,subscription_id)
++);
++create index push_deliveries_queue_idx on ivraine_private.push_deliveries(status,next_attempt_at,locked_until);
++create index push_deliveries_subscription_idx on ivraine_private.push_deliveries(subscription_id);
++alter table ivraine_private.push_subscriptions enable row level security;
++alter table ivraine_private.heart_events enable row level security;
++alter table ivraine_private.push_deliveries enable row level security;
++revoke all on all tables in schema ivraine_private from public, anon, authenticated;
++-- Only the Railway backend's private PostgreSQL connection reads/writes these tables.
++-- No SECURITY DEFINER functions or client-visible subscription keys.
++commit;
+diff --git a/tests/push-browser-check.ts b/tests/push-browser-check.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/push-browser-check.ts
+@@ -0,0 +1,55 @@
++/** Browser verification with actual API/PostgreSQL. Push enrollment/transport are test doubles. */
++import {chromium,expect} from '@playwright/test';
++import {createServer} from 'vite';
++import {createECDH,randomBytes,createHash,randomUUID} from 'node:crypto';
++import {mkdir} from 'node:fs/promises';
++import {resolve} from 'node:path';
++import webpush from 'web-push';
++import {createApp} from '../backend/src/app';
++import {PushStore} from '../backend/src/push/store';
++import {deliverNext} from '../backend/src/push/worker';
++import {startFixture,fixtureKey,USER1,USER2,BOOK} from './fixture';
++import {installPushSchema,pushPool} from './push-fixture';
++const fixture=await startFixture(54329);await installPushSchema(fixture.db);const store=new PushStore(pushPool(fixture.db));
++const keys=webpush.generateVAPIDKeys(),keyId=createHash('sha256').update(keys.publicKey).digest('hex');
++const curve=createECDH('prime256v1');curve.generateKeys();const subscriptionKeys={p256dh:curve.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')};
++await store.subscribe(USER2,BOOK,{endpoint:'https://fcm.googleapis.com/fcm/send/partner-device',keys:subscriptionKeys},keyId);
++const apiServer=await new Promise<any>(done=>{const server=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://127.0.0.1:5173/'],trustProxy:0,push:{store,publicKey:keys.publicKey,keyId}}).listen(3001,'127.0.0.1',()=>done(server));});
++process.env.VITE_SUPABASE_URL=fixture.url;process.env.VITE_SUPABASE_PUBLISHABLE_KEY=fixtureKey;process.env.VITE_API_URL='http://127.0.0.1:3001/api/';
++const vite=await createServer({root:resolve('frontend'),server:{host:'127.0.0.1',port:5173,strictPort:true}});await vite.listen();
++const browser=await chromium.launch({...(process.env.TEST_CHROMIUM_PATH?{executablePath:process.env.TEST_CHROMIUM_PATH}:{}),args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
++const context=await browser.newContext({viewport:{width:1440,height:1000}});await context.grantPermissions(['notifications']);
++// Raw browser source avoids tsx's function-name helpers leaking into the page.
++await context.addInitScript({content:`
++ const subscriptionKeys=${JSON.stringify(subscriptionKeys)};
++ let current=null,serial=0;
++ window.__pushGesture=false;
++ window.__pushPermission='default';
++ Object.defineProperty(Notification,'permission',{get:()=>window.__pushPermission});
++ Object.defineProperty(Notification,'requestPermission',{value:()=>{window.__pushGesture=navigator.userActivation.isActive;window.__pushPermission='granted';return Promise.resolve('granted');}});
++ PushManager.prototype.getSubscription=async()=>current;
++ PushManager.prototype.subscribe=async function(options){
++  const endpoint='https://fcm.googleapis.com/fcm/send/browser-device-'+(++serial);
++  current={endpoint,options:{applicationServerKey:options?.applicationServerKey},expirationTime:null,getKey:()=>null,unsubscribe:async()=>{current=null;return true;},toJSON:()=>({endpoint,expirationTime:null,keys:subscriptionKeys})};return current;
++ };
++`});
++const page=await context.newPage();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
++const check=(message:string)=>console.log('PASS:',message);
++try{
++ await page.goto('http://127.0.0.1:5173');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();
++ const heart=page.getByRole('button',{name:'Send I miss you to my partner'});await expect(heart).toBeEnabled({timeout:20000});expect(errors).toEqual([]);check('Login works with normalized /api URL and trailing-slash origin');
++ await page.getByRole('button',{name:'Enable notifications',exact:true}).click();await expect(page.getByText('Notifications enabled on this device.',{exact:true})).toBeVisible({timeout:20000});expect(await page.evaluate(()=>(window as any).__pushGesture)).toBe(true);check('Permission requested from user gesture; subscription persisted to authenticated backend');
++ expect((await store.state(USER1,BOOK)).deviceCount).toBe(1);
++ await heart.click();await expect(heart).toBeDisabled();await expect(page.locator('#heart-status')).toContainText('queued');check('3D button saves and queues a heart; cooldown disables repeated taps');
++ await deliverNext(store,async()=>({statusCode:201}),keyId);
++ await store.sendHeart(USER2,BOOK,randomUUID(),keyId);
++ await page.evaluate(()=>navigator.serviceWorker.dispatchEvent(new MessageEvent('message',{data:{type:'ivraine-heart'}})));
++ await expect(page.locator('#heart-received')).toContainText('Loraine sent you a heart');await expect(page.locator('#heart-status')).toContainText('accepted');check('Incoming heart appears in-app; provider acceptance is labeled accurately');
++ await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/push-desktop.png',fullPage:true});
++ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/push-mobile.png',fullPage:true});check('Mobile 3D card has no horizontal overflow');
++ await page.emulateMedia({reducedMotion:'reduce'});expect(await page.locator('.heart-gem').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');check('Reduced-motion preference disables heart animation');
++ await page.getByRole('button',{name:'Turn off on this device'}).click();await expect(page.getByRole('button',{name:'Enable notifications',exact:true})).toBeVisible();expect((await store.state(USER1,BOOK)).deviceCount).toBe(0);check('Unsubscribe removes own server record and local subscription');
++ await page.getByRole('button',{name:'Lock',exact:true}).click();await page.getByLabel('Your email').fill('loraine@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();await expect(page.locator('#heart-received')).toContainText('Ivan sent you a heart',{timeout:20000});check('Second account can read the heart addressed to it');
++ expect(errors).toEqual([]);check('No browser runtime errors');
++}catch(error){console.error(await page.locator('body').innerText());await page.screenshot({path:'test-results/push-failure.png',fullPage:true});throw error;}
++finally{await browser.close();await vite.close();await new Promise<void>(done=>apiServer.close(()=>done()));await fixture.close();}
+diff --git a/tests/push-fixture.ts b/tests/push-fixture.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/push-fixture.ts
+@@ -0,0 +1,26 @@
++import type { PGlite } from '@electric-sql/pglite';
++import type { SqlPool,SqlConnection,SqlResult } from '../backend/src/push/store';
++import { readFile } from 'node:fs/promises';
++export async function installPushSchema(db:PGlite){await db.exec(await readFile(new URL('../supabase/migrations/20260916205359_push_notifications.sql',import.meta.url),'utf8'));}
++export function pushPool(db:PGlite):SqlPool{
++ return {
++  query:async(sql,values)=>db.query(sql,values) as Promise<SqlResult>,
++  connect:async()=>{
++   let expose!:(connection:SqlConnection)=>void,finish!:(error?:Error)=>void;
++   const ready=new Promise<SqlConnection>(resolve=>{expose=resolve;});
++   const hold=new Promise<void>((resolve,reject)=>{finish=error=>error?reject(error):resolve();});
++   const done=db.transaction(async tx=>{
++    const connection:SqlConnection={release:()=>finish(),query:async(sql,values)=>{
++     if(sql==='begin')return {rows:[]};
++     if(sql==='commit'){finish();await done;return {rows:[]};}
++     if(sql==='rollback'){finish(new Error('fixture rollback'));await done.catch(()=>undefined);return {rows:[]};}
++     return tx.query(sql,values) as Promise<SqlResult>;
++    }};
++    expose(connection);await hold;
++   });
++   // The transaction is awaited by COMMIT/ROLLBACK, not left unhandled.
++   void done.catch(()=>undefined);
++   return ready;
++  }
++ };
++}
+diff --git a/tests/push.test.ts b/tests/push.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/push.test.ts
+@@ -0,0 +1,72 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import {randomUUID,createECDH,randomBytes} from 'node:crypto';
++import request from 'supertest';
++import {fixtureDatabase,asUser,startFixture,USER1,USER2,OUTSIDER,BOOK,fixtureKey,token} from './fixture';
++import {PushStore,PushError} from '../backend/src/push/store';
++import {deliverNext} from '../backend/src/push/worker';
++import {trustedPushEndpoint,subscriptionSchema} from '../backend/src/push/validation';
++import {normalizeApiUrl} from '../frontend/src/api-config';
++import {installPushSchema,pushPool} from './push-fixture';
++import {createApp} from '../backend/src/app';
++const keyId='a'.repeat(64);
++function subscription(name='device'){const ecdh=createECDH('prime256v1');ecdh.generateKeys();return {endpoint:`https://fcm.googleapis.com/fcm/send/${name}`,keys:{p256dh:ecdh.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')}};}
++test('API URL normalizes trailing /api and prevents deployed localhost/mixed content',()=>{
++ assert.equal(normalizeApiUrl(' https://api.example.com/api/ ','https://app.example.com'),'https://api.example.com/api');
++ assert.equal(normalizeApiUrl('https://api.example.com/','https://app.example.com'),'https://api.example.com/api');
++ assert.throws(()=>normalizeApiUrl('http://localhost:3001','https://app.example.com'),/localhost/);
++ assert.throws(()=>normalizeApiUrl('http://api.example.com','https://app.example.com'),/HTTPS/);
++ assert.throws(()=>normalizeApiUrl('https://user:secret@api.example.com','https://app.example.com'),/credentials/);
++});
++test('subscription validation blocks SSRF, fake suffixes, custom ports and bad keys',()=>{
++ for(const endpoint of ['http://localhost:8000','https://127.0.0.1/x','https://fcm.googleapis.com.evil.test/x','https://fcm.googleapis.com:8080/x','https://user@web.push.apple.com/x'])assert.equal(trustedPushEndpoint(endpoint),false);
++ for(const endpoint of ['https://web.push.apple.com/x','https://fcm.googleapis.com/fcm/send/x','https://updates.push.services.mozilla.com/wpush/v2/x','https://wns2-a.notify.windows.com/w/?token=x'])assert.equal(trustedPushEndpoint(endpoint),true);
++ assert(subscriptionSchema.safeParse(subscription()).success);
++ assert(!subscriptionSchema.safeParse({...subscription(),keys:{auth:'bad',p256dh:'bad'}}).success);
++});
++test('private records, subscription ownership, idempotent hearts, durable cooldown, and two-way sharing',async()=>{
++ const db=await fixtureDatabase();try{await installPushSchema(db);const store=new PushStore(pushPool(db));
++ const sub=subscription();await store.subscribe(USER2,BOOK,sub,keyId);
++ await assert.rejects(store.subscribe(USER1,BOOK,sub,keyId),(e:unknown)=>e instanceof PushError&&e.status===409);
++ await assert.rejects(store.subscribe(OUTSIDER,BOOK,subscription('outsider'),keyId));
++ await assert.rejects(asUser(db,USER1,'select * from ivraine_private.push_subscriptions'));
++ const requestId=randomUUID(),saved=await store.sendHeart(USER1,BOOK,requestId,keyId);assert.equal(saved.queuedDevices,1);
++ const duplicate=await store.sendHeart(USER1,BOOK,requestId,keyId);assert.equal(duplicate.eventId,saved.eventId);assert.equal(duplicate.duplicate,true);
++ await assert.rejects(store.sendHeart(USER1,BOOK,randomUUID(),keyId),(e:unknown)=>e instanceof PushError&&e.status===429&&e.retryAfter>0);
++ const receiver=await store.state(USER2,BOOK);assert.equal(receiver.received[0].senderName,'Ivan');
++ const sender=await store.state(USER1,BOOK);assert.equal(sender.received.length,0);assert.equal(sender.lastSent.pending,1);
++ await store.unsubscribe(USER1,sub.endpoint);assert.equal(await store.subscriptionActive(USER2,sub.endpoint,keyId),true);
++ const reply=await store.sendHeart(USER2,BOOK,randomUUID(),keyId);assert.equal(reply.queuedDevices,0);assert.equal((await store.state(USER1,BOOK)).received[0].senderName,'Loraine');
++ await assert.rejects(store.sendHeart(OUTSIDER,BOOK,randomUUID(),keyId));
++ }finally{await db.close();}
++});
++test('worker accepts pushes, retries transient failures, prunes expired devices, and guards removed members',async()=>{
++ const db=await fixtureDatabase();try{await installPushSchema(db);const store=new PushStore(pushPool(db));
++ await store.subscribe(USER2,BOOK,subscription('retry'),keyId);await store.sendHeart(USER1,BOOK,randomUUID(),keyId);
++ let attempts=0;
++ await deliverNext(store,async()=>{attempts++;throw {statusCode:503};},keyId);
++ assert.equal((await db.query<any>('select status,attempts from ivraine_private.push_deliveries')).rows[0].status,'pending');
++ await db.exec("update ivraine_private.push_deliveries set next_attempt_at=now()-interval '1 second'");
++ await deliverNext(store,async(_sub,payload)=>{attempts++;assert.equal(JSON.parse(payload).url,'/#story');assert(!payload.includes('Ivan'));},keyId);
++ assert.equal(attempts,2);assert.equal((await store.state(USER1,BOOK)).lastSent.accepted,1);
++ await db.exec("update ivraine_private.heart_events set created_at=now()-interval '2 minutes'");
++ await store.sendHeart(USER1,BOOK,randomUUID(),keyId);
++ await deliverNext(store,async()=>{throw {statusCode:410};},keyId);assert.equal((await db.query('select * from ivraine_private.push_subscriptions')).rows.length,0);
++ assert.equal((await store.state(USER1,BOOK)).lastSent.failed,1);
++ await store.subscribe(USER2,BOOK,subscription('revoked'),keyId);await db.exec("update ivraine_private.heart_events set created_at=now()-interval '2 minutes'");await store.sendHeart(USER1,BOOK,randomUUID(),keyId);
++ await db.query('delete from public.ivraine_members where user_id=$1',[USER2]);
++ let leaked=false;await deliverNext(store,async()=>{leaked=true;},keyId);assert.equal(leaked,false);
++ }finally{await db.close();}
++});
++test('HTTP endpoints require auth, persist hearts, expose cooldown, and honor normalized CORS preflight',async()=>{
++ const fixture=await startFixture();try{await installPushSchema(fixture.db);const store=new PushStore(pushPool(fixture.db));
++ const app=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['https://site.example/'],trustProxy:0,push:{store,publicKey:'test-public-key',keyId}});
++ const headers={Authorization:`Bearer ${token(USER1)}`};
++ const preflight=await request(app).options('/api/notifications/hearts').set('Origin','https://site.example').set('Access-Control-Request-Method','POST').set('Access-Control-Request-Headers','authorization,content-type').expect(204);assert.equal(preflight.headers['access-control-allow-origin'],'https://site.example');
++ await request(app).post('/api/notifications/hearts').send({requestId:randomUUID()}).expect(401);
++ await request(app).get('/api/notifications/state').set('Authorization',`Bearer ${token(OUTSIDER)}`).expect(403);
++ await request(app).post('/api/notifications/subscriptions').set(headers).send({...subscription(),endpoint:'https://localhost/'}).expect(400);
++ await request(app).post('/api/notifications/hearts').set(headers).send({requestId:randomUUID()}).expect(201);
++ const tooSoon=await request(app).post('/api/notifications/hearts').set(headers).send({requestId:randomUUID()}).expect(429);assert(Number(tooSoon.headers['retry-after'])>0);
++ }finally{await fixture.close();}
++});
+diff --git a/tests/service-worker.test.ts b/tests/service-worker.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/service-worker.test.ts
+@@ -0,0 +1,19 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import vm from 'node:vm';
++import {readFile} from 'node:fs/promises';
++import webpush from 'web-push';
++import {createECDH,randomBytes} from 'node:crypto';
++test('service worker always displays generic push and opens only the scrapbook origin',async()=>{
++ const handlers=new Map<string,(event:any)=>void>();const shown:any[]=[],opened:string[]=[],focused:string[]=[],messages:any[]=[];
++ const client={url:'https://ivraine.example/',navigate:async(url:string)=>{opened.push(url);},focus:async()=>{focused.push('focused');},postMessage:(value:any)=>messages.push(value)};
++ vm.runInNewContext(await readFile(new URL('../frontend/public/sw.js',import.meta.url),'utf8'),{URL,self:{location:{origin:'https://ivraine.example'},addEventListener:(name:string,handler:any)=>handlers.set(name,handler),registration:{showNotification:async(title:string,options:any)=>shown.push({title,...options})},clients:{matchAll:async()=>[client],openWindow:async(url:string)=>opened.push(url)}}});
++ let waiting:Promise<any>=Promise.resolve();handlers.get('push')!({data:{json:()=>({eventId:'heart-1',url:'https://evil.example/',body:'private message'})},waitUntil:(p:Promise<any>)=>{waiting=p;}});await waiting;
++ assert.equal(shown.length,1);assert.equal(shown[0].tag,'ivraine-heart-heart-1');assert(!shown[0].body.includes('private message'));assert.equal(messages[0].type,'ivraine-heart');
++ let closed=false;handlers.get('notificationclick')!({notification:{data:{url:'https://evil.example/'},close:()=>{closed=true;}},waitUntil:(p:Promise<any>)=>{waiting=p;}});await waiting;assert(closed);assert.deepEqual(opened,['https://ivraine.example/#story']);assert.equal(focused.length,1);
++});
++test('web-push encrypts a standards-based payload with a real generated VAPID pair',()=>{
++ const vapid=webpush.generateVAPIDKeys(),curve=createECDH('prime256v1');curve.generateKeys();
++ const request=webpush.generateRequestDetails({endpoint:'https://web.push.apple.com/test',keys:{p256dh:curve.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')}},'test encrypted message',{vapidDetails:{subject:'mailto:test@example.com',publicKey:vapid.publicKey,privateKey:vapid.privateKey},TTL:3600});
++ assert(request.body instanceof Buffer);assert(!request.body.toString().includes('test encrypted message'));assert.equal(request.headers['Content-Encoding'],'aes128gcm');assert(request.headers.Authorization);
++});
