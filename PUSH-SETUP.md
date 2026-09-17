@@ -118,6 +118,16 @@ git push origin main
 
 The automated tests use the real API and PostgreSQL/RLS in a local fixture, with test authentication and simulated push transport. Browser enrollment is simulated in the browser test; no real partner received any test notification. VAPID/encrypted request generation and service-worker handlers are checked separately. Physical iPhone/Android delivery and live Railway/Supabase deployment must be tested after configuring your actual values.
 
+## Why the hearts card may say the database is not set up (503, not 500)
+
+The API deliberately answers `GET /api/notifications/state` with a calm **503 + Retry-After** while the storage is not ready; the browser then shows a status line instead of error toasts and retries on the server's schedule (5 minutes for a missing migration, 30 seconds for an outage). Railway's deploy logs say exactly which step is missing:
+
+- `push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql` — the migration has not been run in the Supabase SQL Editor yet. Run it once; the API picks it up on the next request without a redeploy.
+- `push_database_unreachable: heart storage did not answer` — `PUSH_DATABASE_URL` is wrong, the database is paused, or the host/TLS is blocked. Copy the connection string again from Supabase → Connect (direct connection or session pooler), fix Railway variables, and redeploy.
+- `push_database_ready` — storage is fine; look for another cause.
+
+The same mapping applies to every `/api/notifications/*` endpoint, so a broken storage can no longer produce raw 500 responses or spam the browser console.
+
 ## Sources
 
 - [Apple/WebKit: Web Push for Home Screen web apps](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)

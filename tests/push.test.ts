@@ -70,3 +70,15 @@ test('HTTP endpoints require auth, persist hearts, expose cooldown, and honor no
  const tooSoon=await request(app).post('/api/notifications/hearts').set(headers).send({requestId:randomUUID()}).expect(429);assert(Number(tooSoon.headers['retry-after'])>0);
  }finally{await fixture.close();}
 });
+test('storage outages answer 503 with Retry-After and an actionable message instead of 500',async()=>{
+ const dbFailure=(code:string)=>async()=>{const error=new Error(code==='42P01'?'relation "ivraine_private.push_subscriptions" does not exist':'connect ECONNREFUSED 127.0.0.1:5432');(error as {code?:string}).code=code;throw error;};
+ const fixture=await startFixture();try{
+  const headers={Authorization:`Bearer ${token(USER1)}`};
+  const schemaMissing=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['https://site.example/'],trustProxy:0,push:{store:{state:dbFailure('42P01')} as unknown as PushStore,publicKey:null,keyId:null}});
+  const missing=await request(schemaMissing).get('/api/notifications/state').set(headers).expect(503);
+  assert.equal(missing.body.error,'Heart sharing needs the notification database setup.');assert.equal(missing.headers['retry-after'],'300');
+  const unreachable=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['https://site.example/'],trustProxy:0,push:{store:{state:dbFailure('ECONNREFUSED')} as unknown as PushStore,publicKey:null,keyId:null}});
+  const down=await request(unreachable).get('/api/notifications/state').set(headers).expect(503);
+  assert.equal(down.body.error,'Hearts are briefly unavailable. The app retries on its own.');assert.equal(down.headers['retry-after'],'30');
+ }finally{await fixture.close();}
+});

@@ -1,36 +1,55 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
 export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;}
+// Storage outages (missing migration, unreachable database) must answer a calm 503 with
+// Retry-After instead of a bare 500, so the app shows a status line and backs off.
+let schemaLogged=false,storeErrorLoggedAt=0;
+function storeFailure(error:unknown):PushError{
+ if(error instanceof PushError)return error;
+ const code=typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';
+ if(code==='42P01'){
+  if(!schemaLogged){schemaLogged=true;console.error('push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied');}
+  return new PushError(503,'Heart sharing needs the notification database setup.',300);
+ }
+ if(Date.now()-storeErrorLoggedAt>300000){storeErrorLoggedAt=Date.now();console.error(`push_store_error: the notification database rejected a query (${code||'unexpected error'}); check PUSH_DATABASE_URL connectivity and credentials`);}
+ return new PushError(503,'Hearts are briefly unavailable. The app retries on its own.',30);
+}
+function guarded(handler:(req:Request,res:Response)=>Promise<void>){
+ return async(req:Request,res:Response,next:NextFunction)=>{try{await handler(req,res);}catch(error){next(error instanceof z.ZodError?error:storeFailure(error));}};
+}
 export function pushRouter(services:PushServices){
  const router=Router();
- router.get('/state',async(_req,res)=>{
+ router.get('/state',guarded(async(_req,res)=>{
   if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0});return;}
   const state=await services.store.state(res.locals.userId,res.locals.member.book_id);
   res.json({enabled:true,pushEnabled:!!services.publicKey,publicKey:services.publicKey,...state});
- });
- router.post('/subscriptions',async(req,res)=>{
+ }));
+ router.post('/subscriptions',guarded(async(req,res)=>{
   if(!services.store||!services.publicKey||!services.keyId)throw new PushError(503,'Push notifications need server setup.');
   const sub=subscriptionSchema.parse(req.body);
   await services.store.subscribe(res.locals.userId,res.locals.member.book_id,sub,services.keyId);
   res.status(201).json({subscribed:true});
- });
- router.post('/subscriptions/check',async(req,res)=>{const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);res.json({active:services.store?await services.store.subscriptionActive(res.locals.userId,endpoint,services.keyId):false});});
- router.delete('/subscriptions',async(req,res)=>{
+ }));
+ router.post('/subscriptions/check',guarded(async(req,res)=>{
+  const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);
+  res.json({active:services.store?await services.store.subscriptionActive(res.locals.userId,endpoint,services.keyId):false});
+ }));
+ router.delete('/subscriptions',guarded(async(req,res)=>{
   if(!services.store)throw new PushError(503,'Notification storage is not configured.');
   const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);
   await services.store.unsubscribe(res.locals.userId,endpoint);res.json({subscribed:false});
- });
- router.delete('/devices',async(_req,res)=>{
+ }));
+ router.delete('/devices',guarded(async(_req,res)=>{
   if(!services.store)throw new PushError(503,'Notification storage is not configured.');
   await services.store.unsubscribeAll(res.locals.userId);res.json({subscribed:false});
- });
- router.post('/hearts',async(req,res)=>{
+ }));
+ router.post('/hearts',guarded(async(req,res)=>{
   if(!services.store)throw new PushError(503,'Heart sharing needs the notification database setup.');
   const {requestId}=heartSchema.parse(req.body);
   const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId);
   res.status(saved.duplicate?200:201).json({saved:true,...saved});
- });
+ }));
  return router;
 }
