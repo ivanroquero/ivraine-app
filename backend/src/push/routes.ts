@@ -59,7 +59,6 @@ export function pushRouter(services:PushServices){
   const report:{storage:{configured:boolean;schemaReady:boolean;error:string|null;code:string};vapid:{configured:boolean};worker:{running:boolean};devices:{own:number;partner:number};deliveries:{pending:number;sending:number;accepted:number;failed:number;lastError:string|null}|null}=
    {storage:{configured:!!services.store,schemaReady:false,error:null,code:''},vapid:{configured:!!services.publicKey},worker:{running:!!services.workerRunning},devices:{own:0,partner:0},deliveries:null};
   if(!services.store){report.storage.error='PUSH_DATABASE_URL is not set on the API service.';res.json(report);return;}
-  if(!services.publicKey)report.storage.error='VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT are not all set on the API service.';
   try{
    const data=await services.store.diagnostics(res.locals.userId,res.locals.member.book_id,services.keyId);
    report.storage.schemaReady=true;report.devices=data.devices;report.deliveries=data.deliveries;

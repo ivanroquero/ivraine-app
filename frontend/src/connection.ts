@@ -152,7 +152,7 @@ async function sendHeart(){
   if(current!==epoch)return;sessionStorage.removeItem(storageKey);
   state.lastSent={nextAllowedAt:result.nextAllowedAt,accepted:0,pending:result.queuedDevices,failed:0};
   // The partner's own registration decides whether a phone can ring, so say it plainly.
-  if(result.queuedDevices){status=`Heart saved and sent to ${partnerName()}’s phone.`;notify('A little love is on its way. ♡');celebrate();}
+  if(result.queuedDevices){status=`Heart saved for ${partnerName()}. Push delivery is queued.`;notify('A little love is on its way. ♡');celebrate();}
   else{status=`Heart saved. ${partnerName()} has not enabled notifications on a phone yet, so nothing was pushed.`;notify('Heart saved in your scrapbook. ♡');buzz([15]);void diagnose(false);}
  }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not send your heart.';if(error instanceof ApiError&&error.status===429){sessionStorage.removeItem(storageKey);state.lastSent={nextAllowedAt:new Date(Date.now()+Math.max(1,error.retryAfter)*1000).toISOString(),accepted:0,pending:0,failed:0};}}}
  finally{if(current===epoch){sending=false;paintConnection();}}

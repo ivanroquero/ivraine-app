@@ -50,7 +50,7 @@ try{
  await expect(page.locator('#push-diagnostics')).toContainText('This device is registered to receive hearts.');
  await expect(page.locator('#push-diagnostics')).toContainText('Loraine has a phone ready to receive hearts.');
  check('The in-app health check names every working notification step');
- await heart.click();await expect(heart).toBeDisabled();await expect(page.locator('#heart-status')).toContainText('queued');check('3D button saves and queues a heart; cooldown disables repeated taps');
+ await heart.click();await expect(heart).toBeDisabled();await expect(page.locator('#heart-status')).toContainText('Heart saved for Loraine');await expect(page.locator('#heart-status')).toContainText('queued');check('3D button saves and queues a heart for the named partner; cooldown disables repeated taps');
  await deliverNext(store,async()=>({statusCode:201}),keyId);
  await store.sendHeart(USER2,BOOK,randomUUID(),keyId);
  await page.evaluate(()=>navigator.serviceWorker.dispatchEvent(new MessageEvent('message',{data:{type:'ivraine-heart'}})));
