@@ -6,14 +6,15 @@ import { startPushWorker } from './worker.js';
 import type { PushServices } from './routes.js';
 // One boot-time probe turns silent per-request failures into an actionable deploy log line.
 async function probeDatabase(pool:Pool){
+ let timer:ReturnType<typeof setTimeout>|undefined;
  try{
-  await Promise.race([pool.query('select 1 from ivraine_private.push_subscriptions limit 1'),new Promise<never>((_,fail)=>setTimeout(()=>fail(new Error('probe_timeout')),8000))]);
+  await Promise.race([pool.query('select 1 from ivraine_private.push_subscriptions limit 1'),new Promise<never>((_,fail)=>{timer=setTimeout(()=>fail(new Error('probe_timeout')),8000);})]);
   console.log('push_database_ready: heart storage is reachable and the notification tables exist');
  }catch(error){
   const code=typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';
   if(code==='42P01')console.error('push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied');
   else console.error(`push_database_unreachable: heart storage did not answer (${code||'network error'}); verify PUSH_DATABASE_URL host, credentials, and TLS`);
- }
+ }finally{clearTimeout(timer);}
 }
 export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>}>{
  const services:PushServices={store:null,publicKey:null,keyId:null};
@@ -34,7 +35,8 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
   webpush.setVapidDetails(env.VAPID_SUBJECT!,env.VAPID_PUBLIC_KEY!,env.VAPID_PRIVATE_KEY!);
   services.publicKey=env.VAPID_PUBLIC_KEY!;
   services.keyId=createHash('sha256').update(services.publicKey).digest('hex');
-  stopWorker=startPushWorker(services.store,(subscription,payload)=>webpush.sendNotification(subscription,payload,{TTL:3600,urgency:'normal',timeout:10000}),services.keyId);
+  services.deliver=(subscription,payload)=>webpush.sendNotification(subscription,payload,{TTL:3600,urgency:'high',timeout:10000});
+  stopWorker=startPushWorker(services.store,services.deliver,services.keyId);
  }
  return {services,stop:async()=>{await stopWorker();await pool.end();}};
 }

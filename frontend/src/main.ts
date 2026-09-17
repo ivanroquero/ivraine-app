@@ -1,5 +1,6 @@
 import './styles.css';
 import './connection.css';
+import './glass.css';
 import { startConnection, stopConnection, paintConnection } from './connection';
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';

@@ -10,6 +10,8 @@ test('service worker always displays generic push and opens only the scrapbook o
  vm.runInNewContext(await readFile(new URL('../frontend/public/sw.js',import.meta.url),'utf8'),{URL,self:{location:{origin:'https://ivraine.example'},addEventListener:(name:string,handler:any)=>handlers.set(name,handler),registration:{showNotification:async(title:string,options:any)=>shown.push({title,...options})},clients:{matchAll:async()=>[client],openWindow:async(url:string)=>opened.push(url)}}});
  let waiting:Promise<any>=Promise.resolve();handlers.get('push')!({data:{json:()=>({eventId:'heart-1',url:'https://evil.example/',body:'private message'})},waitUntil:(p:Promise<any>)=>{waiting=p;}});await waiting;
  assert.equal(shown.length,1);assert.equal(shown[0].tag,'ivraine-heart-heart-1');assert(!shown[0].body.includes('private message'));assert.equal(messages[0].type,'ivraine-heart');
+ handlers.get('push')!({data:{json:()=>({type:'test',eventId:'device-test'})},waitUntil:(p:Promise<any>)=>{waiting=p;}});await waiting;
+ assert.match(shown[1].body,/Notifications are connected/);assert.equal(shown[1].tag,'ivraine-heart-device-test');
  let closed=false;handlers.get('notificationclick')!({notification:{data:{url:'https://evil.example/'},close:()=>{closed=true;}},waitUntil:(p:Promise<any>)=>{waiting=p;}});await waiting;assert(closed);assert.deepEqual(opened,['https://ivraine.example/#story']);assert.equal(focused.length,1);
 });
 test('web-push encrypts a standards-based payload with a real generated VAPID pair',()=>{

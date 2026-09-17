@@ -10,6 +10,22 @@ import {normalizeApiUrl} from '../frontend/src/api-config';
 import {installPushSchema,pushPool} from './push-fixture';
 import {createApp} from '../backend/src/app';
 const keyId='a'.repeat(64);
+test('test pushes verify device ownership, deliver through the provider, and expire invalid subscriptions',async()=>{
+ const fixture=await startFixture();
+ try{
+  await installPushSchema(fixture.db);const store=new PushStore(pushPool(fixture.db));
+  const sub=subscription('self-test');await store.subscribe(USER1,BOOK,sub,keyId);
+  let calls=0,expired=false;
+  const app=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://localhost:5173'],trustProxy:0,push:{store,publicKey:'public',keyId,deliver:async(target,payload)=>{calls++;assert.equal(target.endpoint,sub.endpoint);assert.equal(JSON.parse(payload).type,'test');if(expired)throw {statusCode:410};}}});
+  await request(app).post('/api/notifications/test').send(sub).expect(401);
+  await request(app).post('/api/notifications/test').set('Authorization',`Bearer ${token(USER2)}`).send(sub).expect(409);
+  assert.equal(calls,0);
+  await request(app).post('/api/notifications/test').set('Authorization',`Bearer ${token(USER1)}`).send(sub).expect(200,{accepted:true});
+  expired=true;
+  await request(app).post('/api/notifications/test').set('Authorization',`Bearer ${token(USER1)}`).send(sub).expect(410);
+  assert.equal(calls,2);assert.equal(await store.subscriptionActive(USER1,sub.endpoint,keyId),false);
+ }finally{await fixture.close();}
+});
 function subscription(name='device'){const ecdh=createECDH('prime256v1');ecdh.generateKeys();return {endpoint:`https://fcm.googleapis.com/fcm/send/${name}`,keys:{p256dh:ecdh.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')}};}
 test('API URL normalizes trailing /api and prevents deployed localhost/mixed content',()=>{
  assert.equal(normalizeApiUrl(' https://api.example.com/api/ ','https://app.example.com'),'https://api.example.com/api');

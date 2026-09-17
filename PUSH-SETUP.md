@@ -1,24 +1,10 @@
-# Ivraine push + 3D heart update
+# Push notifications
 
-This update was prepared against the exact source of the previous Ivraine ZIP. The connected GitHub account returned **404** for `ivanroquero/ivraine`; the current GitHub files and live deployment settings could not be read or changed. Apply the patch only if it matches your checkout. It deliberately fails instead of overwriting unrelated changes.
+The current app includes saved hearts, background Web Push, and a **Send test notification** button for the signed-in device. Local tests simulate the push provider; confirm real delivery on each phone after deployment.
 
-## Apply the code
+## Deploy the current source
 
-Extract the update bundle **outside your repository**. From your Ivraine repository root:
-
-```bash
-git apply --check ../ivraine-push-update/ivraine-push.patch
-git apply ../ivraine-push-update/ivraine-push.patch
-npm ci
-npm run typecheck
-npm test
-npm run build
-git add .
-git commit -m "Add durable Web Push and 3D miss-you hearts"
-git push origin main
-```
-
-Adjust only the path to the extracted `.patch` file. If `git apply --check` reports conflicts, do not force it. Your repository differs from the original package; use the patch's file paths and exact changed blocks to merge those edits. `CHANGES.md` lists the files and anchors. No full replacement of your current app is required.
+Run `npm ci`, `npm run typecheck`, `npm test`, and `npm run build`. Deploy `frontend/dist` as the website and the backend using the existing Dockerfile. Configure the variables and database below. No update ZIP or patch needs to be applied to this checkout.
 
 ## Fix the post-login Failed to fetch error
 
@@ -85,9 +71,11 @@ Redeploy Railway, with app sleeping/serverless suspension **disabled** so the pe
 
 1. Sign in as Ivan on Ivan's device and Loraine on Loraine's device.
 2. Open **Our story** and tap **Enable notifications** on each device.
-3. Accept the browser/OS permission prompt. Permission is only requested from a button tap.
+3. Accept the browser/OS permission prompt, then tap **Send test notification**. This sends a real encrypted push to this device through the server. ?Test accepted? means the provider accepted it; check the device notification center to confirm display. Permission is only requested from a button tap.
 4. Tap the 3D **I miss you** button. A heart is saved for the other member, with one send per minute.
 5. Close the recipient's app and send another heart after the cooldown to verify background push delivery on that device.
+
+The self-test is limited to three requests per minute per IP and only accepts a subscription registered to the signed-in account. An expired subscription reveals the enable button again. If the provider rejects VAPID credentials, check the server key pair and contact address.
 
 The enable/disable controls apply to the current account/device. **Remove all my devices** revokes every subscription belonging to that account. Subscriptions remain registered when the user locks the scrapbook so hearts can still arrive; use the notification controls to stop them. Lock-screen notification text is generic and opening it still requires app authentication. When switching accounts on a shared browser, enabling notifications renews the browser subscription so it cannot be reassigned to the other account silently.
 
@@ -97,7 +85,7 @@ The enable/disable controls apply to the current account/device. **Remove all my
 - iPhone/iPad: iOS/iPadOS **16.4+**, install to the Home Screen and open the installed app before enabling push.
 - Embedded social browsers, private-browsing restrictions, permission denial, unsupported versions, OS battery/Focus settings, and offline devices can prevent or delay push. The app explains unsupported/blocked states and continues to save hearts in-app.
 - Supported destination services are Google's FCM, Mozilla Push, Apple's Web Push, and Windows notification endpoints. Custom browser push providers need an explicitly reviewed allowlist update.
-- The app polls in-app hearts every 15 seconds while visible and refreshes immediately on a service-worker message.
+- The app polls in-app hearts every 15 seconds while visible and refreshes immediately when returning to the app or receiving a service-worker message.
 - A heart is **saved** before push delivery is queued. A provider accepting a request is **not proof of device display or human reading**. The UI uses “queued” and “push service accepted,” never “your partner saw it.”
 - The worker retries transient failures up to five attempts with increasing delays. Jobs expire after one hour. It removes 404/410 expired subscriptions and checks both memberships before delivery.
 - A persisted request ID prevents duplicate hearts when the same send is retried after a lost response. Leased jobs recover after a Railway restart. Push systems can still deliver at least once; the notification tag reduces duplicate display for the same heart.

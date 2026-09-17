@@ -14,7 +14,8 @@ const fixture=await startFixture(54329);await installPushSchema(fixture.db);cons
 const keys=webpush.generateVAPIDKeys(),keyId=createHash('sha256').update(keys.publicKey).digest('hex');
 const curve=createECDH('prime256v1');curve.generateKeys();const subscriptionKeys={p256dh:curve.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')};
 await store.subscribe(USER2,BOOK,{endpoint:'https://fcm.googleapis.com/fcm/send/partner-device',keys:subscriptionKeys},keyId);
-const apiServer=await new Promise<any>(done=>{const server=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://127.0.0.1:5173/'],trustProxy:0,push:{store,publicKey:keys.publicKey,keyId}}).listen(3001,'127.0.0.1',()=>done(server));});
+let testPushes=0;
+const apiServer=await new Promise<any>(done=>{const server=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://127.0.0.1:5173/'],trustProxy:0,push:{store,publicKey:keys.publicKey,keyId,deliver:async(_subscription,payload)=>{expect(JSON.parse(payload).type).toBe('test');testPushes++;}}}).listen(3001,'127.0.0.1',()=>done(server));});
 process.env.VITE_SUPABASE_URL=fixture.url;process.env.VITE_SUPABASE_PUBLISHABLE_KEY=fixtureKey;process.env.VITE_API_URL='http://127.0.0.1:3001/api/';
 const vite=await createServer({root:resolve('frontend'),server:{host:'127.0.0.1',port:5173,strictPort:true}});await vite.listen();
 const browser=await chromium.launch({...(process.env.TEST_CHROMIUM_PATH?{executablePath:process.env.TEST_CHROMIUM_PATH}:{}),args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
@@ -40,6 +41,7 @@ try{
  const heart=page.getByRole('button',{name:'Send I miss you to my partner'});await expect(heart).toBeEnabled({timeout:20000});expect(errors).toEqual([]);check('Login works with normalized /api URL and trailing-slash origin');
  await page.getByRole('button',{name:'Enable notifications',exact:true}).click();await expect(page.getByText('Notifications enabled on this device.',{exact:true})).toBeVisible({timeout:20000});expect(await page.evaluate(()=>(window as any).__pushGesture)).toBe(true);check('Permission requested from user gesture; subscription persisted to authenticated backend');
  expect((await store.state(USER1,BOOK)).deviceCount).toBe(1);
+ await page.getByRole('button',{name:'Send test notification',exact:true}).click();await expect(page.locator('#heart-status')).toContainText('Test accepted');expect(testPushes).toBe(1);check('Self-test crosses browser, authenticated API, registered device and push transport');
  await heart.click();await expect(heart).toBeDisabled();await expect(page.locator('#heart-status')).toContainText('queued');check('3D button saves and queues a heart; cooldown disables repeated taps');
  await deliverNext(store,async()=>({statusCode:201}),keyId);
  await store.sendHeart(USER2,BOOK,randomUUID(),keyId);
@@ -47,6 +49,15 @@ try{
  await expect(page.locator('#heart-received')).toContainText('Loraine sent you a heart');await expect(page.locator('#heart-status')).toContainText('accepted');check('Incoming heart appears in-app; provider acceptance is labeled accurately');
  await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/push-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/push-mobile.png',fullPage:true});check('Mobile 3D card has no horizontal overflow');
+ for(const width of [320,375,430,768,1024,1440]){
+  await page.setViewportSize({width,height:932});
+  for(const route of ['story','letters','gallery','calendar','plans','playlist']){
+   await page.getByRole('navigation').locator(`a[href="#${route}"]`).click();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${route} fits ${width}px`).toBe(true);
+  }
+ }
+ check('All six pages fit small phones, large phones, tablets and desktop');
+ await page.getByRole('navigation').locator('a[href="#story"]').click();await page.setViewportSize({width:430,height:932});await page.emulateMedia({colorScheme:'dark'});await page.screenshot({path:'test-results/push-dark-mobile.png',fullPage:true});await page.emulateMedia({colorScheme:'light'});
  await page.emulateMedia({reducedMotion:'reduce'});expect(await page.locator('.heart-gem').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');check('Reduced-motion preference disables heart animation');
  await page.getByRole('button',{name:'Turn off on this device'}).click();await expect(page.getByRole('button',{name:'Enable notifications',exact:true})).toBeVisible();expect((await store.state(USER1,BOOK)).deviceCount).toBe(0);check('Unsubscribe removes own server record and local subscription');
  await page.getByRole('button',{name:'Lock',exact:true}).click();await page.getByLabel('Your email').fill('loraine@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();await expect(page.locator('#heart-received')).toContainText('Ivan sent you a heart',{timeout:20000});check('Second account can read the heart addressed to it');

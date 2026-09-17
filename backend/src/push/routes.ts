@@ -1,8 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { rateLimit } from 'express-rate-limit';
+import type { Deliver } from './worker.js';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
-export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;}
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;}
 // Storage outages (missing migration, unreachable database) must answer a calm 503 with
 // Retry-After instead of a bare 500, so the app shows a status line and backs off.
 let schemaLogged=false,storeErrorLoggedAt=0;
@@ -21,6 +23,20 @@ function guarded(handler:(req:Request,res:Response)=>Promise<void>){
 }
 export function pushRouter(services:PushServices){
  const router=Router();
+ router.post('/test',rateLimit({windowMs:60000,limit:3,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Wait a minute before testing again.'}}),guarded(async(req,res)=>{
+  if(!services.store||!services.keyId||!services.deliver)throw new PushError(503,'Push notifications need server setup.');
+  const subscription=subscriptionSchema.parse(req.body);
+  if(!await services.store.subscriptionActive(res.locals.userId,subscription.endpoint,services.keyId))throw new PushError(409,'Enable notifications on this device before testing.');
+  try{
+   await services.deliver(subscription,JSON.stringify({type:'test',eventId:'device-test'}));
+  }catch(error){
+   const status=typeof error==='object'&&error!==null&&'statusCode' in error?Number(error.statusCode):0;
+   if(status===404||status===410){await services.store.unsubscribe(res.locals.userId,subscription.endpoint);throw new PushError(410,'This device subscription expired. Enable notifications again.');}
+   if(status===401||status===403)throw new PushError(503,'The push service rejected the server credentials. Check the VAPID key pair and contact address.');
+   throw new PushError(503,'The push service could not be reached. Please try again shortly.',30);
+  }
+  res.json({accepted:true});
+ }));
  router.get('/state',guarded(async(_req,res)=>{
   if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0});return;}
   const state=await services.store.state(res.locals.userId,res.locals.member.book_id);

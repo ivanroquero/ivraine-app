@@ -8,7 +8,7 @@ self.addEventListener('push',event=>{
   let payload={};try{payload=event.data?.json()||{};}catch{}
   const eventId=typeof payload.eventId==='string'?payload.eventId.slice(0,80):'new';
   await self.registration.showNotification('Ivraine',{
-   body:'A little “I miss you” is waiting in your private scrapbook. ♡',
+   body:payload.type==='test'?'Notifications are connected on this device. ?':'A little “I miss you” is waiting in your private scrapbook. ♡',
    icon:'/icons/couple-192.png',
    tag:`ivraine-heart-${eventId}`,
    data:{url:'/#story',eventId}
