@@ -1,0 +1,5 @@
+﻿
+> ivraine@2.0.0 typecheck
+> tsc -p frontend/tsconfig.json && tsc -p backend/tsconfig.json --noEmit
+
+backend/src/push/runtime.ts(56,72): error TS2353: Object literal may only specify known properties, and 'kick' does not exist in type '{ services: PushServices; stop: () => Promise<void>; }'.

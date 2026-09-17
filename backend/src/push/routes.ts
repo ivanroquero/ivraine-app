@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import type { Deliver } from './worker.js';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
-export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;workerRunning?:boolean;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;workerRunning?:boolean;kickWorker?:()=>void;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
 // Storage outages (missing migration, unreachable database) must answer a calm 503 with
 // Retry-After instead of a bare 500, so the app shows a status line and backs off.
 let schemaLogged=false,storeErrorLoggedAt=0;
@@ -88,6 +88,8 @@ export function pushRouter(services:PushServices){
   if(!services.store)throw new PushError(503,'Heart sharing needs the notification database setup.');
   const {requestId}=heartSchema.parse(req.body);
   const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId);
+  // Deliver immediately instead of waiting for the next worker poll, so a phone rings within seconds.
+  services.kickWorker?.();
   res.status(saved.duplicate?200:201).json({saved:true,...saved});
  }));
  return router;

@@ -96,5 +96,7 @@ export function startPushWorker(store:PushStore,deliver:Deliver,keyId:string){
  let stopped=false,busy=false,active:Promise<void>=Promise.resolve();
  const tick=()=>{if(stopped||busy)return;busy=true;active=(async()=>{try{for(let i=0;i<10&&!stopped;i++){if(!await deliverNext(store,deliver,keyId))break;}}catch{console.error('push_worker_failed: verify database connectivity and notification migration');}finally{busy=false;}})();};
  const timer=setInterval(tick,5000);timer.unref();tick();
- return async()=>{stopped=true;clearInterval(timer);await active;};
+ // Hearts should reach a phone within seconds, so endpoints that create work wake the worker now.
+ const kick=()=>{tick();};
+ return {stop:async()=>{stopped=true;clearInterval(timer);await active;},kick};
 }

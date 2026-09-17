@@ -28,9 +28,9 @@ export function getPoolStatus(pool:Pool):PoolStatus{
  return {idleCount:pool.idleCount,waitingCount:pool.waitingCount,totalCount:pool.totalCount};
 }
 
-export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>}>{
+export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>;kick:()=>void}>{
  const services:PushServices={store:null,publicKey:null,keyId:null,workerRunning:false};
- if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{}};
+ if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{},kick:()=>{}};
  const database=new URL(env.PUSH_DATABASE_URL);
  if(!['postgres:','postgresql:'].includes(database.protocol))throw new Error('PUSH_DATABASE_URL must be a PostgreSQL connection string.');
  // Enforce verified TLS rather than allowing URL flags to disable certificate validation.
@@ -41,7 +41,7 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
  pool.on('error',(error)=>console.error('push_database_connection_error',error));
  services.store=new PushStore(pool);
  await probeDatabase(pool);
- let stopWorker=async()=>{};
+ let stopWorker=async()=>{},kickWorker=()=>{};
  const configured=[env.VAPID_PUBLIC_KEY,env.VAPID_PRIVATE_KEY,env.VAPID_SUBJECT].filter(Boolean).length;
  if(configured>0&&configured<3)throw new Error('Set all three VAPID variables together.');
  if(configured===3){
@@ -50,7 +50,8 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
   services.publicKey=env.VAPID_PUBLIC_KEY!;
   services.keyId=createHash('sha256').update(services.publicKey).digest('hex');
   services.deliver=(subscription,payload)=>webpush.sendNotification(subscription,payload,{TTL:3600,urgency:'high',timeout:10000});
-  stopWorker=startPushWorker(services.store,services.deliver,services.keyId);services.workerRunning=true;
+  const worker=startPushWorker(services.store,services.deliver,services.keyId);
+  services.workerRunning=true;services.kickWorker=worker.kick;stopWorker=worker.stop;kickWorker=worker.kick;
  }
- return {services,stop:async()=>{await stopWorker();await pool.end();}};
+ return {services,stop:async()=>{await stopWorker();await pool.end();},kick:kickWorker};
 }
