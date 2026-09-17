@@ -25,7 +25,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   app.get('/health/push',(_req,res)=>{
     const push=config.push;
     if(!push?.store){res.status(200).json({status:'disabled',service:'ivraine-push',reason:'Push notifications not configured',checks:{database:false,vapid:false,worker:false}});return;}
-    res.json({status:push.publicKey?'ok':'degraded',service:'ivraine-push',configured:!!push.publicKey,checks:{database:true,vapid:!!push.publicKey,worker:!!push.workerRunning}});
+    const databaseReady=push.storageReady??true;
+    res.json({status:databaseReady&&push.publicKey?'ok':'degraded',service:'ivraine-push',configured:!!push.publicKey,checks:{database:databaseReady,vapid:!!push.publicKey,worker:!!push.workerRunning}});
   });
   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
   app.use('/api', async(req,res,next)=>{

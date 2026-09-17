@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import type { Deliver } from './worker.js';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
-export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;workerRunning?:boolean;kickWorker?:()=>void;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;workerRunning?:boolean;storageReady?:boolean;kickWorker?:()=>void;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
 // Storage outages (missing migration, unreachable database) must answer a calm 503 with
 // Retry-After instead of a bare 500, so the app shows a status line and backs off.
 let schemaLogged=false,storeErrorLoggedAt=0;

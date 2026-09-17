@@ -17,10 +17,12 @@ async function probeDatabase(pool:Pool){
  try{
   await Promise.race([pool.query('select 1 from ivraine_private.push_subscriptions limit 1'),new Promise<never>((_,fail)=>{timer=setTimeout(()=>fail(new Error('probe_timeout')),8000);})]);
   console.log('push_database_ready: heart storage is reachable and the notification tables exist');
+  return true;
  }catch(error){
   const code=typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';
   if(code==='42P01')console.error('push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied');
   else console.error(`push_database_unreachable: heart storage did not answer (${code||'network error'}); verify PUSH_DATABASE_URL host, credentials, and TLS`, error);
+  return false;
  }finally{clearTimeout(timer);}
 }
 
@@ -29,7 +31,7 @@ export function getPoolStatus(pool:Pool):PoolStatus{
 }
 
 export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>;kick:()=>void}>{
- const services:PushServices={store:null,publicKey:null,keyId:null,workerRunning:false};
+ const services:PushServices={store:null,publicKey:null,keyId:null,workerRunning:false,storageReady:false};
  if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{},kick:()=>{}};
  const database=new URL(env.PUSH_DATABASE_URL);
  if(!['postgres:','postgresql:'].includes(database.protocol))throw new Error('PUSH_DATABASE_URL must be a PostgreSQL connection string.');
@@ -40,7 +42,7 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
  pool.on('release',()=>console.debug('push_db_connection_released'));
  pool.on('error',(error)=>console.error('push_database_connection_error',error));
  services.store=new PushStore(pool);
- await probeDatabase(pool);
+ services.storageReady=await probeDatabase(pool);
  let stopWorker=async()=>{},kickWorker=()=>{};
  const configured=[env.VAPID_PUBLIC_KEY,env.VAPID_PRIVATE_KEY,env.VAPID_SUBJECT].filter(Boolean).length;
  if(configured>0&&configured<3)throw new Error('Set all three VAPID variables together.');
