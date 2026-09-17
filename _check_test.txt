@@ -3,3 +3,7 @@
 > node --import tsx --test tests/*.test.ts
 
 Γ£ö API: auth, shared CRUD, photo upload, stale edits, and deletion end to end (163199.4509ms)
+Γ£ö test pushes verify device ownership, deliver through the provider, and expire invalid subscriptions (162601.899ms)
+Γ£ö API URL normalizes trailing /api and prevents deployed localhost/mixed content (11.1424ms)
+Γ£ö subscription validation blocks SSRF, fake suffixes, custom ports and bad keys (25.581ms)
+Γ£ö private records, subscription ownership, idempotent hearts, durable cooldown, and two-way sharing (4251.8819ms)
