@@ -1,0 +1,32 @@
+async function disableNotifications(all=false){const current=epoch;enabling=true;paintConnection();try{
+ const subscription=await readLocalSubscription();
+ if(all)await api('/notifications/devices','DELETE');else if(subscription)await api('/notifications/subscriptions','DELETE',{endpoint:subscription.endpoint});
+ if(subscription&&localStorage.getItem('ivraine-push-owner')===userId)await subscription.unsubscribe();
+ if(current!==epoch)return;localStorage.removeItem('ivraine-push-owner');localSubscribed=false;status=all?'All your notification devices were removed.':'Notifications are off on this device.';issue='';await load();
+ }catch(error){if(current===epoch)issue=error instanceof Error?error.message:'Could not turn off notifications.';}finally{if(current===epoch){enabling=false;paintConnection();}}}
+async function sendHeart(){
+ if(!userId||!state?.enabled||sending)return;const current=epoch,storageKey=`ivraine-pending-heart:${userId}`;sending=true;issue='';status='';paintConnection();
+ const requestId=sessionStorage.getItem(storageKey)||crypto.randomUUID();sessionStorage.setItem(storageKey,requestId);
+ try{
+  const result=await api<{eventId:string;queuedDevices:number;nextAllowedAt:string}>('/notifications/hearts','POST',{requestId});
+  if(current!==epoch)return;sessionStorage.removeItem(storageKey);
+  state.lastSent={nextAllowedAt:result.nextAllowedAt,accepted:0,pending:result.queuedDevices,failed:0};
+  // The partner's own registration decides whether a phone can ring, so say it plainly.
+  if(result.queuedDevices){status=`Heart saved and sent to ${partnerName()}’s phone.`;notify('A little love is on its way. ♡');celebrate();}
+  else{status=`Heart saved. ${partnerName()} has not enabled notifications on a phone yet, so nothing was pushed.`;notify('Heart saved in your scrapbook. ♡');buzz([15]);void diagnose(false);}
+ }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not send your heart.';if(error instanceof ApiError&&error.status===429){sessionStorage.removeItem(storageKey);state.lastSent={nextAllowedAt:new Date(Date.now()+Math.max(1,error.retryAfter)*1000).toISOString(),accepted:0,pending:0,failed:0};}}}
+ finally{if(current===epoch){sending=false;paintConnection();}}
+}
+async function saveResubscription(subscription:PushSubscriptionJSON){
+ if(!userId)return;
+ try{await api('/notifications/subscriptions','POST',subscription);localStorage.setItem('ivraine-push-owner',userId);status='Notifications reconnected on this device.';await load();}
+ catch(error){issue=error instanceof Error?error.message:'Could not reconnect notifications.';paintConnection();}
+}
+document.addEventListener('click',event=>{const button=(event.target as Element).closest<HTMLButtonElement>('[data-heart-action]');if(!button||button.disabled)return;switch(button.dataset.heartAction){case'install':void install();break;case'test':void testNotification();break;case'send':void sendHeart();break;case'enable':void enableNotifications();break;case'disable':void disableNotifications();break;case'all-off':if(confirm('Turn off notifications on all your devices? You can enable them again on each device.'))void disableNotifications(true);break;case'diagnose':void diagnose();break;case'retry':blockedUntil=0;failures=0;void load();break;}});
+window.addEventListener('online',()=>{blockedUntil=0;void load();});
+navigator.serviceWorker?.addEventListener('message',event=>{const data=(event.data??{}) as PushMessage;
+ if(data.type==='ivraine-heart'){void clearBadge();void load();}
+ else if(data.type==='ivraine-resubscribed'&&data.subscription)void saveResubscription(data.subscription);
+ else if(data.type==='ivraine-heart-back'){notify('Sending a heart back. ♡');void sendHeart();}
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()>=blockedUntil)void load();});

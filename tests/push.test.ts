@@ -98,3 +98,18 @@ test('storage outages answer 503 with Retry-After and an actionable message inst
   assert.equal(down.body.error,'Hearts are briefly unavailable. The app retries on its own.');assert.equal(down.headers['retry-after'],'30');
  }finally{await fixture.close();}
 });
+test('notification diagnostics reports each setup step instead of failing with a 500',async()=>{
+ const fixture=await startFixture();try{await installPushSchema(fixture.db);const store=new PushStore(pushPool(fixture.db));
+ const app=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['https://site.example/'],trustProxy:0,push:{store,publicKey:'test-public-key',keyId,workerRunning:true}});
+ await request(app).get('/api/notifications/diagnostics').expect(401);
+ await store.subscribe(USER2,BOOK,subscription('diagnostics-device'),keyId);
+ await store.sendHeart(USER1,BOOK,randomUUID(),keyId);
+ const report=await request(app).get('/api/notifications/diagnostics').set('Authorization',`Bearer ${token(USER1)}`).expect(200);
+ assert.deepEqual(report.body.storage,{configured:true,schemaReady:true,error:null,code:''});
+ assert.deepEqual(report.body.vapid,{configured:true});assert.deepEqual(report.body.worker,{running:true});
+ assert.deepEqual(report.body.devices,{own:0,partner:1});assert.equal(report.body.deliveries.pending,1);assert.equal(report.body.deliveries.lastError,null);
+ const missingMigration=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['https://site.example/'],trustProxy:0,push:{store:{diagnostics:async()=>{const error=new Error('relation "ivraine_private.push_subscriptions" does not exist');(error as {code?:string}).code='42P01';throw error;}} as unknown as PushStore,publicKey:null,keyId:null}});
+ const broken=await request(missingMigration).get('/api/notifications/diagnostics').set('Authorization',`Bearer ${token(USER1)}`).expect(200);
+ assert.equal(broken.body.storage.schemaReady,false);assert.equal(broken.body.storage.code,'42P01');assert.match(broken.body.storage.error,/migration/);assert.equal(broken.body.vapid.configured,false);
+ }finally{await fixture.close();}
+});

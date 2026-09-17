@@ -29,7 +29,7 @@ export function getPoolStatus(pool:Pool):PoolStatus{
 }
 
 export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>}>{
- const services:PushServices={store:null,publicKey:null,keyId:null};
+ const services:PushServices={store:null,publicKey:null,keyId:null,workerRunning:false};
  if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{}};
  const database=new URL(env.PUSH_DATABASE_URL);
  if(!['postgres:','postgresql:'].includes(database.protocol))throw new Error('PUSH_DATABASE_URL must be a PostgreSQL connection string.');
@@ -50,7 +50,7 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
   services.publicKey=env.VAPID_PUBLIC_KEY!;
   services.keyId=createHash('sha256').update(services.publicKey).digest('hex');
   services.deliver=(subscription,payload)=>webpush.sendNotification(subscription,payload,{TTL:3600,urgency:'high',timeout:10000});
-  stopWorker=startPushWorker(services.store,services.deliver,services.keyId);
+  stopWorker=startPushWorker(services.store,services.deliver,services.keyId);services.workerRunning=true;
  }
  return {services,stop:async()=>{await stopWorker();await pool.end();}};
 }

@@ -156,6 +156,10 @@ dialog::backdrop { background: #28203455; backdrop-filter: blur(8px); }
   .sidebar nav a[aria-current] { background: #4a344e; color: #f7cde8; box-shadow: inset 0 1px 0 #ffffff15; }
   .sidebar nav a:hover,.text-button:hover { background: #443449; }
   .eyebrow,.hero>div>p,.hero-stats span,.since,.connection-copy .eyebrow,.connection-copy>p,.connection-copy .heart-received,.notification-row>span,.notification-row .text-button,.heart-hint,.card-copy>p,.card-copy>.metadata,.login-form .subtle,label,dialog p { color: var(--muted); }
+  .connection-copy .heart-partner,.push-diagnostics { color: var(--muted); }
+  .connection-copy .heart-partner.is-ready,.push-diagnostics li.ok>span:first-child { color: #9adcb4; }
+  .push-diagnostics { background: #2f2737; border-color: var(--border); }
+  .push-diagnostics li>span:first-child { color: #ffc79a; }
   .primary,button.primary,.notification-button { background: #e4bad8; color: #312335; border-color: transparent; }
   .primary:hover,.notification-row .notification-button:hover:not(:disabled) { background: #f4d3e9; }
   .hero-photo,.paper { background: #f3eaf0; color: #443143; }

@@ -41,7 +41,7 @@ export class PushStore {
    return {eventId:event.id,queuedDevices:devices.length,nextAllowedAt:new Date(new Date(event.created_at).getTime()+60000).toISOString(),duplicate:false};
   });
  }
- async state(userId:string,bookId:string){
+ async state(userId:string,bookId:string,keyId:string|null=null){
   const result=await this.pool.query(`select e.id,e.sender_id as "senderId",m.display_name as "senderName",e.created_at as "createdAt"
    from ivraine_private.heart_events e join public.ivraine_members m on m.user_id=e.sender_id and m.book_id=e.book_id
    where e.recipient_id=$1 and e.book_id=$2 order by e.created_at desc limit 10`,[userId,bookId]);
@@ -52,7 +52,22 @@ export class PushStore {
    from ivraine_private.heart_events e left join ivraine_private.push_deliveries d on d.event_id=e.id
    where e.sender_id=$1 and e.book_id=$2 group by e.id order by e.created_at desc limit 1`,[userId,bookId]);
   const device=await this.pool.query('select count(*)::int as count from ivraine_private.push_subscriptions where user_id=$1 and book_id=$2',[userId,bookId]);
-  return {received:result.rows,lastSent:sent.rows[0]??null,deviceCount:device.rows[0].count};
+  const partner=await this.pool.query(`select m.display_name as name,
+   (select count(*)::int from ivraine_private.push_subscriptions s where s.book_id=m.book_id and s.user_id=m.user_id and ($3::text is null or s.key_id=$3)) as devices
+   from public.ivraine_members m where m.book_id=$1 and m.user_id<>$2 limit 1`,[bookId,userId,keyId]);
+  return {received:result.rows,lastSent:sent.rows[0]??null,deviceCount:device.rows[0].count,partner:partner.rows[0]??null};
+ }
+ // Read-only health report so a signed-in couple can see exactly which notification step is missing.
+ async diagnostics(userId:string,bookId:string,keyId:string|null){
+  const devices=await this.pool.query(`select count(*) filter (where user_id=$1)::int as own,count(*) filter (where user_id<>$1)::int as partner
+   from ivraine_private.push_subscriptions where book_id=$2 and ($3::text is null or key_id=$3)`,[userId,bookId,keyId]);
+  const deliveries=await this.pool.query(`select count(*) filter (where d.status='pending')::int as pending,count(*) filter (where d.status='sending')::int as sending,
+   count(*) filter (where d.status='accepted')::int as accepted,count(*) filter (where d.status='failed')::int as failed
+   from ivraine_private.push_deliveries d join ivraine_private.heart_events e on e.id=d.event_id where e.book_id=$1`,[bookId]);
+  const lastError=await this.pool.query(`select d.last_error as "lastError" from ivraine_private.push_deliveries d join ivraine_private.heart_events e on e.id=d.event_id
+   where e.book_id=$1 and d.last_error is not null order by d.created_at desc limit 1`,[bookId]);
+  return {devices:{own:Number(devices.rows[0].own),partner:Number(devices.rows[0].partner)},
+   deliveries:{pending:Number(deliveries.rows[0].pending),sending:Number(deliveries.rows[0].sending),accepted:Number(deliveries.rows[0].accepted),failed:Number(deliveries.rows[0].failed),lastError:(lastError.rows[0]?.lastError as string|undefined)??null}};
  }
  async claim(){
   return this.transaction(async db=>{

@@ -15,7 +15,7 @@ const keys=webpush.generateVAPIDKeys(),keyId=createHash('sha256').update(keys.pu
 const curve=createECDH('prime256v1');curve.generateKeys();const subscriptionKeys={p256dh:curve.getPublicKey().toString('base64url'),auth:randomBytes(16).toString('base64url')};
 await store.subscribe(USER2,BOOK,{endpoint:'https://fcm.googleapis.com/fcm/send/partner-device',keys:subscriptionKeys},keyId);
 let testPushes=0;
-const apiServer=await new Promise<any>(done=>{const server=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://127.0.0.1:5173/'],trustProxy:0,push:{store,publicKey:keys.publicKey,keyId,deliver:async(_subscription,payload)=>{expect(JSON.parse(payload).type).toBe('test');testPushes++;}}}).listen(3001,'127.0.0.1',()=>done(server));});
+const apiServer=await new Promise<any>(done=>{const server=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://127.0.0.1:5173/'],trustProxy:0,push:{store,publicKey:keys.publicKey,keyId,workerRunning:true,deliver:async(_subscription,payload)=>{expect(JSON.parse(payload).type).toBe('test');testPushes++;}}}).listen(3001,'127.0.0.1',()=>done(server));});
 process.env.VITE_SUPABASE_URL=fixture.url;process.env.VITE_SUPABASE_PUBLISHABLE_KEY=fixtureKey;process.env.VITE_API_URL='http://127.0.0.1:3001/api/';
 const vite=await createServer({root:resolve('frontend'),server:{host:'127.0.0.1',port:5173,strictPort:true}});await vite.listen();
 const browser=await chromium.launch({...(process.env.TEST_CHROMIUM_PATH?{executablePath:process.env.TEST_CHROMIUM_PATH}:{}),args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
@@ -39,9 +39,17 @@ const check=(message:string)=>console.log('PASS:',message);
 try{
  await page.goto('http://127.0.0.1:5173');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();
  const heart=page.getByRole('button',{name:'Send I miss you to my partner'});await expect(heart).toBeEnabled({timeout:20000});expect(errors).toEqual([]);check('Login works with normalized /api URL and trailing-slash origin');
+ await expect(page.locator('#heart-partner')).toContainText('Loraine gets your hearts');check('The card names the partner whose phone will ring');
  await page.getByRole('button',{name:'Enable notifications',exact:true}).click();await expect(page.getByText('Notifications enabled on this device.',{exact:true})).toBeVisible({timeout:20000});expect(await page.evaluate(()=>(window as any).__pushGesture)).toBe(true);check('Permission requested from user gesture; subscription persisted to authenticated backend');
  expect((await store.state(USER1,BOOK)).deviceCount).toBe(1);
  await page.getByRole('button',{name:'Send test notification',exact:true}).click();await expect(page.locator('#heart-status')).toContainText('Test accepted');expect(testPushes).toBe(1);check('Self-test crosses browser, authenticated API, registered device and push transport');
+ await page.getByRole('button',{name:'Check notifications'}).click();
+ await expect(page.locator('#push-diagnostics')).toBeVisible({timeout:20000});
+ await expect(page.locator('#push-diagnostics')).toContainText('Heart storage is connected.');
+ await expect(page.locator('#push-diagnostics')).toContainText('The delivery worker is running.');
+ await expect(page.locator('#push-diagnostics')).toContainText('This device is registered to receive hearts.');
+ await expect(page.locator('#push-diagnostics')).toContainText('Loraine has a phone ready to receive hearts.');
+ check('The in-app health check names every working notification step');
  await heart.click();await expect(heart).toBeDisabled();await expect(page.locator('#heart-status')).toContainText('queued');check('3D button saves and queues a heart; cooldown disables repeated taps');
  await deliverNext(store,async()=>({statusCode:201}),keyId);
  await store.sendHeart(USER2,BOOK,randomUUID(),keyId);

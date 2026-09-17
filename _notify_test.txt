@@ -1,0 +1,39 @@
+
+> ivraine@2.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+✔ API: auth, shared CRUD, photo upload, stale edits, and deletion end to end (8628.2654ms)
+✔ test pushes verify device ownership, deliver through the provider, and expire invalid subscriptions (8140.4684ms)
+✔ API URL normalizes trailing /api and prevents deployed localhost/mixed content (2.1001ms)
+✔ subscription validation blocks SSRF, fake suffixes, custom ports and bad keys (1.969ms)
+✔ private records, subscription ownership, idempotent hearts, durable cooldown, and two-way sharing (2297.3074ms)
+✔ worker accepts pushes, retries transient failures, prunes expired devices, and guards removed members (2847.2667ms)
+✔ HTTP endpoints require auth, persist hearts, expose cooldown, and honor normalized CORS preflight (3835.2849ms)
+push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied
+push_store_error: the notification database rejected a query (ECONNREFUSED); check PUSH_DATABASE_URL connectivity and credentials Error: connect ECONNREFUSED 127.0.0.1:5432
+    at Object.state (E:\ro\ivraine\tests\push.test.ts:90:55)
+    at <anonymous> (E:\ro\ivraine\backend\src\push\routes.ts:45:36)
+    at <anonymous> (E:\ro\ivraine\backend\src\push\routes.ts:25:71)
+    at Layer.handleRequest (E:\ro\ivraine\node_modules\router\lib\layer.js:152:17)
+    at next (E:\ro\ivraine\node_modules\router\lib\route.js:157:13)
+    at Route.dispatch (E:\ro\ivraine\node_modules\router\lib\route.js:117:3)
+    at handle (E:\ro\ivraine\node_modules\router\index.js:435:11)
+    at Layer.handleRequest (E:\ro\ivraine\node_modules\router\lib\layer.js:152:17)
+    at E:\ro\ivraine\node_modules\router\index.js:295:15
+    at processParams (E:\ro\ivraine\node_modules\router\index.js:582:12) {
+  code: 'ECONNREFUSED'
+}
+✔ storage outages answer 503 with Retry-After and an actionable message instead of 500 (2275.3465ms)
+✔ database RLS protects both direct API access and shared writes (7815.3187ms)
+✔ validation rejects unsafe song URLs, invalid dates, and unbounded photos (32.999ms)
+✔ monthly and yearly calendar handles month ends, leap years, and next dates (19.8855ms)
+✔ service worker always displays generic push and opens only the scrapbook origin (54.9735ms)
+✔ web-push encrypts a standards-based payload with a real generated VAPID pair (14.4283ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21126.2799

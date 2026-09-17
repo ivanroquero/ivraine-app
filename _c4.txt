@@ -1,0 +1,36 @@
+async function readLocalSubscription(){if(!supported())return null;return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription()??null;}
+async function shareKeyWithWorker(publicKey:string){try{const registration=await navigator.serviceWorker.getRegistration('/');(navigator.serviceWorker.controller??registration?.active)?.postMessage({type:'ivraine-push-key',publicKey});}catch{ /* The worker learns the key on the next visit. */ }}
+async function clearBadge(){try{await (navigator as Navigator&{clearAppBadge?:()=>Promise<void>}).clearAppBadge?.();}catch{ /* Badging is optional. */ }}
+// A small burst of hearts confirms the tap landed; the heart itself is always saved first.
+function celebrate(){
+ buzz([20,30,20]);
+ const stage=document.querySelector('.heart-stage');if(!stage||reducedMotion())return;
+ stage.querySelector('.heart-burst')?.remove();
+ const burst=document.createElement('span');burst.className='heart-burst';burst.setAttribute('aria-hidden','true');
+ for(let index=0;index<7;index++)burst.append(document.createElement('i'));
+ stage.append(burst);setTimeout(()=>burst.remove(),1500);
+}
+async function load(){if(!userId||loading)return;loading=true;const current=epoch;
+ try{const next=await api<ConnectionState>('/notifications/state');if(current!==epoch)return;
+  const seen=state?.received[0]?.id;state=next;issue='';failures=0;blockedUntil=0;if(next.lastSent?.pending===0)status='';
+  if(seen&&next.received[0]&&seen!==next.received[0].id){notify(`${next.received[0].senderName} misses you. ♡`);void clearBadge();}
+  const sub=await readLocalSubscription();if(current!==epoch)return;localSubscribed=!!sub&&(!sub.expirationTime||sub.expirationTime>Date.now())&&localStorage.getItem('ivraine-push-owner')===userId&&permission()==='granted';
+  if(localSubscribed&&sub){const {active}=await api<{active:boolean}>('/notifications/subscriptions/check','POST',{endpoint:sub.endpoint});if(current!==epoch)return;localSubscribed=active;if(active&&next.publicKey)void shareKeyWithWorker(next.publicKey);}
+ }catch(error){
+  if(current!==epoch)return;
+  let userMessage=error instanceof Error?error.message:'Could not load heart sharing.';
+  let wait=Math.min(240,15*2**Math.min(4,failures++));
+  if(error instanceof ApiError){
+   if(error.status===503){userMessage='Heart sharing is temporarily unavailable. The app will retry on its own.';wait=error.retryAfter>0?error.retryAfter:wait;}
+   else if(error.status===401||error.status===403){userMessage='Your session expired. Please sign in again.';wait=0;}
+   else if(error.status===429){userMessage='Heart sharing is busy. The app will retry shortly.';wait=error.retryAfter>0?error.retryAfter:wait;}
+  }else if(!navigator.onLine){userMessage='You are offline. Heart sharing will reconnect automatically.';wait=Math.min(300,wait);}
+  issue=userMessage;blockedUntil=Date.now()+wait*1000;
+ }finally{if(current===epoch){loading=false;paintConnection();}}
+}
+async function diagnose(report=true){
+ if(!userId)return;
+ try{diagnostics=await api<Diagnostics>('/notifications/diagnostics');}
+ catch(error){diagnostics=null;if(report)issue=error instanceof Error?error.message:'Could not check notifications.';}
+ paintConnection();
+}

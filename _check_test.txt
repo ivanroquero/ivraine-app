@@ -1,0 +1,5 @@
+﻿
+> ivraine@2.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+Γ£ö API: auth, shared CRUD, photo upload, stale edits, and deletion end to end (163199.4509ms)

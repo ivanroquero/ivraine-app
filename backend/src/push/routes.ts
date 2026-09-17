@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import type { Deliver } from './worker.js';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
-export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;workerRunning?:boolean;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
 // Storage outages (missing migration, unreachable database) must answer a calm 503 with
 // Retry-After instead of a bare 500, so the app shows a status line and backs off.
 let schemaLogged=false,storeErrorLoggedAt=0;
@@ -21,6 +21,14 @@ function storeFailure(error:unknown):PushError{
  }
  return new PushError(503,'Hearts are briefly unavailable. The app retries on its own.',30);
 }
+// A short, non-technical reason reused by the in-app notification health check.
+function storageReason(error:unknown){
+ if(error instanceof PushError)return error.message;
+ const code=typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';
+ if(code==='42P01')return 'The notification tables are missing. Run supabase/migrations/20260916205359_push_notifications.sql in the Supabase SQL editor.';
+ return 'The notification database could not be reached. Verify PUSH_DATABASE_URL on the API service.';
+}
+function storageCode(error:unknown){return typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';}
 function guarded(handler:(req:Request,res:Response)=>Promise<void>){
  return async(req:Request,res:Response,next:NextFunction)=>{try{await handler(req,res);}catch(error){next(error instanceof z.ZodError?error:storeFailure(error));}};
 }
@@ -41,9 +49,22 @@ export function pushRouter(services:PushServices){
   res.json({accepted:true});
  }));
  router.get('/state',guarded(async(_req,res)=>{
-  if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0});return;}
-  const state=await services.store.state(res.locals.userId,res.locals.member.book_id);
-  res.json({enabled:true,pushEnabled:!!services.publicKey,publicKey:services.publicKey,...state});
+  if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0,partner:null,workerRunning:false});return;}
+  const state=await services.store.state(res.locals.userId,res.locals.member.book_id,services.keyId);
+  res.json({enabled:true,pushEnabled:!!services.publicKey,workerRunning:!!services.workerRunning,publicKey:services.publicKey,...state});
+ }));
+ // Answers with a plain-language report instead of an error, so the couple can fix the missing
+ // step (migration, VAPID pair, partner device) without reading server logs.
+ router.get('/diagnostics',rateLimit({windowMs:60000,limit:20,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Wait a minute before checking notifications again.'}}),guarded(async(_req,res)=>{
+  const report:{storage:{configured:boolean;schemaReady:boolean;error:string|null;code:string};vapid:{configured:boolean};worker:{running:boolean};devices:{own:number;partner:number};deliveries:{pending:number;sending:number;accepted:number;failed:number;lastError:string|null}|null}=
+   {storage:{configured:!!services.store,schemaReady:false,error:null,code:''},vapid:{configured:!!services.publicKey},worker:{running:!!services.workerRunning},devices:{own:0,partner:0},deliveries:null};
+  if(!services.store){report.storage.error='PUSH_DATABASE_URL is not set on the API service.';res.json(report);return;}
+  if(!services.publicKey)report.storage.error='VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT are not all set on the API service.';
+  try{
+   const data=await services.store.diagnostics(res.locals.userId,res.locals.member.book_id,services.keyId);
+   report.storage.schemaReady=true;report.devices=data.devices;report.deliveries=data.deliveries;
+  }catch(error){report.storage.error=storageReason(error);report.storage.code=storageCode(error);}
+  res.json(report);
  }));
  router.post('/subscriptions',guarded(async(req,res)=>{
   if(!services.store||!services.publicKey||!services.keyId)throw new PushError(503,'Push notifications need server setup.');

@@ -1,0 +1,42 @@
+export function startConnection(id:string,toast:(message:string)=>void){notify=toast;if(userId===id){paintConnection();return;}stopConnection();userId=id;blockedUntil=0;failures=0;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine&&Date.now()>=blockedUntil)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
+export function stopConnection(){epoch++;userId=null;state=null;loading=false;sending=false;enabling=false;testing=false;issue='';status='';diagnostics=null;localSubscribed=false;blockedUntil=0;failures=0;clearInterval(poll);clearInterval(clock);}
+function keyBytes(value:string):ArrayBuffer{const bytes=Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));return bytes.buffer;}
+async function enableNotifications(){
+ if(!state?.publicKey||!supported()||iosNeedsInstall())return;
+ const current=epoch,owner=userId!,publicKey=state.publicKey;enabling=true;issue='';paintConnection();
+ // Request synchronously from the tap handler, before fetching/registering anything.
+ try{
+  const permissionRequest=Notification.permission==='granted'?Promise.resolve('granted'):Notification.requestPermission();
+  if(await permissionRequest!=='granted')throw new Error('Notifications are not enabled. You can still send and receive hearts inside the app.');
+  if(current!==epoch)return;
+  await navigator.serviceWorker.register('/sw.js',{scope:'/'});
+  let timeout:ReturnType<typeof setTimeout>|undefined;
+  const registration=await Promise.race([navigator.serviceWorker.ready,new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Notification setup timed out. Reload the app and retry.')),15000);})]).finally(()=>clearTimeout(timeout));
+  let subscription=await registration.pushManager.getSubscription();
+  const boundKey=subscription?.options.applicationServerKey;const expected=new Uint8Array(keyBytes(publicKey));
+  const wrongKey=boundKey&&(!new Uint8Array(boundKey).every((value,i)=>value===expected[i])||boundKey.byteLength!==expected.byteLength);
+  if(current!==epoch)return;
+  if(subscription&&((subscription.expirationTime!=null&&subscription.expirationTime<=Date.now())||localStorage.getItem('ivraine-push-owner')!==owner||wrongKey)){await subscription.unsubscribe();subscription=null;}
+  if(current!==epoch)return;
+  subscription??=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:expected.buffer});
+  if(current!==epoch){await subscription.unsubscribe();return;}
+  await api('/notifications/subscriptions','POST',subscription.toJSON());
+  if(current!==epoch)return;
+  localStorage.setItem('ivraine-push-owner',owner);localSubscribed=true;status='Notifications enabled. Your partner can now send you a heart.';notify(status);
+  void shareKeyWithWorker(publicKey);buzz([15,25,15]);await load();
+ }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not enable notifications.';notify(issue);}}
+ finally{if(current===epoch){enabling=false;paintConnection();}}
+}
+async function testNotification(){
+ if(!localSubscribed||testing)return;
+ const current=epoch;testing=true;issue='';paintConnection();
+ try{
+  const subscription=await readLocalSubscription();
+  if(current!==epoch)return;
+  if(!subscription){localSubscribed=false;throw new Error('Enable notifications again to reconnect this device.');}
+  await api('/notifications/test','POST',subscription.toJSON());
+  if(current!==epoch)return;
+  status='Test accepted by the push service. Check your notifications. If it does not appear, check Focus and notification settings.';notify(status);
+ }catch(error){if(current===epoch){if(error instanceof ApiError&&[409,410].includes(error.status))localSubscribed=false;issue=error instanceof Error?error.message:'Could not send the test notification.';}}
+ finally{if(current===epoch){testing=false;paintConnection();}}
+}

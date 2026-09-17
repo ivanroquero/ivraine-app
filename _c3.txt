@@ -1,0 +1,22 @@
+export function paintConnection(){
+ const root=document.querySelector('.connection-card');if(!root)return;
+ const remaining=state?.lastSent?Math.max(0,Math.ceil((Date.parse(state.lastSent.nextAllowedAt)-Date.now())/1000)):0;
+ const button=root.querySelector<HTMLButtonElement>('[data-heart-action=send]')!;button.disabled=!state?.enabled||sending||remaining>0;button.classList.toggle('is-sent',remaining>0);button.classList.toggle('is-sending',sending);button.setAttribute('aria-busy',String(sending));
+ root.querySelector('#heart-button-label')!.textContent=sending?'Sending…':remaining?'Heart sent':'I miss you';
+ root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
+ const partner=root.querySelector('#heart-partner')!;
+ partner.textContent=!state?.enabled?'':partnerReady()?`${partnerName()} gets your hearts on their phone. ♡`:`${partnerName()} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
+ partner.classList.toggle('is-ready',partnerReady());
+ const latest=state?.received[0];root.querySelector('#heart-received')!.textContent=latest?`${latest.senderName} sent you a heart · ${new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(latest.createdAt))}`:'Our little way to feel close.';
+ const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your scrapbook. Push could not be delivered.':'';
+ root.querySelector('#heart-status')!.textContent=issue||status||delivery||(!state?'Connecting…':!state.enabled?'Heart sharing needs the notification database setup.':'Hearts stay in our scrapbook, even when notifications are off.');
+ const device=root.querySelector('#push-device-status')!;
+ device.textContent=iosNeedsInstall()?'On iPhone: add Ivraine to your Home Screen, then open it there.':!supported()?'This browser cannot receive Web Push. You can still exchange hearts here.':permission()==='denied'?'Notifications are blocked. Allow them in your browser or device settings.':!state?.pushEnabled?'Push notifications need server configuration.':localSubscribed?'Notifications enabled on this device.':'Enable notifications to receive hearts when the app is closed.';
+ const enable=root.querySelector<HTMLButtonElement>('[data-heart-action=enable]')!;enable.hidden=localSubscribed||iosNeedsInstall();enable.disabled=enabling||!supported()||iosNeedsInstall()||permission()==='denied'||!state?.pushEnabled;enable.textContent=enabling?'Enabling…':'Enable notifications';
+ const installButton=root.querySelector<HTMLButtonElement>('[data-heart-action=install]')!;installButton.hidden=!iosNeedsInstall();
+ const testButton=root.querySelector<HTMLButtonElement>('[data-heart-action=test]')!;testButton.hidden=!localSubscribed;testButton.disabled=testing||enabling;testButton.textContent=testing?'Sending test?':'Send test notification';
+ const disable=root.querySelector<HTMLButtonElement>('[data-heart-action=disable]')!;disable.hidden=!localSubscribed;disable.disabled=enabling;
+ root.querySelector<HTMLButtonElement>('[data-heart-action=all-off]')!.hidden=!(state?.deviceCount);
+ root.querySelector<HTMLButtonElement>('[data-heart-action=retry]')!.hidden=!issue;
+ paintDiagnostics(root);
+}
