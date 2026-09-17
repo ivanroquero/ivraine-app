@@ -1,4 +1,0 @@
-﻿
-> ivraine@2.0.0 typecheck
-> tsc -p frontend/tsconfig.json && tsc -p backend/tsconfig.json --noEmit
-
