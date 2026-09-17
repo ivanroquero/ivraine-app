@@ -45,7 +45,7 @@ export function paintConnection(){
  root.querySelector('#heart-button-label')!.textContent=sending?'Sending…':remaining?'Heart sent':'I miss you';
  root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
  const partner=root.querySelector('#heart-partner')!;
- partner.textContent=!state?.enabled?'':partnerReady()?`${partnerName()} gets your hearts on their phone. ♡`:`${partnerName()} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
+ partner.textContent=!state?.enabled?'':!state.partner?'Add your partner to this scrapbook to share hearts.':partnerReady()?`${partnerName()} gets your hearts on their phone. ♡`:`${partnerName()} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
  partner.classList.toggle('is-ready',partnerReady());
  const latest=state?.received[0];root.querySelector('#heart-received')!.textContent=latest?`${latest.senderName} sent you a heart · ${new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(latest.createdAt))}`:'Our little way to feel close.';
  const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your scrapbook. Push could not be delivered.':'';

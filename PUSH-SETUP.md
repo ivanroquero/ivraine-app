@@ -130,6 +130,8 @@ git push origin main
 
 The automated tests use the real API and PostgreSQL/RLS in a local fixture, with test authentication and simulated push transport. Browser enrollment is simulated in the browser test; no real partner received any test notification. VAPID/encrypted request generation and service-worker handlers are checked separately. Physical iPhone/Android delivery and live Railway/Supabase deployment must be tested after configuring your actual values.
 
+The suite also covers the parts that make delivery verifiable: the service worker's modern notification options, its `pushsubscriptionchange` re-subscription, and `GET /api/notifications/diagnostics` for both a healthy service and a missing migration (which must answer `200` with a reason, never a `500`). The browser check taps **Check notifications** and asserts the health list, so the panel cannot silently regress.
+
 ## Why the hearts card may say the database is not set up (503, not 500)
 
 The API deliberately answers `GET /api/notifications/state` with a calm **503 + Retry-After** while the storage is not ready; the browser then shows a status line instead of error toasts and retries on the server's schedule (5 minutes for a missing migration, 30 seconds for an outage). Railway's deploy logs say exactly which step is missing:
