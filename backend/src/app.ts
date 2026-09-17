@@ -19,6 +19,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   const allowedOrigins=new Set(config.origins.map(origin=>new URL(origin.trim()).origin));
   app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
   app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
+  // Parse JSON before any auth/router middleware so POST bodies are never undefined.
+  app.use(express.json({limit:'64kb'}));
   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));
   app.get('/health/push',(_req,res)=>{
     const push=config.push;
@@ -36,7 +38,6 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     if(!membership) throw new HttpError(403,'This account has not been added to the scrapbook.');
     res.locals.db=db;res.locals.userId=data.user.id;res.locals.member=membership;next();
   });
-  app.use(express.json({limit:'64kb'}));
   app.use('/api/notifications',pushRouter(config.push??{store:null,publicKey:null,keyId:null}));
   app.get('/api/book',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;

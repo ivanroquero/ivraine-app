@@ -1,0 +1,41 @@
+﻿
+> ivraine@2.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+Γ£ö API: auth, shared CRUD, photo upload, stale edits, and deletion end to end (7737.0817ms)
+Γ£ö test pushes verify device ownership, deliver through the provider, and expire invalid subscriptions (7592.8448ms)
+Γ£ö API URL normalizes trailing /api and prevents deployed localhost/mixed content (1.8919ms)
+Γ£ö subscription validation blocks SSRF, fake suffixes, custom ports and bad keys (1.6595ms)
+Γ£ö private records, subscription ownership, idempotent hearts, durable cooldown, and two-way sharing (2146.3625ms)
+Γ£ö worker accepts pushes, retries transient failures, prunes expired devices, and guards removed members (2916.9504ms)
+Γ£ö HTTP endpoints require auth, persist hearts, expose cooldown, and honor normalized CORS preflight (2123.0705ms)
+push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied
+push_store_error: the notification database rejected a query (ECONNREFUSED); check PUSH_DATABASE_URL connectivity and credentials Error: connect ECONNREFUSED 127.0.0.1:5432
+    at Object.state (E:\ro\ivraine\tests\push.test.ts:90:55)
+    at <anonymous> (E:\ro\ivraine\backend\src\push\routes.ts:53:36)
+    at <anonymous> (E:\ro\ivraine\backend\src\push\routes.ts:33:71)
+    at Layer.handleRequest (E:\ro\ivraine\node_modules\router\lib\layer.js:152:17)
+    at next (E:\ro\ivraine\node_modules\router\lib\route.js:157:13)
+    at Route.dispatch (E:\ro\ivraine\node_modules\router\lib\route.js:117:3)
+    at handle (E:\ro\ivraine\node_modules\router\index.js:435:11)
+    at Layer.handleRequest (E:\ro\ivraine\node_modules\router\lib\layer.js:152:17)
+    at E:\ro\ivraine\node_modules\router\index.js:295:15
+    at processParams (E:\ro\ivraine\node_modules\router\index.js:582:12) {
+  code: 'ECONNREFUSED'
+}
+Γ£ö storage outages answer 503 with Retry-After and an actionable message instead of 500 (1668.5178ms)
+Γ£ö notification diagnostics reports each setup step instead of failing with a 500 (2589.9926ms)
+Γ£ö database RLS protects both direct API access and shared writes (7305.2989ms)
+Γ£ö validation rejects unsafe song URLs, invalid dates, and unbounded photos (11.3426ms)
+Γ£ö monthly and yearly calendar handles month ends, leap years, and next dates (78.0102ms)
+Γ£ö service worker always displays generic push and opens only the scrapbook origin (34.1614ms)
+Γ£ö web-push encrypts a standards-based payload with a real generated VAPID pair (22.8521ms)
+Γ£ö service worker keeps the push key and re-subscribes when the push service rotates the endpoint (6.2522ms)
+Γä╣ tests 15
+Γä╣ suites 0
+Γä╣ pass 15
+Γä╣ fail 0
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 21089.357

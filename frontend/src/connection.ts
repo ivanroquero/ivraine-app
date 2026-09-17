@@ -40,7 +40,8 @@ function paintDiagnostics(root:Element){
 }
 export function paintConnection(){
  const root=document.querySelector('.connection-card');if(!root)return;
- const remaining=state?.lastSent?Math.max(0,Math.ceil((Date.parse(state.lastSent.nextAllowedAt)-Date.now())/1000)):0;
+ const next=state?.lastSent?.nextAllowedAt?Date.parse(state.lastSent.nextAllowedAt):0;
+ const remaining=Number.isFinite(next)&&next>0?Math.max(0,Math.ceil((next-Date.now())/1000)):0;
  const button=root.querySelector<HTMLButtonElement>('[data-heart-action=send]')!;button.disabled=!state?.enabled||sending||remaining>0;button.classList.toggle('is-sent',remaining>0);button.classList.toggle('is-sending',sending);button.setAttribute('aria-busy',String(sending));
  root.querySelector('#heart-button-label')!.textContent=sending?'Sending…':remaining?'Heart sent':'I miss you';
  root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
@@ -60,9 +61,10 @@ export function paintConnection(){
  root.querySelector<HTMLButtonElement>('[data-heart-action=retry]')!.hidden=!issue;
  paintDiagnostics(root);
 }
-async function readLocalSubscription(){if(!supported())return null;return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription()??null;}
-async function shareKeyWithWorker(publicKey:string){try{const registration=await navigator.serviceWorker.getRegistration('/');(navigator.serviceWorker.controller??registration?.active)?.postMessage({type:'ivraine-push-key',publicKey});}catch{ /* The worker learns the key on the next visit. */ }}
-async function clearBadge(){try{await (navigator as Navigator&{clearAppBadge?:()=>Promise<void>}).clearAppBadge?.();}catch{ /* Badging is optional. */ }}
+async function readLocalSubscription(){if(!supported())return null;try{return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription()??null;}catch{return null;}}
+async function shareKeyWithWorker(publicKey:string){try{const registration=await navigator.serviceWorker.getRegistration('/');const target=navigator.serviceWorker.controller??registration?.active??registration?.waiting??registration?.installing;target?.postMessage({type:'ivraine-push-key',publicKey});}catch{ /* The worker learns the key on the next visit. */ }}
+async function clearBadge(){try{await (navigator as Navigator&{clearAppBadge?:()=>Promise<void>}).clearAppBadge?.();}catch{ /* Badging is optional. */ }
+ try{const registration=await navigator.serviceWorker?.getRegistration('/');registration?.active?.postMessage({type:'ivraine-badge-clear'});}catch{ /* Older workers ignore this. */ }}
 // A small burst of hearts confirms the tap landed; the heart itself is always saved first.
 function celebrate(){
  buzz([20,30,20]);
@@ -98,7 +100,7 @@ async function diagnose(report=true){
 }
 export function startConnection(id:string,toast:(message:string)=>void){notify=toast;if(userId===id){paintConnection();return;}stopConnection();userId=id;blockedUntil=0;failures=0;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine&&Date.now()>=blockedUntil)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
 export function stopConnection(){epoch++;userId=null;state=null;loading=false;sending=false;enabling=false;testing=false;issue='';status='';diagnostics=null;localSubscribed=false;blockedUntil=0;failures=0;clearInterval(poll);clearInterval(clock);}
-function keyBytes(value:string):ArrayBuffer{const bytes=Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));return bytes.buffer;}
+function keyBytes(value:string):Uint8Array{const clean=value.replace(/-/g,'+').replace(/_/g,'/');const padded=clean.padEnd(Math.ceil(clean.length/4)*4,'=');return Uint8Array.from(atob(padded),c=>c.charCodeAt(0));}
 async function enableNotifications(){
  if(!state?.publicKey||!supported()||iosNeedsInstall())return;
  const current=epoch,owner=userId!,publicKey=state.publicKey;enabling=true;issue='';paintConnection();
@@ -116,7 +118,9 @@ async function enableNotifications(){
   if(current!==epoch)return;
   if(subscription&&((subscription.expirationTime!=null&&subscription.expirationTime<=Date.now())||localStorage.getItem('ivraine-push-owner')!==owner||wrongKey)){await subscription.unsubscribe();subscription=null;}
   if(current!==epoch)return;
-  subscription??=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:expected.buffer});
+  // PushManager accepts a BufferSource; pass the exact slice (not the whole ArrayBuffer).
+  const applicationServerKey=new Uint8Array(expected.buffer,expected.byteOffset,expected.byteLength);
+  subscription??=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});
   if(current!==epoch){await subscription.unsubscribe();return;}
   await api('/notifications/subscriptions','POST',subscription.toJSON());
   if(current!==epoch)return;

@@ -1,5 +1,5 @@
 /* Cache only a non-private offline page; never cache sessions, API, or photo data. */
-const CACHE='ivraine-offline-v4';
+const CACHE='ivraine-offline-v5';
 const CONFIG='ivraine-push-config-v1';
 const KEY_PATH='/ivraine-push-key';
 const SCRAPBOOK_URL='/#story';
@@ -15,8 +15,8 @@ function base64Bytes(value){const padded=value.replace(/-/g,'+').replace(/_/g,'/
 async function badge(count){try{const api=self.navigator;if(api&&typeof api.setAppBadge==='function')await api.setAppBadge(count);}catch{}}
 async function storeKey(value){try{if(typeof caches==='undefined'||typeof Response==='undefined'||!value)return;const cache=await caches.open(CONFIG);await cache.put(KEY_PATH,new Response(value));}catch{}}
 async function loadKey(){try{if(typeof caches==='undefined')return null;const cache=await caches.open(CONFIG);const hit=await cache.match(KEY_PATH);if(!hit)return null;const value=await hit.text();return value?base64Bytes(value):null;}catch{return null;}}
-async function notify(title,options){try{await self.registration.showNotification(title,options);}catch{await self.registration.showNotification(title,{body:options.body,icon:options.icon,tag:options.tag,data:options.data});}}
-async function toApp(type,payload){const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});for(const client of windows)client.postMessage({type,...payload});}
+async function notify(title,options){try{await self.registration.showNotification(title,{...options,silent:false,requireInteraction:true,persistent:true});}catch{await self.registration.showNotification(title,{body:options.body,icon:options.icon,badge:options.badge,image:options.image,tag:options.tag,data:options.data});}}
+async function toApp(type,payload){try{const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});for(const client of windows)client.postMessage({type,...payload});}catch{}}
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['/offline.html','/offline.css'])).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE&&key!==CONFIG).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{if(new URL(event.request.url).pathname==='/offline.css'){event.respondWith(caches.match('/offline.css'));return;}if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/offline.html')));}});
