@@ -4,6 +4,13 @@ import { createHash } from 'node:crypto';
 import { PushStore } from './store.js';
 import { startPushWorker } from './worker.js';
 import type { PushServices } from './routes.js';
+
+export interface PoolStatus {
+  idleCount: number;
+  waitingCount: number;
+  totalCount: number;
+}
+
 // One boot-time probe turns silent per-request failures into an actionable deploy log line.
 async function probeDatabase(pool:Pool){
  let timer:ReturnType<typeof setTimeout>|undefined;
@@ -13,9 +20,14 @@ async function probeDatabase(pool:Pool){
  }catch(error){
   const code=typeof error==='object'&&error!==null&&'code' in error?String((error as {code:unknown}).code):'';
   if(code==='42P01')console.error('push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied');
-  else console.error(`push_database_unreachable: heart storage did not answer (${code||'network error'}); verify PUSH_DATABASE_URL host, credentials, and TLS`);
+  else console.error(`push_database_unreachable: heart storage did not answer (${code||'network error'}); verify PUSH_DATABASE_URL host, credentials, and TLS`, error);
  }finally{clearTimeout(timer);}
 }
+
+export function getPoolStatus(pool:Pool):PoolStatus{
+ return {idleCount:pool.idleCount,waitingCount:pool.waitingCount,totalCount:pool.totalCount};
+}
+
 export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services:PushServices;stop:()=>Promise<void>}>{
  const services:PushServices={store:null,publicKey:null,keyId:null};
  if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{}};
@@ -24,7 +36,9 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
  // Enforce verified TLS rather than allowing URL flags to disable certificate validation.
  for(const name of ['sslmode','sslcert','sslkey','sslrootcert'])database.searchParams.delete(name);
  const pool=new Pool({connectionString:database.toString(),max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,statement_timeout:15000,ssl:{rejectUnauthorized:true,...(env.PUSH_DATABASE_CA?{ca:env.PUSH_DATABASE_CA.replace(/\\n/g,'\n')}:{})}});
- pool.on('error',()=>console.error('push_database_connection_error'));
+ pool.on('acquire',()=>console.debug('push_db_connection_acquired'));
+ pool.on('release',()=>console.debug('push_db_connection_released'));
+ pool.on('error',(error)=>console.error('push_database_connection_error',error));
  services.store=new PushStore(pool);
  await probeDatabase(pool);
  let stopWorker=async()=>{};

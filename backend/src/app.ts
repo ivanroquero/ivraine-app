@@ -20,6 +20,11 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
   app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));
+  app.get('/health/push',(_req,res)=>{
+    const push=config.push;
+    if(!push?.store){res.status(200).json({status:'disabled',service:'ivraine-push',reason:'Push notifications not configured'});return;}
+    res.json({status:'ok',service:'ivraine-push',configured:!!push.publicKey});
+  });
   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
   app.use('/api', async(req,res,next)=>{
     const token=req.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];

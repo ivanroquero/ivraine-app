@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import type { Deliver } from './worker.js';
 import { PushStore, PushError } from './store.js';
 import { heartSchema, subscriptionSchema } from './validation.js';
-export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;}
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;deliver?:Deliver;poolStatus?:{idleCount:number;waitingCount:number;totalCount:number}|null;}
 // Storage outages (missing migration, unreachable database) must answer a calm 503 with
 // Retry-After instead of a bare 500, so the app shows a status line and backs off.
 let schemaLogged=false,storeErrorLoggedAt=0;
@@ -15,7 +15,10 @@ function storeFailure(error:unknown):PushError{
   if(!schemaLogged){schemaLogged=true;console.error('push_schema_missing: apply supabase/migrations/20260916205359_push_notifications.sql to the PUSH_DATABASE_URL database; heart sharing stays disabled until it is applied');}
   return new PushError(503,'Heart sharing needs the notification database setup.',300);
  }
- if(Date.now()-storeErrorLoggedAt>300000){storeErrorLoggedAt=Date.now();console.error(`push_store_error: the notification database rejected a query (${code||'unexpected error'}); check PUSH_DATABASE_URL connectivity and credentials`);}
+ if(Date.now()-storeErrorLoggedAt>300000){
+  storeErrorLoggedAt=Date.now();
+  console.error(`push_store_error: the notification database rejected a query (${code||'unexpected error'}); check PUSH_DATABASE_URL connectivity and credentials`, error);
+ }
  return new PushError(503,'Hearts are briefly unavailable. The app retries on its own.',30);
 }
 function guarded(handler:(req:Request,res:Response)=>Promise<void>){

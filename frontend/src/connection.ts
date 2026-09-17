@@ -34,7 +34,17 @@ async function load(){if(!userId||loading)return;loading=true;const current=epoc
   if(seen&&next.received[0]&&seen!==next.received[0].id)notify(`${next.received[0].senderName} misses you. ♡`);
   const sub=await readLocalSubscription();if(current!==epoch)return;localSubscribed=!!sub&&(!sub.expirationTime||sub.expirationTime>Date.now())&&localStorage.getItem('ivraine-push-owner')===userId&&permission()==='granted';
   if(localSubscribed&&sub){const {active}=await api<{active:boolean}>('/notifications/subscriptions/check','POST',{endpoint:sub.endpoint});if(current!==epoch)return;localSubscribed=active;}
- }catch(error){if(current!==epoch)return;issue=error instanceof Error?error.message:'Could not load heart sharing.';const wait=error instanceof ApiError&&error.retryAfter>0?error.retryAfter:Math.min(240,15*2**Math.min(4,failures++));blockedUntil=Date.now()+wait*1000;}finally{if(current===epoch){loading=false;paintConnection();}}
+ }catch(error){
+  if(current!==epoch)return;
+  let userMessage=error instanceof Error?error.message:'Could not load heart sharing.';
+  let wait=Math.min(240,15*2**Math.min(4,failures++));
+  if(error instanceof ApiError){
+   if(error.status===503){userMessage='Heart sharing is temporarily unavailable. The app will retry on its own.';wait=error.retryAfter>0?error.retryAfter:wait;}
+   else if(error.status===401||error.status===403){userMessage='Your session expired. Please sign in again.';wait=0;}
+   else if(error.status===429){userMessage='Heart sharing is busy. The app will retry shortly.';wait=error.retryAfter>0?error.retryAfter:wait;}
+  }else if(!navigator.onLine){userMessage='You are offline. Heart sharing will reconnect automatically.';wait=Math.min(300,wait);}
+  issue=userMessage;blockedUntil=Date.now()+wait*1000;
+ }finally{if(current===epoch){loading=false;paintConnection();}}
 }
 export function startConnection(id:string,toast:(message:string)=>void){notify=toast;if(userId===id){paintConnection();return;}stopConnection();userId=id;blockedUntil=0;failures=0;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine&&Date.now()>=blockedUntil)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
 export function stopConnection(){epoch++;userId=null;state=null;loading=false;sending=false;enabling=false;testing=false;issue='';status='';localSubscribed=false;blockedUntil=0;failures=0;clearInterval(poll);clearInterval(clock);}

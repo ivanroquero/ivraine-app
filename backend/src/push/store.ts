@@ -5,7 +5,9 @@ export interface SqlPool {query:(sql:string,values?:any[])=>Promise<SqlResult>;c
 export class PushError extends Error {constructor(public status:number,message:string,public retryAfter=0){super(message);}}
 export class PushStore {
  constructor(readonly pool:SqlPool){}
+
  async transaction<T>(fn:(sql:SqlConnection)=>Promise<T>):Promise<T>{const db=await this.pool.connect();try{await db.query('begin');const value=await fn(db);await db.query('commit');return value;}catch(error){await db.query('rollback').catch(()=>undefined);throw error;}finally{db.release();}}
+
  async subscribe(userId:string,bookId:string,subscription:PushSubscription,keyId:string){
   await this.transaction(async db=>{
    await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[userId]);
@@ -14,7 +16,7 @@ export class PushStore {
    const existing=await db.query('select user_id from ivraine_private.push_subscriptions where endpoint=$1',[subscription.endpoint]);
    if(existing.rows[0] && existing.rows[0].user_id!==userId)throw new PushError(409,'This browser subscription belongs to another account. Disable notifications, then enable them again.');
    await db.query('delete from ivraine_private.push_subscriptions where user_id=$1 and key_id<>$2',[userId,keyId]);
-   if(!existing.rows.length){const count=await db.query('select count(*)::int as n from ivraine_private.push_subscriptions where user_id=$1',[userId]);if(count.rows[0].n>=5)throw new PushError(409,'You already have five notification devices. Remove an old device first.');}
+   if(!existing.rows.length){const count=await db.query('select count(*)::int as n from ivraine_private.push_subscriptions where user_id=$1',[userId]);const maxDevices = process.env.MAX_PUSH_DEVICES_PER_USER ? parseInt(process.env.MAX_PUSH_DEVICES_PER_USER, 10) : 5;if(count.rows[0].n>=maxDevices)throw new PushError(409,`You already have ${maxDevices} notification devices. Remove an old device first.`);}
    await db.query(`insert into ivraine_private.push_subscriptions(user_id,book_id,endpoint,p256dh,auth,key_id) values($1,$2,$3,$4,$5,$6)
    on conflict(endpoint) do update set book_id=excluded.book_id,p256dh=excluded.p256dh,auth=excluded.auth,key_id=excluded.key_id,updated_at=now() where ivraine_private.push_subscriptions.user_id=excluded.user_id`,[userId,bookId,subscription.endpoint,subscription.keys.p256dh,subscription.keys.auth,keyId]);
   });
