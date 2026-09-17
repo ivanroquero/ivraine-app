@@ -35,9 +35,11 @@ export async function createPushRuntime(env:NodeJS.ProcessEnv):Promise<{services
  if(!env.PUSH_DATABASE_URL)return {services,stop:async()=>{},kick:()=>{}};
  const database=new URL(env.PUSH_DATABASE_URL);
  if(!['postgres:','postgresql:'].includes(database.protocol))throw new Error('PUSH_DATABASE_URL must be a PostgreSQL connection string.');
- // Enforce verified TLS rather than allowing URL flags to disable certificate validation.
+ // Supabase pooler connections require TLS. Railway's base image may not have the
+ // pooler's CA chain, so use encrypted TLS by default and verify it when a CA is supplied.
  for(const name of ['sslmode','sslcert','sslkey','sslrootcert'])database.searchParams.delete(name);
- const pool=new Pool({connectionString:database.toString(),max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,statement_timeout:15000,ssl:{rejectUnauthorized:true,...(env.PUSH_DATABASE_CA?{ca:env.PUSH_DATABASE_CA.replace(/\\n/g,'\n')}:{})}});
+ const ca=env.PUSH_DATABASE_CA?.replace(/\\n/g,'\n');
+ const pool=new Pool({connectionString:database.toString(),max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,statement_timeout:15000,ssl:ca?{rejectUnauthorized:true,ca}:{rejectUnauthorized:false}});
  pool.on('acquire',()=>console.debug('push_db_connection_acquired'));
  pool.on('release',()=>console.debug('push_db_connection_released'));
  pool.on('error',(error)=>console.error('push_database_connection_error',error));
