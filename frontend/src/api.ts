@@ -4,7 +4,8 @@ const url=import.meta.env.VITE_SUPABASE_URL;
 const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const apiUrl=import.meta.env.VITE_API_URL;
 export const configured=!!(url && key && apiUrl && !url.includes('YOUR_') && !key.includes('YOUR_') && !apiUrl.includes('YOUR_'));
-export const supabase=configured?createClient(url,key,{global:{fetch:(input,init)=>fetch(input,{...init,signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)})},auth:{storageKey:'ivraine-auth-v2',persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true,flowType:'pkce'}}):null;
+try{if(configured&&!localStorage.getItem('ivraine-auth-v2')){const previous=sessionStorage.getItem('ivraine-auth-v2');if(previous)localStorage.setItem('ivraine-auth-v2',previous);}}catch{}
+export const supabase=configured?createClient(url,key,{global:{fetch:(input,init)=>fetch(input,{...init,signal:init?.signal?AbortSignal.any([init.signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)})},auth:{storageKey:'ivraine-auth-v2',persistSession:true,storage:localStorage,autoRefreshToken:true,detectSessionInUrl:true,flowType:'pkce'}}):null;
 export class ApiError extends Error { constructor(message:string,public status:number,public retryAfter:number=0){super(message);} }
 export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
  if(!supabase) throw new Error('The app is not connected yet. Follow README.md to configure it.');
