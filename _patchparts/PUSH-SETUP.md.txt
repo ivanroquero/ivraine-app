@@ -1,0 +1,132 @@
+﻿diff --git a/PUSH-SETUP.md b/PUSH-SETUP.md
+new file mode 100644
+--- /dev/null
++++ b/PUSH-SETUP.md
+@@ -0,0 +1,126 @@
++# Ivraine push + 3D heart update
++
++This update was prepared against the exact source of the previous Ivraine ZIP. The connected GitHub account returned **404** for `ivanroquero/ivraine`; the current GitHub files and live deployment settings could not be read or changed. Apply the patch only if it matches your checkout. It deliberately fails instead of overwriting unrelated changes.
++
++## Apply the code
++
++Extract the update bundle **outside your repository**. From your Ivraine repository root:
++
++```bash
++git apply --check ../ivraine-push-update/ivraine-push.patch
++git apply ../ivraine-push-update/ivraine-push.patch
++npm ci
++npm run typecheck
++npm test
++npm run build
++git add .
++git commit -m "Add durable Web Push and 3D miss-you hearts"
++git push origin main
++```
++
++Adjust only the path to the extracted `.patch` file. If `git apply --check` reports conflicts, do not force it. Your repository differs from the original package; use the patch's file paths and exact changed blocks to merge those edits. `CHANGES.md` lists the files and anchors. No full replacement of your current app is required.
++
++## Fix the post-login Failed to fetch error
++
++Supabase sign-in happens directly against Supabase. After sign-in, `/api/book` and `/api/entries` are requested from Railway. Success at the first step does not verify the second service.
++
++**Vercel â†’ Environment Variables** â€” replace `VITE_API_URL` with the actual public HTTPS domain of the Railway API, then redeploy:
++
++```dotenv
++VITE_API_URL=https://YOUR_ACTUAL_RAILWAY_DOMAIN
++```
++
++**Railway â†’ Variables** â€” replace `FRONTEND_ORIGINS` with the exact Vercel/custom origin you open in your browser, then redeploy:
++
++```dotenv
++FRONTEND_ORIGINS=https://YOUR_ACTUAL_VERCEL_DOMAIN
++TRUST_PROXY_HOPS=1
++NODE_ENV=production
++```
++
++Multiple trusted origins are comma-separated. Never use `*` or allow all Vercel projects. The API now normalizes trailing slashes and preflight origins. The client normalizes an accidental `/api/` suffix, rejects localhost from a published app, rejects HTTPSâ†’HTTP mixed content, detects an HTML response from a wrong destination, and gives specific network/configuration errors.
++
++Open `https://YOUR_ACTUAL_RAILWAY_DOMAIN/health`; it must return JSON with `status: ok`. If that address is down, fix the Railway deployment/startup logs before trying login again. This patch cannot make an undeployed or unreachable Railway service reachable. The exact cause in your deployment is not confirmed because its configuration was unavailable.
++
++Keep the existing Supabase URL and publishable-key settings in both services. Do not replace them with the database connection string or private VAPID key.
++
++## Database setup for hearts and push
++
++Run this file once in the **same Supabase project's SQL Editor** after your existing `database/setup.sql`:
++
++`supabase/migrations/20260916205359_push_notifications.sql`
++
++It creates `ivraine_private.push_subscriptions`, `heart_events`, and `push_deliveries`, with RLS and no client grants. The private schema is not exposed through the Supabase Data API. The API still verifies the bearer token and book membership before using the server-only PostgreSQL connection. This is a deliberately privileged backend connection; never put it in a browser variable.
++
++The PostgreSQL database should have exactly two `ivraine_members` rows for the scrapbook. The heart endpoint rejects other group sizes rather than guessing whom to notify.
++
++## Railway secrets for push
++
++Generate one VAPID pair on your own machine, once, from the repository root:
++
++```bash
++npm run push:keys -w backend
++```
++
++Save its public and private values securely. Do not regenerate them on each deploy; rotation requires devices to re-enable notifications.
++
++Add these **Railway server variables**:
++
++```dotenv
++PUSH_DATABASE_URL=YOUR_SUPABASE_POSTGRES_SESSION_POOLER_CONNECTION_STRING
++VAPID_PUBLIC_KEY=YOUR_GENERATED_PUBLIC_KEY
++VAPID_PRIVATE_KEY=YOUR_GENERATED_PRIVATE_KEY
++VAPID_SUBJECT=mailto:YOUR_REAL_CONTACT_EMAIL
++```
++
++For `PUSH_DATABASE_URL`, open Supabase **Connect â†’ Session pooler** and copy the complete connection string. Replace its password placeholder with the percent-encoded database password. Use the provided host and username, not a guessed hostname. Session pooling works on IPv4-only networks. Use the database from this scrapbook's Supabase project, not a separate Railway database.
++
++The connection verifies TLS certificates. If your project's certificate chain needs its CA, add `PUSH_DATABASE_CA` containing the PEM certificate from Supabase; literal `\n` line breaks are supported. Never disable certificate validation.
++
++Keep `VAPID_PRIVATE_KEY`, `PUSH_DATABASE_URL`, and `PUSH_DATABASE_CA` off Vercel's frontend variables and out of Git. No `VITE_VAPID_*` value is needed: the authenticated API returns the public key.
++
++Redeploy Railway, with app sleeping/serverless suspension **disabled** so the persistent worker can drain its queue. The normal API Dockerfile and start command are unchanged. Existing API behavior works when these optional push variables are omitted; heart sharing requires the database variable, and Web Push requires all three VAPID variables as well.
++
++## Enable each device
++
++1. Sign in as Ivan on Ivan's device and Loraine on Loraine's device.
++2. Open **Our story** and tap **Enable notifications** on each device.
++3. Accept the browser/OS permission prompt. Permission is only requested from a button tap.
++4. Tap the 3D **I miss you** button. A heart is saved for the other member, with one send per minute.
++5. Close the recipient's app and send another heart after the cooldown to verify background push delivery on that device.
++
++The enable/disable controls apply to the current account/device. **Remove all my devices** revokes every subscription belonging to that account. Subscriptions remain registered when the user locks the scrapbook so hearts can still arrive; use the notification controls to stop them. Lock-screen notification text is generic and opening it still requires app authentication. When switching accounts on a shared browser, enabling notifications renews the browser subscription so it cannot be reassigned to the other account silently.
++
++## Browser support and truthful delivery states
++
++- Android/Desktop browsers that expose the standard Push, Notifications, and Service Worker APIs can enroll; HTTPS and permission are required.
++- iPhone/iPad: iOS/iPadOS **16.4+**, install to the Home Screen and open the installed app before enabling push.
++- Embedded social browsers, private-browsing restrictions, permission denial, unsupported versions, OS battery/Focus settings, and offline devices can prevent or delay push. The app explains unsupported/blocked states and continues to save hearts in-app.
++- Supported destination services are Google's FCM, Mozilla Push, Apple's Web Push, and Windows notification endpoints. Custom browser push providers need an explicitly reviewed allowlist update.
++- The app polls in-app hearts every 15 seconds while visible and refreshes immediately on a service-worker message.
++- A heart is **saved** before push delivery is queued. A provider accepting a request is **not proof of device display or human reading**. The UI uses â€œqueuedâ€ and â€œpush service accepted,â€ never â€œyour partner saw it.â€
++- The worker retries transient failures up to five attempts with increasing delays. Jobs expire after one hour. It removes 404/410 expired subscriptions and checks both memberships before delivery.
++- A persisted request ID prevents duplicate hearts when the same send is retried after a lost response. Leased jobs recover after a Railway restart. Push systems can still deliver at least once; the notification tag reduces duplicate display for the same heart.
++- There is no scheduling, email, SMS, location tracking, or notification broadcasting. This update specifically provides the requested miss-you heart notification.
++
++## Verification
++
++```bash
++npm run typecheck
++npm test
++npm run build
++npx playwright install chromium
++npm run test:push-browser
++git add .
++git commit -m "Verify Ivraine push notifications and connection configuration"
++git push origin main
++```
++
++The automated tests use the real API and PostgreSQL/RLS in a local fixture, with test authentication and simulated push transport. Browser enrollment is simulated in the browser test; no real partner received any test notification. VAPID/encrypted request generation and service-worker handlers are checked separately. Physical iPhone/Android delivery and live Railway/Supabase deployment must be tested after configuring your actual values.
++
++## Sources
++
++- [Apple/WebKit: Web Push for Home Screen web apps](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)
++- [MDN: PushManager.subscribe](https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe)
++- [Supabase: database connections and session pooling](https://supabase.com/docs/guides/database/connecting-to-postgres)
++- [web-push: VAPID and encrypted push requests](https://github.com/web-push-libs/web-push)
+

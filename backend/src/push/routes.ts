@@ -1,0 +1,36 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { PushStore, PushError } from './store.js';
+import { heartSchema, subscriptionSchema } from './validation.js';
+export interface PushServices {store:PushStore|null;publicKey:string|null;keyId:string|null;}
+export function pushRouter(services:PushServices){
+ const router=Router();
+ router.get('/state',async(_req,res)=>{
+  if(!services.store){res.json({enabled:false,pushEnabled:false,publicKey:null,received:[],lastSent:null,deviceCount:0});return;}
+  const state=await services.store.state(res.locals.userId,res.locals.member.book_id);
+  res.json({enabled:true,pushEnabled:!!services.publicKey,publicKey:services.publicKey,...state});
+ });
+ router.post('/subscriptions',async(req,res)=>{
+  if(!services.store||!services.publicKey||!services.keyId)throw new PushError(503,'Push notifications need server setup.');
+  const sub=subscriptionSchema.parse(req.body);
+  await services.store.subscribe(res.locals.userId,res.locals.member.book_id,sub,services.keyId);
+  res.status(201).json({subscribed:true});
+ });
+ router.post('/subscriptions/check',async(req,res)=>{const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);res.json({active:services.store?await services.store.subscriptionActive(res.locals.userId,endpoint,services.keyId):false});});
+ router.delete('/subscriptions',async(req,res)=>{
+  if(!services.store)throw new PushError(503,'Notification storage is not configured.');
+  const {endpoint}=z.object({endpoint:z.string().max(4096)}).strict().parse(req.body);
+  await services.store.unsubscribe(res.locals.userId,endpoint);res.json({subscribed:false});
+ });
+ router.delete('/devices',async(_req,res)=>{
+  if(!services.store)throw new PushError(503,'Notification storage is not configured.');
+  await services.store.unsubscribeAll(res.locals.userId);res.json({subscribed:false});
+ });
+ router.post('/hearts',async(req,res)=>{
+  if(!services.store)throw new PushError(503,'Heart sharing needs the notification database setup.');
+  const {requestId}=heartSchema.parse(req.body);
+  const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId);
+  res.status(saved.duplicate?200:201).json({saved:true,...saved});
+ });
+ return router;
+}

@@ -1,0 +1,10 @@
+﻿?? _applycheck.txt
+?? _files.txt
+?? _gitstatus.txt
+?? _listing.txt
+?? _patchinfo.txt
+?? _patchparts.txt
+?? _patchparts/
+c99648d new
+307d146 fix the 502 errors
+5867792 fix cors

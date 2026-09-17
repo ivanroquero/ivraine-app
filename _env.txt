@@ -1,0 +1,5 @@
+﻿node=v24.21.0
+node_modules=False
+pg=False
+web-push=False
+types-pg=False

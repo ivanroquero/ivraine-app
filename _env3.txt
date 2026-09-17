@@ -1,0 +1,6 @@
+﻿pg=True
+web-push=True
+types-pg=True
+types-wp=True
+tsx=True
+pglite=True

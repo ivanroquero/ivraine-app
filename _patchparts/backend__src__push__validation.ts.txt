@@ -1,0 +1,18 @@
+﻿diff --git a/backend/src/push/validation.ts b/backend/src/push/validation.ts
+new file mode 100644
+--- /dev/null
++++ b/backend/src/push/validation.ts
+@@ -0,0 +1,12 @@
++import { z } from 'zod';
++export function trustedPushEndpoint(value: string): boolean {
++  try {
++    const u=new URL(value),h=u.hostname;
++    return u.protocol==='https:' && !u.port && !u.username && !u.password && !u.hash && (
++      h==='fcm.googleapis.com' || h==='updates.push.services.mozilla.com' || h==='push.services.mozilla.com' || h.endsWith('.push.services.mozilla.com') || h.endsWith('.push.apple.com') || h.endsWith('.notify.windows.com')
++    );
++  } catch { return false; }
++}
++const encoded=(length:number)=>z.string().regex(/^[A-Za-z0-9_-]+={0,2}$/).refine(value=>Buffer.from(value,'base64url').length===length,'Invalid subscription key');
++export const subscriptionSchema=z.object({endpoint:z.string().max(4096).refine(trustedPushEndpoint,'Unsupported push-service endpoint'),expirationTime:z.number().nullable().optional(),keys:z.object({p256dh:encoded(65),auth:encoded(16)}).strict()}).strict();
++export const heartSchema=z.object({requestId:z.uuid()}).strict();
+

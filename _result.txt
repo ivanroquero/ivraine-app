@@ -1,0 +1,158 @@
+﻿=== install ===
+
+changed 13 packages in 3m
+npm.cmd : npm warn install-scripts 2 packages have install scripts not yet covered by allowScripts:
+At line:1 char:158
++ ... coding utf8; $o = & npm.cmd install --no-audit --no-fund *>&1; $c=$LA ...
++                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn instal...y allowScripts::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm warn install-scripts   agent-browser@0.38.0 (postinstall: node scripts/postinstall.js)
+npm warn install-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+INSTALL_EXIT=0
+=== typecheck ===
+
+> ivraine@2.0.0 typecheck
+> tsc -p frontend/tsconfig.json && tsc -p backend/tsconfig.json --noEmit
+
+error TS2318: Cannot find global type 'Array'.
+error TS2318: Cannot find global type 'Boolean'.
+error TS2318: Cannot find global type 'CallableFunction'.
+error TS2318: Cannot find global type 'Function'.
+error TS2318: Cannot find global type 'IArguments'.
+error TS2318: Cannot find global type 'NewableFunction'.
+error TS2318: Cannot find global type 'Number'.
+error TS2318: Cannot find global type 'Object'.
+error TS2318: Cannot find global type 'RegExp'.
+error TS2318: Cannot find global type 'String'.
+TYPECHECK_EXIT=1
+=== test ===
+
+> ivraine@2.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'E:\ro\ivraine\node_modules\zod\v4\classic\external.js' imported from E:\ro\ivraine\node_modules\zod\index.js
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:10932)
+    at resolveDirectorySync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:12238)
+    at resolveTsPathsSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:13445)
+    at resolve (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:15991) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///E:/ro/ivraine/node_modules/zod/v4/classic/external.js'
+}
+
+Node.js v24.21.0
+Γ£û tests\api.test.ts (592.4349ms)
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'E:\ro\ivraine\node_modules\zod\v4\classic\external.js' imported from E:\ro\ivraine\node_modules\zod\index.js
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:10932)
+    at resolveDirectorySync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:12238)
+    at resolveTsPathsSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:13445)
+    at resolve (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:15991) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///E:/ro/ivraine/node_modules/zod/v4/classic/external.js'
+}
+
+Node.js v24.21.0
+Γ£û tests\push.test.ts (833.4997ms)
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'E:\ro\ivraine\node_modules\zod\v4\classic\external.js' imported from E:\ro\ivraine\node_modules\zod\index.js
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:10932)
+    at resolveDirectorySync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:12238)
+    at resolveTsPathsSync (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:13445)
+    at resolve (file:///E:/ro/ivraine/node_modules/tsx/dist/register-SoqaU4rg.mjs:2:15991) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///E:/ro/ivraine/node_modules/zod/v4/classic/external.js'
+}
+
+Node.js v24.21.0
+Γ£û tests\security.test.ts (782.2638ms)
+Γ£ö service worker always displays generic push and opens only the scrapbook origin (24.9921ms)
+Γ£ö web-push encrypts a standards-based payload with a real generated VAPID pair (21.4677ms)
+Γä╣ tests 5
+Γä╣ suites 0
+Γä╣ pass 2
+Γä╣ fail 3
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 1090.9574
+
+Γ£û failing tests:
+
+test at tests\api.test.ts:1:1
+Γ£û tests\api.test.ts (592.4349ms)
+  'test failed'
+
+test at tests\push.test.ts:1:1
+Γ£û tests\push.test.ts (833.4997ms)
+  'test failed'
+
+test at tests\security.test.ts:1:1
+Γ£û tests\security.test.ts (782.2638ms)
+  'test failed'
+TEST_EXIT=1
+=== build ===
+
+> ivraine@2.0.0 build
+> npm run build -w frontend && npm run build -w backend
+
+
+> @ivraine/web@2.0.0 build
+> tsc --noEmit && vite build
+
+error TS2318: Cannot find global type 'Array'.
+error TS2318: Cannot find global type 'Boolean'.
+error TS2318: Cannot find global type 'CallableFunction'.
+error TS2318: Cannot find global type 'Function'.
+error TS2318: Cannot find global type 'IArguments'.
+error TS2318: Cannot find global type 'NewableFunction'.
+error TS2318: Cannot find global type 'Number'.
+error TS2318: Cannot find global type 'Object'.
+error TS2318: Cannot find global type 'RegExp'.
+error TS2318: Cannot find global type 'String'.
+npm.cmd : npm error Lifecycle script `build` failed with error:
+At line:1 char:796
++ ... le -Append $log -Encoding utf8; $o = & npm.cmd run build *>&1; $c=$LA ...
++                                          ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm error Lifec...led with error::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm error code 1
+npm error path E:\ro\ivraine\frontend
+npm error workspace @ivraine/web@2.0.0
+npm error location E:\ro\ivraine\frontend
+npm error command failed
+npm error command C:\windows\system32\cmd.exe /d /s /c tsc --noEmit && vite build
+BUILD_EXIT=1
+ALL_DONE

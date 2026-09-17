@@ -1,0 +1,47 @@
+﻿CHECK_EXIT=0
+git : new update/ivraine-push-update-1/ivraine-push-update/ivraine-push.patch:6: trailing whitespace.
+At line:1 char:378
++ ... ro\ivraine\_apply2.txt' -Encoding utf8; git apply @ex $p 2>&1 | Out-F ...
++                                             ~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (new update/ivra...ing whitespace.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+# Ivraine push + 3D heart update
+new update/ivraine-push-update-1/ivraine-push-update/ivraine-push.patch:7: trailing whitespace.
+
+new update/ivraine-push-update-1/ivraine-push-update/ivraine-push.patch:8: trailing whitespace.
+This update was prepared against the exact source of the previous Ivraine ZIP. The connected GitHub account returned **404** for `ivanroquero/ivraine`; the 
+current GitHub files and live deployment settings could not be read or changed. Apply the patch only if it matches your checkout. It deliberately fails 
+instead of overwriting unrelated changes.
+new update/ivraine-push-update-1/ivraine-push-update/ivraine-push.patch:9: trailing whitespace.
+
+new update/ivraine-push-update-1/ivraine-push-update/ivraine-push.patch:10: trailing whitespace.
+## Apply the code
+warning: squelched 621 whitespace errors
+warning: 626 lines add whitespace errors.
+APPLY_EXIT=0
+ M backend/.env.example
+ M backend/src/server.ts
+ M frontend/public/sw.js
+ M frontend/src/main.ts
+ M frontend/src/views.ts
+ M package-lock.json
+ M package.json
+?? PUSH-SETUP.md
+?? _apply2.txt
+?? _applycheck.txt
+?? _files.txt
+?? _gitstatus.txt
+?? _listing.txt
+?? _patchinfo.txt
+?? _patchparts.txt
+?? _patchparts/
+?? backend/src/push/
+?? frontend/src/api-config.ts
+?? frontend/src/connection.css
+?? frontend/src/connection.ts
+?? supabase/
+?? tests/push-browser-check.ts
+?? tests/push-fixture.ts
+?? tests/push.test.ts
+?? tests/service-worker.test.ts

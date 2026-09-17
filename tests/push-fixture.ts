@@ -1,0 +1,26 @@
+import type { PGlite } from '@electric-sql/pglite';
+import type { SqlPool,SqlConnection,SqlResult } from '../backend/src/push/store';
+import { readFile } from 'node:fs/promises';
+export async function installPushSchema(db:PGlite){await db.exec(await readFile(new URL('../supabase/migrations/20260916205359_push_notifications.sql',import.meta.url),'utf8'));}
+export function pushPool(db:PGlite):SqlPool{
+ return {
+  query:async(sql,values)=>db.query(sql,values) as Promise<SqlResult>,
+  connect:async()=>{
+   let expose!:(connection:SqlConnection)=>void,finish!:(error?:Error)=>void;
+   const ready=new Promise<SqlConnection>(resolve=>{expose=resolve;});
+   const hold=new Promise<void>((resolve,reject)=>{finish=error=>error?reject(error):resolve();});
+   const done=db.transaction(async tx=>{
+    const connection:SqlConnection={release:()=>finish(),query:async(sql,values)=>{
+     if(sql==='begin')return {rows:[]};
+     if(sql==='commit'){finish();await done;return {rows:[]};}
+     if(sql==='rollback'){finish(new Error('fixture rollback'));await done.catch(()=>undefined);return {rows:[]};}
+     return tx.query(sql,values) as Promise<SqlResult>;
+    }};
+    expose(connection);await hold;
+   });
+   // The transaction is awaited by COMMIT/ROLLBACK, not left unhandled.
+   void done.catch(()=>undefined);
+   return ready;
+  }
+ };
+}
