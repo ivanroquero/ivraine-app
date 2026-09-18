@@ -13,7 +13,13 @@ export function connectionMarkup(){return `<section class="connection-card" aria
 function supported(){return window.isSecureContext&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
 function iosNeedsInstall(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1?!(matchMedia('(display-mode: standalone)').matches||(navigator as Navigator&{standalone?:boolean}).standalone):false;}
 function permission(){return 'Notification' in window?Notification.permission:'unsupported';}
-function partnerName(){return state?.partner?.name||'Your partner';}
+let configuredPartnerName = '';
+function partnerName(){
+ const name = state?.partner?.name?.trim();
+ if(name && name.toLowerCase() !== 'your partner') return name;
+ if(configuredPartnerName && configuredPartnerName.toLowerCase() !== 'your partner') return configuredPartnerName;
+ return '';
+}
 function partnerReady(){return (state?.partner?.devices??0)>0;}
 function reducedMotion(){return matchMedia('(prefers-reduced-motion: reduce)').matches;}
 function buzz(pattern:number[]){try{navigator.vibrate?.(pattern);}catch{ /* Vibration is optional on most devices. */ }}
@@ -46,7 +52,8 @@ export function paintConnection(){
  root.querySelector('#heart-button-label')!.textContent=sending?'Sending…':remaining?'Heart sent':'I miss you';
  root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
  const partner=root.querySelector('#heart-partner')!;
- partner.textContent=!state?.enabled?'':!state.partner?'Add your partner to this scrapbook to share hearts.':partnerReady()?`${partnerName()} gets your hearts on their phone. ♡`:`${partnerName()} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
+ const pName=partnerName();
+ partner.textContent=!state?.enabled?'':!state.partner?(pName?`Share hearts with ${pName}.`:'Add your love to this scrapbook to share hearts.'):partnerReady()?`${pName||'Your love'} gets your hearts on their phone. ♡`:`${pName||'Your love'} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
  partner.classList.toggle('is-ready',partnerReady());
  const latest=state?.received[0];root.querySelector('#heart-received')!.textContent=latest?`${latest.senderName} sent you a heart · ${new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(latest.createdAt))}`:'Our little way to feel close.';
  const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your scrapbook. Push could not be delivered.':'';
@@ -97,8 +104,8 @@ async function diagnose(report=true){
  catch(error){diagnostics=null;if(report)issue=error instanceof Error?error.message:'Could not check notifications.';}
  paintConnection();
 }
-export function startConnection(id:string,toast:(message:string)=>void){notify=toast;if(userId===id){paintConnection();return;}stopConnection();userId=id;blockedUntil=0;failures=0;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine&&Date.now()>=blockedUntil)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
-export function stopConnection(){epoch++;userId=null;state=null;loading=false;sending=false;enabling=false;issue='';status='';diagnostics=null;localSubscribed=false;blockedUntil=0;failures=0;clearInterval(poll);clearInterval(clock);}
+export function startConnection(id:string,toast:(message:string)=>void,partner?:string){notify=toast;if(partner)configuredPartnerName=partner;if(userId===id){paintConnection();return;}stopConnection();if(partner)configuredPartnerName=partner;userId=id;blockedUntil=0;failures=0;void load();poll=setInterval(()=>{if(!document.hidden&&navigator.onLine&&Date.now()>=blockedUntil)void load();},15000);clock=setInterval(()=>{if(!document.hidden)paintConnection();},1000);}
+export function stopConnection(){epoch++;configuredPartnerName='';userId=null;state=null;loading=false;sending=false;enabling=false;issue='';status='';diagnostics=null;localSubscribed=false;blockedUntil=0;failures=0;clearInterval(poll);clearInterval(clock);}
 function keyBytes(value:string):Uint8Array{const clean=value.replace(/-/g,'+').replace(/_/g,'/');const padded=clean.padEnd(Math.ceil(clean.length/4)*4,'=');return Uint8Array.from(atob(padded),c=>c.charCodeAt(0));}
 async function enableNotifications(){
  if(!state?.publicKey||!supported()||iosNeedsInstall())return;
@@ -123,7 +130,7 @@ async function enableNotifications(){
   if(current!==epoch){await subscription.unsubscribe();return;}
   await api('/notifications/subscriptions','POST',subscription.toJSON());
   if(current!==epoch)return;
-  localStorage.setItem('ivraine-push-owner',owner);localSubscribed=true;status='Notifications enabled. Your partner can now send you a heart.';notify(status);
+  localStorage.setItem('ivraine-push-owner',owner);localSubscribed=true;status=partnerName()?`Notifications enabled. ${partnerName()} can now send you a heart.`:'Notifications enabled. You can now exchange hearts.';notify(status);
   void shareKeyWithWorker(publicKey);buzz([15,25,15]);await load();
  }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not enable notifications.';notify(issue);}}
  finally{if(current===epoch){enabling=false;paintConnection();}}
@@ -142,8 +149,8 @@ async function sendHeart(){
   if(current!==epoch)return;sessionStorage.removeItem(storageKey);
   state.lastSent={nextAllowedAt:result.nextAllowedAt,accepted:0,pending:result.queuedDevices,failed:0};
   // The partner's own registration decides whether a phone can ring, so say it plainly.
-  if(result.queuedDevices){status=`Heart saved for ${partnerName()}. Push delivery is queued.`;notify('A little love is on its way. ♡');celebrate();}
-  else{status=`Heart saved. ${partnerName()} has not enabled notifications on a phone yet, so nothing was pushed.`;notify('Heart saved in your scrapbook. ♡');buzz([15]);void diagnose(false);}
+  if(result.queuedDevices){status=`Heart saved for ${partnerName()||'your love'}. Push delivery is queued.`;notify('A little love is on its way. ♡');celebrate();}
+  else{status=`Heart saved. ${partnerName()||'They'} have not enabled notifications on a phone yet, so nothing was pushed.`;notify('Heart saved in your scrapbook. ♡');buzz([15]);void diagnose(false);}
  }catch(error){if(current===epoch){issue=error instanceof Error?error.message:'Could not send your heart.';if(error instanceof ApiError&&error.status===429){sessionStorage.removeItem(storageKey);state.lastSent={nextAllowedAt:new Date(Date.now()+Math.max(1,error.retryAfter)*1000).toISOString(),accepted:0,pending:0,failed:0};}}}
  finally{if(current===epoch){sending=false;paintConnection();}}
 }

@@ -18,6 +18,11 @@ create table public.ivraine_members (
  last_active_at timestamptz not null default now()
 );
 create index ivraine_members_book_idx on public.ivraine_members(book_id);
+create function public.ivraine_user_book_id(user_uuid uuid) returns uuid language sql security definer stable set search_path = '' as $$
+ select book_id from public.ivraine_members where user_id = user_uuid;
+$$;
+revoke all on function public.ivraine_user_book_id(uuid) from public;
+grant execute on function public.ivraine_user_book_id(uuid) to authenticated;
 create table public.ivraine_entries (
  id uuid primary key default gen_random_uuid(),
  book_id uuid not null references public.ivraine_books(id) on delete cascade,
@@ -32,6 +37,7 @@ create table public.ivraine_entries (
  recurrence text not null default 'none' check(recurrence in ('none','monthly','yearly')),
  song_url text not null default '' check(length(song_url)<=2000 and (song_url='' or song_url ~ '^https://(open\.spotify\.com|music\.apple\.com|www\.youtube\.com|youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com)/')),
  artist text not null default '' check(length(artist)<=160),
+ voice_url text not null default '' check(length(voice_url)<=2000 and (voice_url='' or voice_url ~ '^https://.+\.(mp3|m4a|wav|ogg|webm|aac)(\?.*)?$')),
  favorite boolean not null default false,
  completed boolean not null default false,
  created_at timestamptz not null default now(),
@@ -48,17 +54,19 @@ alter table public.ivraine_members enable row level security;
 alter table public.ivraine_entries enable row level security;
 revoke all on public.ivraine_books,public.ivraine_members,public.ivraine_entries from anon,authenticated;
 grant select on public.ivraine_books,public.ivraine_members,public.ivraine_entries to authenticated;
-grant insert(id,book_id,author_id,kind,title,body,event_date,location,photo_paths,chapter,recurrence,song_url,artist,favorite,completed) on public.ivraine_entries to authenticated;
-grant update(title,body,event_date,location,chapter,recurrence,song_url,artist,favorite,completed) on public.ivraine_entries to authenticated;
+grant update(last_active_at) on public.ivraine_members to authenticated;
+grant insert(id,book_id,author_id,kind,title,body,event_date,location,photo_paths,chapter,recurrence,song_url,artist,voice_url,favorite,completed) on public.ivraine_entries to authenticated;
+grant update(title,body,event_date,location,chapter,recurrence,song_url,artist,voice_url,favorite,completed) on public.ivraine_entries to authenticated;
 grant delete on public.ivraine_entries to authenticated;
-create policy ivraine_self_membership on public.ivraine_members for select to authenticated using(user_id=(select auth.uid()));
-create policy ivraine_read_book on public.ivraine_books for select to authenticated using(id in (select book_id from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_read_entry on public.ivraine_entries for select to authenticated using(book_id in (select book_id from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_add_entry on public.ivraine_entries for insert to authenticated with check(author_id=(select auth.uid()) and book_id in (select book_id from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_edit_entry on public.ivraine_entries for update to authenticated using(book_id in (select book_id from public.ivraine_members where user_id=(select auth.uid()))) with check(book_id in (select book_id from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_delete_entry on public.ivraine_entries for delete to authenticated using(book_id in (select book_id from public.ivraine_members where user_id=(select auth.uid())));
+create policy ivraine_read_members on public.ivraine_members for select to authenticated using(book_id = public.ivraine_user_book_id((select auth.uid())));
+create policy ivraine_update_self_activity on public.ivraine_members for update to authenticated using(user_id=(select auth.uid())) with check(user_id=(select auth.uid()));
+create policy ivraine_read_book on public.ivraine_books for select to authenticated using(id = public.ivraine_user_book_id((select auth.uid())));
+create policy ivraine_read_entry on public.ivraine_entries for select to authenticated using(book_id = public.ivraine_user_book_id((select auth.uid())));
+create policy ivraine_add_entry on public.ivraine_entries for insert to authenticated with check(author_id=(select auth.uid()) and book_id = public.ivraine_user_book_id((select auth.uid())));
+create policy ivraine_edit_entry on public.ivraine_entries for update to authenticated using(book_id = public.ivraine_user_book_id((select auth.uid()))) with check(book_id = public.ivraine_user_book_id((select auth.uid())));
+create policy ivraine_delete_entry on public.ivraine_entries for delete to authenticated using(book_id = public.ivraine_user_book_id((select auth.uid())));
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('ivraine-photos','ivraine-photos',false,8388608,array['image/jpeg','image/png','image/webp']);
-create policy ivraine_photo_read on storage.objects for select to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) in (select book_id::text from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_photo_add on storage.objects for insert to authenticated with check(bucket_id='ivraine-photos' and split_part(name,'/',2)=(select auth.uid())::text and split_part(name,'/',1) in (select book_id::text from public.ivraine_members where user_id=(select auth.uid())));
-create policy ivraine_photo_delete on storage.objects for delete to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) in (select book_id::text from public.ivraine_members where user_id=(select auth.uid())));
+create policy ivraine_photo_read on storage.objects for select to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
+create policy ivraine_photo_add on storage.objects for insert to authenticated with check(bucket_id='ivraine-photos' and split_part(name,'/',2)=(select auth.uid())::text and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
+create policy ivraine_photo_delete on storage.objects for delete to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
 commit;

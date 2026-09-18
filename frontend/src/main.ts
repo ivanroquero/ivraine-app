@@ -6,7 +6,7 @@ import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
 import { login, shell, renderPage, pageKind, type Page, type Filters, navigation } from './views';
 import { dialog, editor } from './dialogs';
-import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, presenceLabel, isRecentlyActive } from './utils';
+import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, presenceLabel, isRecentlyActive, partnerDisplayName } from './utils';
 import { unlockLegacy, importLegacy } from './legacy';
 import { install, registerPwa } from './pwa';
 import { monthEvents } from './calendar';
@@ -16,10 +16,8 @@ let filters:Filters={query:'',chapter:'',favorites:false};
 let month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);
 let selectedDate=today();
 let presenceTimer:ReturnType<typeof setInterval>|undefined;
-const themeKey='ivraine-theme';
-function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;localStorage.setItem(themeKey,theme);}
-function currentTheme(): 'light'|'dark'{const current=document.documentElement.dataset.theme;if(current==='dark'||current==='light')return current;return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
-try{const saved=localStorage.getItem(themeKey);applyTheme(saved==='light'||saved==='dark'?saved:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch{document.documentElement.dataset.theme='light';}
+function applyTheme(theme:'dark'){document.documentElement.dataset.theme='dark';try{localStorage.setItem('ivraine-theme','dark');}catch{}}
+applyTheme('dark');
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
@@ -29,7 +27,7 @@ function updatePresenceStatus(){
  const currentInfo=info;
  if(!currentInfo)return;
  const youName=currentInfo.member.display_name || 'You';
- const partnerName=currentInfo.partner?.display_name || 'Your partner';
+ const partnerName=partnerDisplayName(currentInfo);
  const partnerValue=currentInfo.partner?.last_active_at;
  youNodes.forEach((you)=>{
   const isHero=you.dataset.presenceRole==='hero';
@@ -38,6 +36,8 @@ function updatePresenceStatus(){
   you.textContent=label;you.classList.toggle('is-live', isRecentlyActive(currentInfo.member.last_active_at));you.setAttribute('title', `${youName} ${label.split(' · ').slice(1).join(' · ')}`);
  });
  partnerNodes.forEach((partnerEl)=>{
+  if(!partnerName){partnerEl.hidden=true;return;}
+  partnerEl.hidden=false;
   const isHero=partnerEl.dataset.presenceRole==='hero';
   if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.removeAttribute('title');return;}
   const label=presenceLabel(partnerName, partnerValue, false);
@@ -56,7 +56,7 @@ async function boot(){const gen=++generation;
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startPresenceHeartbeat();void pingPresence();void refreshPresence();startConnection(info.userId,toast);}
+ try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startPresenceHeartbeat();void pingPresence();void refreshPresence();startConnection(info.userId,toast,partnerDisplayName(info));}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
@@ -92,7 +92,7 @@ function showViewer(entry:Entry){let index=0;const photos=entry.photo_urls.filte
  el.querySelector('#fullscreen-photo')!.addEventListener('click',async()=>{if(!el.requestFullscreen){toast('This browser uses the full-window photo viewer.');return;}try{if(document.fullscreenElement)await document.exitFullscreen();else await el.requestFullscreen();}catch{toast('Fullscreen is not available in this browser.');}});
  let touchX=0;el.addEventListener('touchstart',e=>{touchX=e.changedTouches[0].clientX;},{passive:true});el.addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchX;if(Math.abs(delta)>60)step(delta<0?1:-1);},{passive:true});
 }
-function settings(){const el=dialog('Our little space.',`<p>Signed in as <strong>${h(info?.member.display_name)}</strong>. Only the two accounts added to this scrapbook can access its content.</p><div class="settings-actions"><button class="secondary" id="theme-toggle" data-action="theme">${currentTheme()==='dark'?'☀ Light mode':'☾ Dark mode'}</button><button class="secondary" id="install">Add to Home Screen</button><button class="secondary" id="export">Export our stories (JSON)</button><button class="secondary" id="password">Change password</button><a class="secondary" href="/legacy/index.html">Open original scrapbook ↗</a></div><hr><h3>Bring our old photos along.</h3><p>Unlock the original with its existing 8-digit passcode. Photos are imported into this private scrapbook; the original stories and layout remain available in the original version.</p><form id="import-form"><label>Original passcode<input type="password" name="passcode" inputmode="numeric" minlength="8" maxlength="8" required autocomplete="off"></label><p class="field-help">The passcode is used in this browser and is never sent to the backend. Imported photo dates need to be reviewed.</p><p id="import-status" role="status"></p><button class="primary" type="submit">Import original photos</button></form>`);
+function settings(){const el=dialog('Our little space.',`<p>Signed in as <strong>${h(info?.member.display_name)}</strong>. Only the two accounts added to this scrapbook can access its content.</p><div class="settings-actions"><button class="secondary" id="install">Add to Home Screen</button><button class="secondary" id="export">Export our stories (JSON)</button><button class="secondary" id="password">Change password</button><a class="secondary" href="/legacy/index.html">Open original scrapbook ↗</a></div><hr><h3>Bring our old photos along.</h3><p>Unlock the original with its existing 8-digit passcode. Photos are imported into this private scrapbook; the original stories and layout remain available in the original version.</p><form id="import-form"><label>Original passcode<input type="password" name="passcode" inputmode="numeric" minlength="8" maxlength="8" required autocomplete="off"></label><p class="field-help">The passcode is used in this browser and is never sent to the backend. Imported photo dates need to be reviewed.</p><p id="import-status" role="status"></p><button class="primary" type="submit">Import original photos</button></form>`);
  el.querySelector('#install')!.addEventListener('click',()=>{el.close();void install();});
  el.querySelector('#password')!.addEventListener('click',()=>{el.close();passwordDialog();});
  el.querySelector('#export')!.addEventListener('click',()=>{download(`ivraine-stories-${today()}.json`,new Blob([JSON.stringify({version:2,exported_at:new Date().toISOString(),book:info?.book,entries:entries.map(({photo_urls,...e})=>e),note:'Photo files are stored separately. This is a stories export; keep a separate Supabase Storage backup.'},null,2)],{type:'application/json'}));toast('Stories exported. Photo files need a separate storage backup.');});
@@ -114,7 +114,6 @@ document.addEventListener('click',async event=>{
  case'letter':if(entry)showLetter(entry);break;
  case'view':if(entry)showViewer(entry);break;
  case'settings':settings();break;
- case'theme':{const next=currentTheme()==='dark'?'light':'dark';applyTheme(next);const themeButton=document.querySelector<HTMLButtonElement>('#theme-toggle');if(themeButton)themeButton.textContent=next==='dark'?'☀ Light mode':'☾ Dark mode';break;}
  case'refresh':await refresh();break;
  case'filter-favorites':filters.favorites=!filters.favorites;render();break;
  case'clear-filters':filters={query:'',chapter:'',favorites:false};render();break;

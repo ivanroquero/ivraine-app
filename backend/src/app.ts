@@ -52,20 +52,37 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const book=result(await db.from('ivraine_books').select('*').eq('id',res.locals.member.book_id).single());
     let members: Array<{user_id:string;book_id:string;display_name:string;last_active_at?:string|null}> = [];
     try{members=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('book_id',res.locals.member.book_id)) ?? [];}catch(err){if(!missingColumn(err)) throw err; members=result(await db.from('ivraine_members').select('user_id,book_id,display_name').eq('book_id',res.locals.member.book_id)) ?? [];}
-    members=members.map(member=>({ ...member, last_active_at: member.last_active_at ?? new Date().toISOString() }));
     const current=members.find((member)=>member.user_id===res.locals.userId) ?? res.locals.member;
-    const partner=members.find((member)=>member.user_id!==res.locals.userId) ?? null;
+    let partner=members.find((member)=>member.user_id!==res.locals.userId) ?? null;
+    if(!partner && book){
+      const currentName=(current.display_name||'').trim().toLowerCase();
+      const p1=(book.partner_one||'').trim();
+      const p2=(book.partner_two||'').trim();
+      let fallbackName='';
+      if(p1 && currentName && (p1.toLowerCase().includes(currentName) || currentName.includes(p1.toLowerCase()))){
+        fallbackName=p2.split(' ')[0]||p2;
+      }else if(p2 && currentName && (p2.toLowerCase().includes(currentName) || currentName.includes(p2.toLowerCase()))){
+        fallbackName=p1.split(' ')[0]||p1;
+      }else if(p2){
+        fallbackName=p2.split(' ')[0]||p2;
+      }else if(p1){
+        fallbackName=p1.split(' ')[0]||p1;
+      }
+      if(fallbackName){
+        partner={user_id:'',book_id:book.id,display_name:fallbackName,last_active_at:null};
+      }
+    }
     res.json({book,member:current,partner,userId:res.locals.userId});
   });
   app.post('/api/active',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;
+    const now=new Date().toISOString();
     try{
-      const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').maybeSingle());
-      if(!row || !row.last_active_at) throw new HttpError(500,'Could not update your active status.');
-      res.json({last_active_at: row.last_active_at});
+      const row=result(await db.from('ivraine_members').update({last_active_at:now}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').maybeSingle());
+      res.json({last_active_at: row?.last_active_at ?? now});
     }catch(err){
       if(!missingColumn(err)) throw err;
-      res.json({last_active_at: new Date().toISOString()});
+      res.json({last_active_at: now});
     }
   });
   app.get('/api/entries',async(req,res)=>{

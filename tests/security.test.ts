@@ -11,7 +11,8 @@ test('database RLS protects both direct API access and shared writes',async()=>{
   assert.equal((await asUser(db,USER2,'select * from public.ivraine_entries')).rows.length,1);
   assert.equal((await asUser(db,OUTSIDER,'select * from public.ivraine_entries')).rows.length,0);
   assert.equal((await asUser(db,OUTSIDER,'select * from public.ivraine_books')).rows.length,0);
-  assert.equal((await asUser(db,USER1,'select * from public.ivraine_members')).rows.length,1);
+  assert.equal((await asUser(db,USER1,'select * from public.ivraine_members')).rows.length,2);
+  assert.equal((await asUser(db,OUTSIDER,'select * from public.ivraine_members')).rows.length,0);
   await asUser(db,USER2,'update public.ivraine_entries set title=$1 where id=$2',['Shared edit',id]);
   assert.equal((await asUser(db,USER1,'select title from public.ivraine_entries')).rows[0].title,'Shared edit');
   await assert.rejects(asUser(db,OUTSIDER,`insert into public.ivraine_entries(book_id,author_id,kind,title,event_date) values($1,$2,'note','Intrusion','2026-09-02')`,[BOOK,OUTSIDER]));
