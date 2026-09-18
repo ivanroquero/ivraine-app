@@ -50,7 +50,8 @@ button:active:not(:disabled),.primary:active { transform: scale(.97); }
 .notification-row>div { max-width: 420px; }
 .notification-button { font-size: 12px; }
 .notification-row .text-button { font-size: 11px; }
-.page-heading { margin-top: 36px; }
+.page-heading { margin-top: 36px; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.page-heading h1,.page-heading h2 { margin: 0; }
 .page-heading p,.card-copy>p { font-size: 14px; }
 .toolbar { gap: 10px; flex-wrap: wrap; }
 .search { border-radius: 100px; background: rgba(38,32,45,0.8); padding: 2px 16px; border: 1px solid var(--border); }
@@ -97,8 +98,9 @@ dialog::backdrop { background: rgba(14,11,17,0.75); backdrop-filter: blur(8px); 
   #content { padding: 12px max(16px,env(safe-area-inset-right)) calc(110px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
   .hero { display: grid; grid-template-columns: minmax(0,1fr) 100px; gap: 12px; min-height: 350px; padding: 28px 22px; border-radius: 28px; }
   .hero>div:first-child { min-width: 0; }
-  .hero h1 { font-size: clamp(30px,8vw,40px); width: calc(100% + 110px); margin: 14px 0; }
+  .hero h1 { font-size: clamp(30px,8vw,40px); width: auto; max-width: 100%; margin: 14px 0; }
   .hero .eyebrow { font-size: 10px; }
+  .page-heading { flex-direction: column; align-items: flex-start; }
   .hero>div>p { font-size: 12px; max-width: 180px; }
   .hero-photo { position: relative; width: 100%; right: auto; bottom: auto; margin: 78px 0 0; padding: 6px 6px 12px; border-radius: 16px; align-self: center; }
   .hero-photo img { border-radius: 11px; }
@@ -140,7 +142,7 @@ dialog::backdrop { background: rgba(14,11,17,0.75); backdrop-filter: blur(8px); 
 }
 @media (max-width: 380px) {
   .hero { grid-template-columns: minmax(0,1fr) 84px; padding: 24px 18px; }
-  .hero h1 { width: calc(100% + 96px); font-size: 30px; }
+  .hero h1 { width: auto; font-size: 30px; }
   .hero-stats { gap: 8px; }
   .hero-stats strong { font-size: 20px; }
   .connection-card { grid-template-columns: 1fr; text-align: center; }
