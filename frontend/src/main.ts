@@ -24,14 +24,22 @@ function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?lo
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
 function updatePresenceStatus(){
- const you=document.querySelector<HTMLElement>('[data-presence="you"]');
- const partnerEl=document.querySelector<HTMLElement>('[data-presence="partner"]');
+ const youNodes=document.querySelectorAll<HTMLElement>('[data-presence="you"]');
+ const partnerNodes=document.querySelectorAll<HTMLElement>('[data-presence="partner"]');
  if(!info)return;
  const youName=info.member.display_name || 'You';
  const partnerName=info.partner?.display_name || 'Your partner';
  const partnerValue=info.partner?.last_active_at;
- if(you){you.textContent=presenceLabel(youName, info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.setAttribute('title', `${youName} ${presenceLabel(youName, info.member.last_active_at, true).split(' · ').slice(1).join(' · ')}`);} 
- if(partnerEl){partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${presenceLabel(partnerName, partnerValue, false).split(' · ').slice(1).join(' · ')}`);}
+ youNodes.forEach((you)=>{
+  const isHero=you.dataset.presenceRole==='hero';
+  if(isHero){you.textContent=youName;you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.removeAttribute('title');return;}
+  you.textContent=presenceLabel(youName, info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.setAttribute('title', `${youName} ${presenceLabel(youName, info.member.last_active_at, true).split(' · ').slice(1).join(' · ')}`);
+ });
+ partnerNodes.forEach((partnerEl)=>{
+  const isHero=partnerEl.dataset.presenceRole==='hero';
+  if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.removeAttribute('title');return;}
+  partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${presenceLabel(partnerName, partnerValue, false).split(' · ').slice(1).join(' · ')}`);
+ });
 }
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
 function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();}
