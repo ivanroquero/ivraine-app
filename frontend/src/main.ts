@@ -47,7 +47,7 @@ async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=
    if(files.some(f=>f.size>8388608||!['image/jpeg','image/png','image/webp'].includes(f.type)))throw new Error('Use JPEG, PNG, or WebP photos, each under 8 MB.');
    for(const [i,file] of files.entries()){status.textContent=`Uploading photo ${i+1} of ${files.length}…`;uploaded.push((await api<{path:string}>('/photos','POST',file)).path);}
    status.textContent='Saving your little moment…';
-   const body={title:data.get('title'),body:data.get('body')||'',event_date:data.get('event_date'),location:data.get('location')||'',chapter:data.get('chapter')||existing?.chapter||'Our story',recurrence:data.get('recurrence')||existing?.recurrence||'none',artist:data.get('artist')||'',song_url:data.get('song_url')||''};
+   const body={title:data.get('title'),body:data.get('body')||'',event_date:data.get('event_date'),location:data.get('location')||'',chapter:data.get('chapter')||existing?.chapter||'Our story',recurrence:data.get('recurrence')||existing?.recurrence||'none',artist:data.get('artist')||'',song_url:data.get('song_url')||'',voice_url:data.get('voice_url')||''};
    if(edit)await api(`/entries/${existing.id}`,'PATCH',{...body,updated_at:existing.updated_at});
    else await api('/entries','POST',{...body,id:crypto.randomUUID(),kind,photo_paths:uploaded});
    saved=true;el.close();await refresh(true);toast(edit?'Changes saved.':'A little moment, kept forever.');
@@ -107,6 +107,7 @@ document.addEventListener('change',event=>{const input=event.target as HTMLSelec
 window.addEventListener('hashchange',()=>{filters={query:'',chapter:'',favorites:false};if(info){render(true);window.scrollTo({top:0,behavior:'smooth'});}});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status)status.textContent=navigator.onLine?'Connected':'Offline';toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});
 document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]'))void refresh(true);});
+setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){void refresh(true);render();}},1000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
 if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
 void boot();void registerPwa();

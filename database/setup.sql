@@ -5,7 +5,7 @@ create function public.ivraine_valid_photos(paths text[], book uuid, author uuid
 $$;
 create table public.ivraine_books (
  id uuid primary key default gen_random_uuid(),
- title text not null default 'Our little scrapbook' check(length(title) between 1 and 160),
+ title text not null default 'Our little space' check(length(title) between 1 and 160),
  partner_one text not null default 'Ivan Roquero',
  partner_two text not null default 'Loraine Cacho',
  anniversary date not null default '2026-09-02',
@@ -21,7 +21,7 @@ create table public.ivraine_entries (
  id uuid primary key default gen_random_uuid(),
  book_id uuid not null references public.ivraine_books(id) on delete cascade,
  author_id uuid not null references auth.users(id),
- kind text not null check(kind in ('memory','note','plan','date','song')),
+ kind text not null check(kind in ('memory','note','plan','date','song','voice')),
  title text not null check(length(trim(title)) between 1 and 160),
  body text not null default '' check(length(body)<=12000),
  event_date date not null,

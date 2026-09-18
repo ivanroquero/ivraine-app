@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fixtureDatabase,asUser,USER1,USER2,OUTSIDER,BOOK } from './fixture';
 import { entrySchema, imageExtension } from '../backend/src/validation';
 import { monthEvents, nextEvent } from '../frontend/src/calendar';
-import { daysTogether, escapeHtml } from '../frontend/src/utils';
+import { countdownLabel, daysTogether, escapeHtml, secondsUntil } from '../frontend/src/utils';
 import type { Book,Entry } from '../frontend/src/types';
 test('database RLS protects both direct API access and shared writes',async()=>{
  const db=await fixtureDatabase();try{
@@ -28,6 +28,7 @@ test('database RLS protects both direct API access and shared writes',async()=>{
 test('validation rejects unsafe song URLs, invalid dates, and unbounded photos',()=>{
  const base={kind:'song',title:'Our song',event_date:'2026-09-02'};
  assert(entrySchema.safeParse({...base,song_url:'https://open.spotify.com/track/123'}).success);
+ assert(entrySchema.safeParse({kind:'voice',title:'A little voice note',event_date:'2026-09-02',voice_url:'https://example.com/note.mp3'}).success);
  for(const url of ['javascript:alert(1)','https://evil.example/song','https://open.spotify.com.evil.example/song'])assert(!entrySchema.safeParse({...base,song_url:url}).success);
  assert(!entrySchema.safeParse({...base,event_date:'2026-02-30'}).success);
  assert(!entrySchema.safeParse({...base,author_id:USER2}).success);
@@ -44,4 +45,6 @@ test('monthly and yearly calendar handles month ends, leap years, and next dates
  assert.equal(monthEvents(book,[e],2028,1).find(x=>x.id==='birthday')?.date,'2028-02-29');
  assert.equal(nextEvent(book,[],'2026-09-16')?.date,'2026-09-30');
  assert.equal(daysTogether('2026-09-02','2026-09-16'),14);
+ assert.equal(secondsUntil('2026-09-20',new Date('2026-09-18T00:00:00Z')),172800);
+ assert.equal(countdownLabel('2026-09-20',new Date('2026-09-18T00:00:00Z')),'2d 00h 00m 00s');
 });

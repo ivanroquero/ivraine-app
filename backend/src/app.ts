@@ -11,7 +11,7 @@ import { entrySchema, patchSchema, idSchema, imageExtension } from './validation
 export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; push?:PushServices; }
 export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
 const bucket = 'ivraine-photos';
-function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'The scrapbook service could not complete this request. Please retry.'); return r.data; }
+function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'Our space service could not complete this request. Please retry.'); return r.data; }
 export function createApp(config:Config, clientFactory?:(token:string)=>SupabaseClient) {
   const app=express();
   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
@@ -36,7 +36,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const {data,error}=await db.auth.getUser(token);
     if(error || !data.user) throw new HttpError(401,'Your session expired. Please sign in again.');
     const membership=result(await db.from('ivraine_members').select('book_id,display_name').eq('user_id',data.user.id).maybeSingle());
-    if(!membership) throw new HttpError(403,'This account has not been added to the scrapbook.');
+    if(!membership) throw new HttpError(403,'This account has not been added to our space.');
     res.locals.db=db;res.locals.userId=data.user.id;res.locals.member=membership;next();
   });
   app.use('/api/notifications',pushRouter(config.push??{store:null,publicKey:null,keyId:null}));
