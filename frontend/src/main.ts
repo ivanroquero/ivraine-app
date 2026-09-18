@@ -6,7 +6,7 @@ import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
 import { login, shell, renderPage, pageKind, type Page, type Filters, navigation } from './views';
 import { dialog, editor } from './dialogs';
-import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil } from './utils';
+import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, presenceLabel, isRecentlyActive } from './utils';
 import { unlockLegacy, importLegacy } from './legacy';
 import { install, registerPwa } from './pwa';
 import { monthEvents } from './calendar';
@@ -23,13 +23,12 @@ try{const saved=localStorage.getItem(themeKey);applyTheme(saved==='light'||saved
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
-function formatAgo(value:string|undefined){if(!value)return 'just now';const time=Date.parse(value);if(!Number.isFinite(time))return 'just now';const minutes=Math.max(0,Math.round((Date.now()-time)/60000));if(minutes<1)return 'just now';if(minutes<60)return `${minutes} min ago`;const hours=Math.floor(minutes/60);if(hours<24)return `${hours} hr ago`;const days=Math.floor(hours/24);return `${days} day${days===1?'':'s'} ago`;}
 function updatePresenceStatus(){
  const you=document.querySelector<HTMLElement>('[data-presence="you"]');
  const partnerEl=document.querySelector<HTMLElement>('[data-presence="partner"]');
  if(!info)return;
- if(you){you.textContent=`You · ${formatAgo(info.member.last_active_at)}`;you.classList.toggle('is-live',Date.now()-Date.parse(info.member.last_active_at||new Date().toISOString())<600000);}
- if(partnerEl){const partnerName=info.partner?.display_name||'Your partner';const partnerValue=info.partner?.last_active_at;partnerEl.textContent=`${partnerName} · ${formatAgo(partnerValue)}`;partnerEl.classList.toggle('is-live',partnerValue?Date.now()-Date.parse(partnerValue)<600000:false);}
+ if(you){you.textContent=presenceLabel('You', info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));}
+ if(partnerEl){const partnerName=info.partner?.display_name||'Your partner';const partnerValue=info.partner?.last_active_at;partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));}
 }
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
 function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();}

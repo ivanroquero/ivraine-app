@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../backend/src/app';
+import { presenceLabel } from '../frontend/src/utils';
 import { startFixture,token,USER1,USER2,OUTSIDER,fixtureKey } from './fixture';
 test('API: auth, shared CRUD, photo upload, stale edits, and deletion end to end',async()=>{
  const fixture=await startFixture();const app=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://localhost:5173'],trustProxy:0});
@@ -48,4 +49,11 @@ test('API: presence timestamps are shared and updated for both members',async()=
   assert(refreshed.body.partner.display_name==='Ivan');
   assert(Date.parse(refreshed.body.member.last_active_at) >= before);
  }finally{await fixture.close();}
+});
+
+test('Presence labels use active-now for recent activity instead of just now',()=>{
+ const now=Date.parse('2026-09-18T12:00:00Z');
+ assert.equal(presenceLabel('You', undefined, true, new Date(now)), 'You · active now');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:58:00Z', false, new Date(now)), 'Loraine · active now');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:30:00Z', false, new Date(now)), 'Loraine · 30 min ago');
 });
