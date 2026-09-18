@@ -7,7 +7,7 @@ export function secondsUntil(date:string,now=new Date()){const target=new Date(`
 export function countdownLabel(date:string,now=new Date()){const total=secondsUntil(date,now);if(total<=0)return 'Today';const days=Math.floor(total/86400);const hours=Math.floor((total%86400)/3600);const minutes=Math.floor((total%3600)/60);const seconds=total%60;return `${days}d ${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m ${String(seconds).padStart(2,'0')}s`;}
 const ACTIVE_WINDOW_MINUTES = 5;
 export function presenceLabel(name:string, value:string|undefined, isSelf=false, now:Date|number=new Date()){const stamp = typeof now === 'number' ? now : now.getTime();const timestamp = value ? Date.parse(value) : Number.NaN;
- if (!value || !Number.isFinite(timestamp)) return `${name} · offline`;
+ if (!value || !Number.isFinite(timestamp)) return `${name}`;
  const minutes = Math.max(0, Math.round((stamp - timestamp) / 60000));
  if (minutes < ACTIVE_WINDOW_MINUTES) return `${name} · active now`;
  if (minutes < 60) return `${name} · ${minutes} min ago`;
