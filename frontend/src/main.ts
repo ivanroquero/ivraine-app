@@ -16,8 +16,13 @@ let filters:Filters={query:'',chapter:'',favorites:false};
 let month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);
 let selectedDate=today();
 let presenceTimer:ReturnType<typeof setInterval>|undefined;
-function applyTheme(theme:'dark'){document.documentElement.dataset.theme='dark';try{localStorage.setItem('ivraine-theme','dark');}catch{}}
-applyTheme('dark');
+function currentTheme(): 'light'|'dark' {
+  const saved = localStorage.getItem('ivraine-theme');
+  if (saved === 'light' || saved === 'dark') return saved;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;try{localStorage.setItem('ivraine-theme',theme);}catch{};const button=document.querySelector<HTMLButtonElement>('[data-action="theme"]');if(button){const nextTheme=theme==='dark'?'light':'dark';button.textContent=theme==='dark'?'☀':'☾';button.setAttribute('aria-label',`Switch to ${nextTheme} mode`);button.setAttribute('title',`Switch to ${nextTheme} mode`);}}
+applyTheme(currentTheme());
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
@@ -106,6 +111,7 @@ document.addEventListener('click',async event=>{
  try{
  switch(action){
  case'retry':await boot();break;
+ case'theme':{const nextTheme=currentTheme()==='dark'?'light':'dark';applyTheme(nextTheme);break;}
  case'logout':{stopConnection();generation++;signingOut=true;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());app.innerHTML='<p class="loading">Locking our little space…</p>';try{const {error}=await supabase!.auth.signOut({scope:'local'});if(error)toast('Locked on this device. Remote sign-out could not be confirmed.');}finally{localStorage.removeItem('ivraine-auth-v2');localStorage.removeItem('ivraine-auth-v2-code-verifier');sessionStorage.removeItem('ivraine-auth-v2');sessionStorage.removeItem('ivraine-auth-v2-code-verifier');signingOut=false;app.innerHTML=login(configured);}break;}
  case'reset':{const email=(document.querySelector<HTMLInputElement>('[name="email"]')?.value||'').trim();if(!email){toast('Enter your email above first.');return;}const {error}=await supabase!.auth.resetPasswordForEmail(email,{redirectTo:location.origin});if(error)throw error;toast('If this account exists, a password reset link is on its way.');break;}
  case'add':openEditor(pageKind[page()]);break;

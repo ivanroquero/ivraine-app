@@ -7,9 +7,9 @@ const root = join(process.cwd());
 const main = readFileSync(join(root, 'frontend/src/main.ts'), 'utf8');
 const connection = readFileSync(join(root, 'frontend/src/connection.ts'), 'utf8');
 
-test('theme is forced to dark and there is no light-mode toggle', () => {
-  assert.match(main, /applyTheme\(theme:\s*'dark'\s*\)/);
-  assert.doesNotMatch(main, /currentTheme\(\)\s*:\s*'light'\|'dark'\s*\{|theme-toggle|case'theme'/);
+test('theme toggle is available and can switch between light and dark modes', () => {
+  assert.match(main, /currentTheme\s*\(|applyTheme\s*\(|case\s*'theme'|theme-toggle/);
+  assert.doesNotMatch(main, /applyTheme\(\s*'dark'\s*\);\s*applyTheme\('dark'\)/);
 });
 
 test('test notification UI is removed', () => {
