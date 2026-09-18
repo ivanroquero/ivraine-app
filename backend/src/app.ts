@@ -12,6 +12,7 @@ export interface Config { supabaseUrl:string; supabaseKey:string; origins:string
 export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
 const bucket = 'ivraine-photos';
 function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'Our space service could not complete this request. Please retry.'); return r.data; }
+function missingColumn(error:unknown){return !!(error && typeof error==='object' && 'code' in error && (error as {code?:string}).code==='42703');}
 export function createApp(config:Config, clientFactory?:(token:string)=>SupabaseClient) {
   const app=express();
   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
@@ -35,7 +36,13 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const db=clientFactory?.(token) ?? createClient(config.supabaseUrl,config.supabaseKey,{global:{headers:{Authorization:`Bearer ${token}`},fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(20000)})},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
     const {data,error}=await db.auth.getUser(token);
     if(error || !data.user) throw new HttpError(401,'Your session expired. Please sign in again.');
-    const membership=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('user_id',data.user.id).maybeSingle());
+    let membership;
+    try{membership=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('user_id',data.user.id).maybeSingle());}
+    catch(err){
+      if(!missingColumn(err)) throw err;
+      membership=result(await db.from('ivraine_members').select('user_id,book_id,display_name').eq('user_id',data.user.id).maybeSingle());
+      membership={...membership,last_active_at:new Date().toISOString()};
+    }
     if(!membership) throw new HttpError(403,'This account has not been added to our space.');
     res.locals.db=db;res.locals.userId=data.user.id;res.locals.member=membership;next();
   });
@@ -43,16 +50,23 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   app.get('/api/book',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;
     const book=result(await db.from('ivraine_books').select('*').eq('id',res.locals.member.book_id).single());
-    const members=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('book_id',res.locals.member.book_id)) ?? [];
+    let members: Array<{user_id:string;book_id:string;display_name:string;last_active_at?:string|null}> = [];
+    try{members=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('book_id',res.locals.member.book_id)) ?? [];}catch(err){if(!missingColumn(err)) throw err; members=result(await db.from('ivraine_members').select('user_id,book_id,display_name').eq('book_id',res.locals.member.book_id)) ?? [];}
+    members=members.map(member=>({ ...member, last_active_at: member.last_active_at ?? new Date().toISOString() }));
     const current=members.find((member)=>member.user_id===res.locals.userId) ?? res.locals.member;
     const partner=members.find((member)=>member.user_id!==res.locals.userId) ?? null;
     res.json({book,member:current,partner,userId:res.locals.userId});
   });
   app.post('/api/active',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;
-    const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').maybeSingle());
-    if(!row || !row.last_active_at) throw new HttpError(500,'Could not update your active status.');
-    res.json({last_active_at: row.last_active_at});
+    try{
+      const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').maybeSingle());
+      if(!row || !row.last_active_at) throw new HttpError(500,'Could not update your active status.');
+      res.json({last_active_at: row.last_active_at});
+    }catch(err){
+      if(!missingColumn(err)) throw err;
+      res.json({last_active_at: new Date().toISOString()});
+    }
   });
   app.get('/api/entries',async(req,res)=>{
     const offset=z.coerce.number().int().min(0).max(1000000).parse(req.query.offset??0);
