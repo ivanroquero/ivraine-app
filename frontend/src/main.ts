@@ -15,6 +15,7 @@ let info:BookResponse|null=null, entries:Entry[]=[], generation=0, refreshing=fa
 let filters:Filters={query:'',chapter:'',favorites:false};
 let month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);
 let selectedDate=today();
+let presenceTimer:ReturnType<typeof setInterval>|undefined;
 const themeKey='ivraine-theme';
 function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;localStorage.setItem(themeKey,theme);}
 function currentTheme(): 'light'|'dark'{const current=document.documentElement.dataset.theme;if(current==='dark'||current==='light')return current;return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
@@ -22,16 +23,26 @@ try{const saved=localStorage.getItem(themeKey);applyTheme(saved==='light'||saved
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
+function formatAgo(value:string|undefined){if(!value)return 'just now';const time=Date.parse(value);if(!Number.isFinite(time))return 'just now';const minutes=Math.max(0,Math.round((Date.now()-time)/60000));if(minutes<1)return 'just now';if(minutes<60)return `${minutes} min ago`;const hours=Math.floor(minutes/60);if(hours<24)return `${hours} hr ago`;const days=Math.floor(hours/24);return `${days} day${days===1?'':'s'} ago`;}
+function updatePresenceStatus(){
+ const you=document.querySelector<HTMLElement>('[data-presence="you"]');
+ const partnerEl=document.querySelector<HTMLElement>('[data-presence="partner"]');
+ if(!info)return;
+ if(you){you.textContent=`You · ${formatAgo(info.member.last_active_at)}`;you.classList.toggle('is-live',Date.now()-Date.parse(info.member.last_active_at||new Date().toISOString())<600000);}
+ if(partnerEl){const partnerName=info.partner?.display_name||'Your partner';const partnerValue=info.partner?.last_active_at;partnerEl.textContent=`${partnerName} · ${formatAgo(partnerValue)}`;partnerEl.classList.toggle('is-live',partnerValue?Date.now()-Date.parse(partnerValue)<600000:false);}
+}
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
-function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();paintConnection();}
+function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();}
 async function fetchEntries(){const all:Entry[]=[];let offset:number|null=0;while(offset!==null){const r: {entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);all.push(...r.entries);offset=r.nextOffset;}return all;}
 async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const rows=await fetchEntries();if(gen!==generation)return;entries=rows;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
+async function pingPresence(){if(!info||!navigator.onLine)return;try{const active=await api<{last_active_at:string}>('/active','POST');if(!info)return;info.member.last_active_at=active.last_active_at;updatePresenceStatus();}catch{ /* Presence updates are best-effort and should not block the rest of the app. */ }}
+function startPresenceHeartbeat(){if(presenceTimer)clearInterval(presenceTimer);presenceTimer=setInterval(()=>{if(info&&!document.hidden&&navigator.onLine)void pingPresence();},30000);}
 async function boot(){const gen=++generation;
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startConnection(info.userId,toast);}
+ try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startPresenceHeartbeat();void pingPresence();startConnection(info.userId,toast);}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
@@ -107,8 +118,8 @@ document.addEventListener('input',event=>{const input=event.target as HTMLInputE
 document.addEventListener('change',event=>{const input=event.target as HTMLSelectElement;if(input.id==='chapter-filter'){filters.chapter=input.value;render();}});
 window.addEventListener('hashchange',()=>{filters={query:'',chapter:'',favorites:false};if(info){render(true);window.scrollTo({top:0,behavior:'smooth'});}});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status){status.textContent=navigator.onLine?'Connected':'Offline';status.classList.toggle('online',navigator.onLine);status.classList.toggle('offline',!navigator.onLine);}toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});
-document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]'))void refresh(true);});
-setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();paintConnection();}},1000);
+document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]')){void refresh(true);void pingPresence();}});
+setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();updatePresenceStatus();paintConnection();}},1000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
-if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
+if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();if(presenceTimer)clearInterval(presenceTimer);generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
 void boot();void registerPwa();

@@ -30,3 +30,22 @@ test('API: auth, shared CRUD, photo upload, stale edits, and deletion end to end
   await request(app).delete(`/api/entries/${id}`).set(auth1).expect(404);
  }finally{await fixture.close();}
 });
+
+test('API: presence timestamps are shared and updated for both members',async()=>{
+ const fixture=await startFixture();const app=createApp({supabaseUrl:fixture.url,supabaseKey:fixtureKey,origins:['http://localhost:5173'],trustProxy:0});
+ const auth1={Authorization:`Bearer ${token(USER1)}`},auth2={Authorization:`Bearer ${token(USER2)}`};
+ try{
+  const initial=await request(app).get('/api/book').set(auth1).expect(200);
+  assert(initial.body.member.last_active_at);
+  assert(initial.body.partner.display_name==='Loraine');
+  const before=Date.parse(initial.body.partner.last_active_at);
+
+  const heartbeat=await request(app).post('/api/active').set(auth1).expect(200);
+  assert(heartbeat.body.last_active_at);
+
+  const refreshed=await request(app).get('/api/book').set(auth2).expect(200);
+  assert(refreshed.body.member.display_name==='Loraine');
+  assert(refreshed.body.partner.display_name==='Ivan');
+  assert(Date.parse(refreshed.body.member.last_active_at) >= before);
+ }finally{await fixture.close();}
+});

@@ -14,7 +14,8 @@ create table public.ivraine_books (
 create table public.ivraine_members (
  user_id uuid primary key references auth.users(id) on delete cascade,
  book_id uuid not null references public.ivraine_books(id) on delete cascade,
- display_name text not null check(length(display_name) between 1 and 80)
+ display_name text not null check(length(display_name) between 1 and 80),
+ last_active_at timestamptz not null default now()
 );
 create index ivraine_members_book_idx on public.ivraine_members(book_id);
 create table public.ivraine_entries (

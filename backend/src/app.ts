@@ -35,7 +35,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const db=clientFactory?.(token) ?? createClient(config.supabaseUrl,config.supabaseKey,{global:{headers:{Authorization:`Bearer ${token}`},fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(20000)})},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
     const {data,error}=await db.auth.getUser(token);
     if(error || !data.user) throw new HttpError(401,'Your session expired. Please sign in again.');
-    const membership=result(await db.from('ivraine_members').select('book_id,display_name').eq('user_id',data.user.id).maybeSingle());
+    const membership=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('user_id',data.user.id).maybeSingle());
     if(!membership) throw new HttpError(403,'This account has not been added to our space.');
     res.locals.db=db;res.locals.userId=data.user.id;res.locals.member=membership;next();
   });
@@ -43,7 +43,15 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   app.get('/api/book',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;
     const book=result(await db.from('ivraine_books').select('*').eq('id',res.locals.member.book_id).single());
-    res.json({book,member:res.locals.member,userId:res.locals.userId});
+    const members=result(await db.from('ivraine_members').select('user_id,book_id,display_name,last_active_at').eq('book_id',res.locals.member.book_id)) ?? [];
+    const current=members.find((member)=>member.user_id===res.locals.userId) ?? res.locals.member;
+    const partner=members.find((member)=>member.user_id!==res.locals.userId) ?? null;
+    res.json({book,member:current,partner,userId:res.locals.userId});
+  });
+  app.post('/api/active',async(_req,res)=>{
+    const db=res.locals.db as SupabaseClient;
+    const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').single());
+    res.json({last_active_at: row.last_active_at});
   });
   app.get('/api/entries',async(req,res)=>{
     const offset=z.coerce.number().int().min(0).max(1000000).parse(req.query.offset??0);
