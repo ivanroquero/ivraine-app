@@ -26,19 +26,22 @@ function message(error:unknown){return error instanceof Error?error.message:'Som
 function updatePresenceStatus(){
  const youNodes=document.querySelectorAll<HTMLElement>('[data-presence="you"]');
  const partnerNodes=document.querySelectorAll<HTMLElement>('[data-presence="partner"]');
- if(!info)return;
- const youName=info.member.display_name || 'You';
- const partnerName=info.partner?.display_name || 'Your partner';
- const partnerValue=info.partner?.last_active_at;
+ const currentInfo=info;
+ if(!currentInfo)return;
+ const youName=currentInfo.member.display_name || 'You';
+ const partnerName=currentInfo.partner?.display_name || 'Your partner';
+ const partnerValue=currentInfo.partner?.last_active_at;
  youNodes.forEach((you)=>{
   const isHero=you.dataset.presenceRole==='hero';
-  if(isHero){you.textContent=youName;you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.removeAttribute('title');return;}
-  you.textContent=presenceLabel(youName, info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.setAttribute('title', `${youName} ${presenceLabel(youName, info.member.last_active_at, true).split(' · ').slice(1).join(' · ')}`);
+  if(isHero){you.textContent=youName;you.classList.toggle('is-live', isRecentlyActive(currentInfo.member.last_active_at));you.removeAttribute('title');return;}
+  const label=presenceLabel(youName, currentInfo.member.last_active_at, true);
+  you.textContent=label;you.classList.toggle('is-live', isRecentlyActive(currentInfo.member.last_active_at));you.setAttribute('title', `${youName} ${label.split(' · ').slice(1).join(' · ')}`);
  });
  partnerNodes.forEach((partnerEl)=>{
   const isHero=partnerEl.dataset.presenceRole==='hero';
   if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.removeAttribute('title');return;}
-  partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${presenceLabel(partnerName, partnerValue, false).split(' · ').slice(1).join(' · ')}`);
+  const label=presenceLabel(partnerName, partnerValue, false);
+  partnerEl.textContent=label;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${label.split(' · ').slice(1).join(' · ')}`);
  });
 }
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
