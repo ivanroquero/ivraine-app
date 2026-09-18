@@ -27,8 +27,11 @@ function updatePresenceStatus(){
  const you=document.querySelector<HTMLElement>('[data-presence="you"]');
  const partnerEl=document.querySelector<HTMLElement>('[data-presence="partner"]');
  if(!info)return;
- if(you){you.textContent=presenceLabel('You', info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));}
- if(partnerEl){const partnerName=info.partner?.display_name||'Your partner';const partnerValue=info.partner?.last_active_at;partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));}
+ const youName=info.member.display_name || 'You';
+ const partnerName=info.partner?.display_name || 'Your partner';
+ const partnerValue=info.partner?.last_active_at;
+ if(you){you.textContent=presenceLabel(youName, info.member.last_active_at, true);you.classList.toggle('is-live', isRecentlyActive(info.member.last_active_at));you.setAttribute('title', `${youName} ${presenceLabel(youName, info.member.last_active_at, true).split(' · ').slice(1).join(' · ')}`);} 
+ if(partnerEl){partnerEl.textContent=presenceLabel(partnerName, partnerValue, false);partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${presenceLabel(partnerName, partnerValue, false).split(' · ').slice(1).join(' · ')}`);}
 }
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
 function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();}
