@@ -50,7 +50,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   });
   app.post('/api/active',async(_req,res)=>{
     const db=res.locals.db as SupabaseClient;
-    const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').single());
+    const row=result(await db.from('ivraine_members').update({last_active_at:new Date().toISOString()}).eq('user_id',res.locals.userId).eq('book_id',res.locals.member.book_id).select('last_active_at').maybeSingle());
+    if(!row || !row.last_active_at) throw new HttpError(500,'Could not update your active status.');
     res.json({last_active_at: row.last_active_at});
   });
   app.get('/api/entries',async(req,res)=>{
