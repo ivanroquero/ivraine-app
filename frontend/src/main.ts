@@ -14,6 +14,7 @@ const app=document.querySelector<HTMLDivElement>('#app')!;
 let info:BookResponse|null=null, entries:Entry[]=[], generation=0, refreshing=false, signingOut=false, toastTimer:ReturnType<typeof setTimeout>;
 let filters:Filters={query:'',chapter:'',favorites:false};
 let month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);
+let selectedDate=today();
 const themeKey='ivraine-theme';
 function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;localStorage.setItem(themeKey,theme);}
 function currentTheme(): 'light'|'dark'{const current=document.documentElement.dataset.theme;if(current==='dark'||current==='light')return current;return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
@@ -21,7 +22,7 @@ try{const saved=localStorage.getItem(themeKey);applyTheme(saved==='light'||saved
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
 function message(error:unknown){return error instanceof Error?error.message:'Something went wrong. Please try again.';}
-function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month);paintConnection();}
+function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);paintConnection();}
 async function fetchEntries(){const all:Entry[]=[];let offset:number|null=0;while(offset!==null){const r: {entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);all.push(...r.entries);offset=r.nextOffset;}return all;}
 async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const rows=await fetchEntries();if(gen!==generation)return;entries=rows;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
 async function boot(){const gen=++generation;
@@ -91,10 +92,10 @@ document.addEventListener('click',async event=>{
  case'refresh':await refresh();break;
  case'filter-favorites':filters.favorites=!filters.favorites;render();break;
  case'clear-filters':filters={query:'',chapter:'',favorites:false};render();break;
- case'prev-month':month=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()-1,1));render();break;
- case'next-month':month=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,1));render();break;
- case'this-month':month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);render();break;
- case'day':{const date=button.dataset.date!;const daily=monthEvents(info!.book,entries,month.getUTCFullYear(),month.getUTCMonth()).filter(e=>e.date===date);const el=dialog(dateLabel(date),`${daily.length?`<ul>${daily.map(e=>`<li>${h(e.title)}</li>`).join('')}</ul>`:'<p>A lovely day for a new plan.</p>'}<button class="primary" id="add-on-day">Add a date</button>`);el.querySelector('#add-on-day')!.addEventListener('click',()=>{el.close();openEditor('date',undefined,false,date);});break;}
+ case'prev-month':month=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()-1,1));selectedDate=`${month.getUTCFullYear()}-${String(month.getUTCMonth()+1).padStart(2,'0')}-01`;render();break;
+ case'next-month':month=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,1));selectedDate=`${month.getUTCFullYear()}-${String(month.getUTCMonth()+1).padStart(2,'0')}-01`;render();break;
+ case'this-month':month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);selectedDate=today();render();break;
+ case'day':{const date=button.dataset.date!;selectedDate=date;render();const daily=monthEvents(info!.book,entries,month.getUTCFullYear(),month.getUTCMonth()).filter(e=>e.date===date);const el=dialog(dateLabel(date),`${daily.length?`<ul>${daily.map(e=>`<li>${h(e.title)}</li>`).join('')}</ul>`:'<p>A lovely day for a new plan.</p>'}<button class="primary" id="add-on-day">Add a date</button>`);el.querySelector('#add-on-day')!.addEventListener('click',()=>{el.close();openEditor('date',undefined,false,date);});break;}
  case'favorite':case'complete':{if(!entry)return;if(button instanceof HTMLButtonElement)button.disabled=true;const patch=action==='favorite'?{favorite:!entry.favorite}:{completed:!entry.completed};await api(`/entries/${entry.id}`,'PATCH',{...patch,updated_at:entry.updated_at});await refresh(true);break;}
  case'delete':{if(!entry)return;const el=dialog('Delete this little moment?',`<p>“${h(entry.title)}” and its attached photos will be removed for both of you.</p><button class="danger-button" id="confirm-delete">Delete permanently</button><p id="delete-status" role="status"></p>`);el.querySelector('#confirm-delete')!.addEventListener('click',async event=>{const target=event.target as HTMLButtonElement;target.disabled=true;try{const result=await api<{warning?:string}>(`/entries/${entry.id}`,'DELETE');el.close();await refresh(true);toast(result.warning||'Entry deleted.');}catch(error){el.querySelector('#delete-status')!.textContent=message(error);target.disabled=false;}});break;}
  }
