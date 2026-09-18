@@ -6,7 +6,7 @@ import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
 import { login, shell, renderPage, pageKind, type Page, type Filters, navigation } from './views';
 import { dialog, editor } from './dialogs';
-import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, presenceLabel, isRecentlyActive, partnerDisplayName } from './utils';
+import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, partnerDisplayName } from './utils';
 import { unlockLegacy, importLegacy } from './legacy';
 import { install, registerPwa } from './pwa';
 import { monthEvents } from './calendar';
@@ -15,11 +15,10 @@ let info:BookResponse|null=null, entries:Entry[]=[], generation=0, refreshing=fa
 let filters:Filters={query:'',chapter:'',favorites:false};
 let month=new Date(`${today().slice(0,7)}-01T00:00:00Z`);
 let selectedDate=today();
-let presenceTimer:ReturnType<typeof setInterval>|undefined;
 function currentTheme(): 'light'|'dark' {
   const saved = localStorage.getItem('ivraine-theme');
   if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'dark';
 }
 function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;try{localStorage.setItem('ivraine-theme',theme);}catch{};const button=document.querySelector<HTMLButtonElement>('[data-action="theme"]');if(button){const nextTheme=theme==='dark'?'light':'dark';button.textContent=theme==='dark'?'☀':'☾';button.setAttribute('aria-label',`Switch to ${nextTheme} mode`);button.setAttribute('title',`Switch to ${nextTheme} mode`);}}
 applyTheme(currentTheme());
@@ -33,20 +32,17 @@ function updatePresenceStatus(){
  if(!currentInfo)return;
  const youName=currentInfo.member.display_name || 'You';
  const partnerName=partnerDisplayName(currentInfo);
- const partnerValue=currentInfo.partner?.last_active_at;
  youNodes.forEach((you)=>{
   const isHero=you.dataset.presenceRole==='hero';
-  if(isHero){you.textContent=youName;you.classList.toggle('is-live', isRecentlyActive(currentInfo.member.last_active_at));you.removeAttribute('title');return;}
-  const label=presenceLabel(youName, currentInfo.member.last_active_at, true);
-  you.textContent=label;you.classList.toggle('is-live', isRecentlyActive(currentInfo.member.last_active_at));you.setAttribute('title', `${youName} ${label.split(' · ').slice(1).join(' · ')}`);
+  if(isHero){you.textContent=youName;you.classList.remove('is-live');you.removeAttribute('title');return;}
+  you.textContent=youName;you.classList.remove('is-live');you.removeAttribute('title');
  });
  partnerNodes.forEach((partnerEl)=>{
   if(!partnerName){partnerEl.hidden=true;return;}
   partnerEl.hidden=false;
   const isHero=partnerEl.dataset.presenceRole==='hero';
-  if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.removeAttribute('title');return;}
-  const label=presenceLabel(partnerName, partnerValue, false);
-  partnerEl.textContent=label;partnerEl.classList.toggle('is-live', isRecentlyActive(partnerValue));partnerEl.setAttribute('title', `${partnerName} ${label.split(' · ').slice(1).join(' · ')}`);
+  if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.remove('is-live');partnerEl.removeAttribute('title');return;}
+  partnerEl.textContent=partnerName;partnerEl.classList.remove('is-live');partnerEl.removeAttribute('title');
  });
 }
 function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
@@ -54,14 +50,12 @@ function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,p
 async function fetchEntries(){const all:Entry[]=[];let offset:number|null=0;while(offset!==null){const r: {entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);all.push(...r.entries);offset=r.nextOffset;}return all;}
 async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const rows=await fetchEntries();if(gen!==generation)return;entries=rows;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
 async function refreshPresence(){if(!info||!navigator.onLine)return;try{const book=await api<BookResponse>('/book');if(!info)return;info.member=book.member;info.partner=book.partner;updatePresenceStatus();}catch{ /* Presence is best-effort and should not block the rest of the app. */ }}
-async function pingPresence(){if(!info||!navigator.onLine)return;const now=new Date().toISOString();info.member.last_active_at=now;updatePresenceStatus();try{const active=await api<{last_active_at:string}>('/active','POST');if(!info)return;info.member.last_active_at=active.last_active_at;await refreshPresence();updatePresenceStatus();}catch{ /* Presence updates are best-effort and should not block the rest of the app. */ }}
-function startPresenceHeartbeat(){if(presenceTimer)clearInterval(presenceTimer);presenceTimer=setInterval(()=>{if(info&&!document.hidden&&navigator.onLine){void pingPresence();void refreshPresence();}},10000);}
 async function boot(){const gen=++generation;
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);startPresenceHeartbeat();void pingPresence();void refreshPresence();startConnection(info.userId,toast,partnerDisplayName(info));}
+ try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);void refreshPresence();startConnection(info.userId,toast,partnerDisplayName(info));}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
@@ -137,8 +131,8 @@ document.addEventListener('input',event=>{const input=event.target as HTMLInputE
 document.addEventListener('change',event=>{const input=event.target as HTMLSelectElement;if(input.id==='chapter-filter'){filters.chapter=input.value;render();}});
 window.addEventListener('hashchange',()=>{filters={query:'',chapter:'',favorites:false};if(info){render(true);window.scrollTo({top:0,behavior:'smooth'});}});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status){status.textContent=navigator.onLine?'Connected':'Offline';status.classList.toggle('online',navigator.onLine);status.classList.toggle('offline',!navigator.onLine);}toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});
-document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]')){void refresh(true);void pingPresence();}});
+document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]')){void refresh(true);}});
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();updatePresenceStatus();paintConnection();}},1000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
-if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();if(presenceTimer)clearInterval(presenceTimer);generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
+if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
 void boot();void registerPwa();

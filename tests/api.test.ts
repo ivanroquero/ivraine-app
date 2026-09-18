@@ -51,12 +51,12 @@ test('API: presence timestamps are shared and updated for both members',async()=
  }finally{await fixture.close();}
 });
 
-test('Presence labels reflect actual activity status without reporting false just-now activity',()=>{
+test('Presence labels no longer surface active status in the UI',()=>{
  const now=Date.parse('2026-09-18T12:00:00Z');
  assert.equal(presenceLabel('You', undefined, true, new Date(now)), 'You · offline');
- assert.equal(presenceLabel('Loraine', '2026-09-18T11:58:00Z', false, new Date(now)), 'Loraine · active now');
- assert.equal(presenceLabel('Loraine', '2026-09-18T11:30:00Z', false, new Date(now)), 'Loraine · 30 min ago');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:58:00Z', false, new Date(now)), 'Loraine · offline');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:30:00Z', false, new Date(now)), 'Loraine · offline');
  assert.equal(presenceLabel('Loraine', '2026-09-17T12:00:00Z', false, new Date(now)), 'Loraine · offline');
- assert.equal(isRecentlyActive('2026-09-18T11:58:00Z', new Date(now)), true);
+ assert.equal(isRecentlyActive('2026-09-18T11:58:00Z', new Date(now)), false);
  assert.equal(isRecentlyActive('2026-09-18T11:30:00Z', new Date(now)), false);
 });
