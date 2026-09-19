@@ -25,11 +25,11 @@ self.addEventListener('push',event=>{
   let payload={};try{payload=event.data?.json()||{};}catch{}
   const test=payload.type==='test'||payload.kind==='test';
   const eventId=test?'device-test':cleanId(payload.eventId);
-  await notify('Ivraine ♡',{
+  await notify('IVRAINE',{
    body:test?TEXT.test:TEXT.heart,
-   icon:'/icons/couple-192.png',
-   badge:'/icons/couple-32.png',
-   image:'/icons/couple-512.png',
+   icon:'/icons/ivraine-notification.png',
+   badge:'/icons/ivraine-notification-badge.png',
+   image:'/icons/ivraine-notification.png',
    tag:`ivraine-heart-${eventId}`,
    renotify:true,
    timestamp:Date.now(),
@@ -37,7 +37,7 @@ self.addEventListener('push',event=>{
    dir:'ltr',
    vibrate:test?[40]:[120,60,120],
    data:{url:SCRAPBOOK_URL,eventId,test},
-   actions:test?[{action:'open',title:'Open Ivraine'}]:[{action:'open',title:'Open our scrapbook'},{action:'heart-back',title:'Send one back ♡'}]
+   actions:test?[{action:'open',title:'Open IVRAINE'}]:[{action:'open',title:'Open IVRAINE'},{action:'heart-back',title:'Send one back ♡'}]
   });
   await badge(test?0:1);
   await toApp('ivraine-heart',{eventId,test});
