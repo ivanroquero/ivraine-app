@@ -1,12 +1,13 @@
 /* Cache only a non-private offline page; never cache sessions, API, or photo data. */
-const CACHE='ivraine-offline-v5';
-const CONFIG='ivraine-push-config-v1';
+const CACHE='ivraine-offline-v6';
+const CONFIG='ivraine-push-config-v2';
 const KEY_PATH='/ivraine-push-key';
 const SCRAPBOOK_URL='/#story';
+const APP_NAME='IVRAINE';
 // Push payloads are untrusted input. Only fixed, allow-listed text is ever rendered, so a
 // spoofed or corrupted payload can never inject a private message into the notification tray.
 const TEXT={
- heart:'A little “I miss you” is waiting in your private scrapbook. ♡',
+ heart:'A little “I miss you” is waiting in your private space. ♡',
  test:'Notifications are connected on this device. ♡'
 };
 function cleanId(value){return typeof value==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(value)?value:'new';}
@@ -25,7 +26,7 @@ self.addEventListener('push',event=>{
   let payload={};try{payload=event.data?.json()||{};}catch{}
   const test=payload.type==='test'||payload.kind==='test';
   const eventId=test?'device-test':cleanId(payload.eventId);
-  await notify('IVRAINE',{
+  await notify(APP_NAME,{
    body:test?TEXT.test:TEXT.heart,
    icon:'/icons/ivraine-notification.png',
    badge:'/icons/ivraine-notification-badge.png',
@@ -36,8 +37,8 @@ self.addEventListener('push',event=>{
    lang:'en',
    dir:'ltr',
    vibrate:test?[40]:[120,60,120],
-   data:{url:SCRAPBOOK_URL,eventId,test},
-   actions:test?[{action:'open',title:'Open IVRAINE'}]:[{action:'open',title:'Open IVRAINE'},{action:'heart-back',title:'Send one back ♡'}]
+   data:{url:SCRAPBOOK_URL,eventId,test,appName:APP_NAME},
+   actions:test?[{action:'open',title:`Open ${APP_NAME}`}]:[{action:'open',title:`Open ${APP_NAME}`},{action:'heart-back',title:'Send one back ♡'}]
   });
   await badge(test?0:1);
   await toApp('ivraine-heart',{eventId,test});
