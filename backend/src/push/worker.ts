@@ -76,7 +76,7 @@ export async function deliverNext(store:PushStore,deliver:Deliver,keyId:string):
 
  try{
   metrics.deliveriesAttempted++;
-  await deliver({endpoint:job.endpoint,keys:{p256dh:job.p256dh,auth:job.auth}},JSON.stringify({title:'Ivraine',body:'A little “I miss you” is waiting in your private scrapbook. ♡',eventId:job.event_id,url:'/#story',tag:`ivraine-heart-${job.event_id}`}));
+  await deliver({endpoint:job.endpoint,keys:{p256dh:job.p256dh,auth:job.auth}},JSON.stringify({title:'Ivraine',body:'A little “I miss you” is waiting in your private space. ♡',eventId:job.event_id,url:'/#story',tag:`ivraine-heart-${job.event_id}`}));
   await store.finish(job.id,job.lease_id,'accepted',null);
   metrics.deliveriesSuccessful++;
  }catch(error){

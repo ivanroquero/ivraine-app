@@ -53,11 +53,11 @@ export function paintConnection(){
  root.querySelector('#heart-hint')!.textContent=remaining?`Send again in ${remaining}s`:'Send a little love';
  const partner=root.querySelector('#heart-partner')!;
  const pName=partnerName();
- partner.textContent=!state?.enabled?'':!state.partner?(pName?`Share hearts with ${pName}.`:'Add your love to this scrapbook to share hearts.'):partnerReady()?`${pName||'Your love'} gets your hearts on their phone. ♡`:`${pName||'Your love'} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
+ partner.textContent=!state?.enabled?'':!state.partner?(pName?`Share hearts with ${pName}.`:'Add your love to this private space to share hearts.'):partnerReady()?`${pName||'Your love'} gets your hearts on their phone. ♡`:`${pName||'Your love'} has not enabled notifications on a phone yet — ask them to open Ivraine and tap “Enable notifications”.`;
  partner.classList.toggle('is-ready',partnerReady());
  const latest=state?.received[0];root.querySelector('#heart-received')!.textContent=latest?`${latest.senderName} sent you a heart · ${new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(latest.createdAt))}`:'Our little way to feel close.';
- const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your scrapbook. Push could not be delivered.':'';
- root.querySelector('#heart-status')!.textContent=issue||status||delivery||(!state?'Connecting…':!state.enabled?'Heart sharing needs the notification database setup.':'Hearts stay in our scrapbook, even when notifications are off.');
+ const last=state?.lastSent;const delivery=last?.pending?'Saved. Push delivery is queued.':last?.accepted?'Saved. The push service accepted the notification.':last?.failed?'Saved in your private space. Push could not be delivered.':'';
+ root.querySelector('#heart-status')!.textContent=issue||status||delivery||(!state?'Connecting…':!state.enabled?'Heart sharing needs the notification database setup.':'Hearts stay in your private space, even when notifications are off.');
  const device=root.querySelector('#push-device-status')!;
  device.textContent=iosNeedsInstall()?'On iPhone: add Ivraine to your Home Screen, then open it there.':!supported()?'This browser cannot receive Web Push. You can still exchange hearts here.':permission()==='denied'?'Notifications are blocked. Allow them in your browser or device settings.':!state?.pushEnabled?'Push notifications need server configuration.':localSubscribed?'Notifications enabled on this device.':'Enable notifications to receive hearts when the app is closed.';
  const enable=root.querySelector<HTMLButtonElement>('[data-heart-action=enable]')!;enable.hidden=localSubscribed||iosNeedsInstall();enable.disabled=enabling||!supported()||iosNeedsInstall()||permission()==='denied'||!state?.pushEnabled;enable.textContent=enabling?'Enabling…':'Enable notifications';
@@ -97,8 +97,7 @@ async function load(){if(!userId||loading)return;loading=true;const current=epoc
   }else if(!navigator.onLine){userMessage='You are offline. Heart sharing will reconnect automatically.';wait=Math.min(300,wait);}
   issue=userMessage;blockedUntil=Date.now()+wait*1000;
  }finally{if(current===epoch){loading=false;paintConnection();}}
-}
-async function diagnose(report=true){
+}async function diagnose(report=true){
  if(!userId)return;
  try{diagnostics=await api<Diagnostics>('/notifications/diagnostics');}
  catch(error){diagnostics=null;if(report)issue=error instanceof Error?error.message:'Could not check notifications.';}
