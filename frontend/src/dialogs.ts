@@ -8,6 +8,22 @@ export function dialog(title:string,content:string,classes=''){
  el.addEventListener('click',e=>{if(e.target===el&&!el.querySelector('button[type=submit]:disabled')){const r=el.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)el.close();}});
  el.addEventListener('close',()=>el.remove(),{once:true});el.showModal();return el;
 }
+export function sheet(title:string,content:string,classes=''){
+ const overlay=document.createElement('div');overlay.className=`sheet-overlay ${classes}`.trim();
+ const panel=document.createElement('div');panel.className='sheet-panel';
+ panel.innerHTML=`<div class="sheet-grab" aria-hidden="true"></div><div class="sheet-header"><h2 id="sheet-title">${h(title)}</h2></div>${content}`;
+ overlay.append(panel);document.body.append(overlay);
+ document.body.style.overflow='hidden';
+ const close=()=>{panel.classList.add('is-closing');setTimeout(()=>{overlay.remove();document.body.style.overflow='';},240);};
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+ panel.addEventListener('keydown',e=>{if((e as KeyboardEvent).key==='Escape')close();});
+ let touchY=0;
+ panel.addEventListener('touchstart',e=>{if(panel.scrollTop<=0)touchY=e.touches[0].clientY;},{passive:true});
+ panel.addEventListener('touchmove',e=>{if(panel.scrollTop>0)return;const delta=e.touches[0].clientY-touchY;if(delta>0){panel.style.transform=`translateY(${delta}px)`;panel.style.opacity=`${Math.max(0,1-delta/220)}`;}} ,{passive:true});
+ panel.addEventListener('touchend',()=>{const transform=panel.style.transform.match(/translateY\(([-0-9.]+)px\)/);const delta=transform?Number(transform[1]):0;panel.style.transform='';panel.style.opacity='';if(delta>120)close();});
+ requestAnimationFrame(()=>panel.classList.add('is-visible'));
+ return {el:panel,close};
+}
 export function editor(kind:Kind,entry?:Entry,convert=false,date=today()){
  const names:Record<Kind,string>={memory:'memory',note:'letter',plan:'dream',date:'date',song:'song',voice:'voice note'};
  const e=entry;const editing=!!e&&!convert;
