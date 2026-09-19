@@ -28,9 +28,9 @@ self.addEventListener('push',event=>{
   const eventId=test?'device-test':cleanId(payload.eventId);
   await notify(APP_NAME,{
    body:test?TEXT.test:TEXT.heart,
-   icon:'/icons/ivraine-notification.png',
-   badge:'/icons/ivraine-notification-badge.png',
-   image:'/icons/ivraine-notification.png',
+   icon:'/icons/couple-192.png',
+   badge:'/icons/couple-32.png',
+   image:'/icons/couple-512.png',
    tag:`ivraine-heart-${eventId}`,
    renotify:true,
    timestamp:Date.now(),
