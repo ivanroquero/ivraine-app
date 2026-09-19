@@ -17,10 +17,23 @@ export function sheet(title:string,content:string,classes=''){
  const close=()=>{panel.classList.add('is-closing');setTimeout(()=>{overlay.remove();document.body.style.overflow='';},240);};
  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
  panel.addEventListener('keydown',e=>{if((e as KeyboardEvent).key==='Escape')close();});
- let touchY=0;
- panel.addEventListener('touchstart',e=>{if(panel.scrollTop<=0)touchY=e.touches[0].clientY;},{passive:true});
- panel.addEventListener('touchmove',e=>{if(panel.scrollTop>0)return;const delta=e.touches[0].clientY-touchY;if(delta>0){panel.style.transform=`translateY(${delta}px)`;panel.style.opacity=`${Math.max(0,1-delta/220)}`;}} ,{passive:true});
- panel.addEventListener('touchend',()=>{const transform=panel.style.transform.match(/translateY\(([-0-9.]+)px\)/);const delta=transform?Number(transform[1]):0;panel.style.transform='';panel.style.opacity='';if(delta>120)close();});
+ const interactiveSelector='button, input, textarea, select, a, label, [role="button"], [type="submit"], [type="button"], [type="checkbox"], [type="radio"]';
+ let touchY=0,startTracking=false;
+ panel.addEventListener('touchstart',e=>{
+  const target=e.target as HTMLElement;
+  if(target.closest(interactiveSelector)||panel.scrollTop>0){startTracking=false;return;}
+  startTracking=true;
+  touchY=e.touches[0].clientY;
+ },{passive:true});
+ panel.addEventListener('touchmove',e=>{
+  if(!startTracking||panel.scrollTop>0)return;
+  const delta=e.touches[0].clientY-touchY;
+  if(delta>0){panel.style.transform=`translateY(${delta}px)`;panel.style.opacity=`${Math.max(0,1-delta/220)}`;}
+ },{passive:true});
+ panel.addEventListener('touchend',()=>{
+  if(!startTracking)return;
+  const transform=panel.style.transform.match(/translateY\(([-0-9.]+)px\)/);const delta=transform?Number(transform[1]):0;panel.style.transform='';panel.style.opacity='';startTracking=false;if(delta>120)close();
+ });
  requestAnimationFrame(()=>panel.classList.add('is-visible'));
  return {el:panel,close};
 }
