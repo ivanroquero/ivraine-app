@@ -18,26 +18,44 @@ export function sheet(title:string,content:string,classes=''){
  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
  panel.addEventListener('keydown',e=>{if((e as KeyboardEvent).key==='Escape')close();});
  const interactiveSelector='button, input, textarea, select, a, label, [role="button"], [type="submit"], [type="button"], [type="checkbox"], [type="radio"]';
- const dragZone=panel.querySelector('.sheet-grab') as HTMLElement | null;
- let touchY=0,startTracking=false;
+ let touchY=0,startTracking=false,mouseStartY=0,mouseTracking=false;
+ const beginTracking=(y:number)=>{startTracking=true;touchY=y;};
+ const updateTracking=(y:number)=>{
+  if(!startTracking || panel.scrollTop>0)return;
+  const delta=y-touchY;
+  if(delta>0){panel.style.transform=`translateY(${delta}px)`;panel.style.opacity=`${Math.max(0,1-delta/220)}`;}
+ };
+ const endTracking=()=>{
+  if(!startTracking)return;
+  const transform=panel.style.transform.match(/translateY\(([-0-9.]+)px\)/);const delta=transform?Number(transform[1]):0;panel.style.transform='';panel.style.opacity='';startTracking=false;if(delta>120)close();
+ };
+ panel.addEventListener('mousedown',e=>{
+  const target=e.target as HTMLElement;
+  const rect=panel.getBoundingClientRect();
+  const isHeaderTouch = e.clientY - rect.top < 72;
+  if(!isHeaderTouch || target.closest(interactiveSelector) || panel.scrollTop>0)return;
+  mouseTracking=true;mouseStartY=e.clientY;beginTracking(e.clientY);
+ });
+ panel.addEventListener('mousemove',e=>{
+  if(!mouseTracking)return;updateTracking(e.clientY);
+ });
+ window.addEventListener('mouseup',()=>{
+  if(mouseTracking){mouseTracking=false;endTracking();}
+ });
  panel.addEventListener('touchstart',e=>{
   const target=e.target as HTMLElement;
   const touch=e.touches[0];
   const rect=panel.getBoundingClientRect();
   const isHeaderTouch = touch.clientY - rect.top < 72;
   if(!isHeaderTouch || target.closest(interactiveSelector) || panel.scrollTop>0){startTracking=false;return;}
-  startTracking=true;
-  touchY=touch.clientY;
+  beginTracking(touch.clientY);
  },{passive:true});
  panel.addEventListener('touchmove',e=>{
   if(!startTracking || panel.scrollTop>0)return;
   const delta=e.touches[0].clientY-touchY;
   if(delta>0){e.preventDefault();panel.style.transform=`translateY(${delta}px)`;panel.style.opacity=`${Math.max(0,1-delta/220)}`;}
  },{passive:false});
- panel.addEventListener('touchend',()=>{
-  if(!startTracking)return;
-  const transform=panel.style.transform.match(/translateY\(([-0-9.]+)px\)/);const delta=transform?Number(transform[1]):0;panel.style.transform='';panel.style.opacity='';startTracking=false;if(delta>120)close();
- });
+ panel.addEventListener('touchend',()=>{endTracking();});
  requestAnimationFrame(()=>panel.classList.add('is-visible'));
  return {el:panel,close};
 }
