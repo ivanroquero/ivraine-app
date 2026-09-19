@@ -16,10 +16,35 @@ function missingColumn(error:unknown){return !!(error && typeof error==='object'
 export function createApp(config:Config, clientFactory?:(token:string)=>SupabaseClient) {
   const app=express();
   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
-  app.use(helmet());
+  app.use(helmet({
+    frameguard: { action: 'deny' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'", 'https://*.supabase.co', 'https://*.supabase.com'],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    dnsPrefetchControl: true,
+    referrerPolicy: { policy: 'no-referrer' },
+    hidePoweredBy: true,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    noSniff: true,
+    xssFilter: false,
+    ieNoOpen: true,
+  }));
   const allowedOrigins=new Set(config.origins.map(origin=>new URL(origin.trim()).origin));
   app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
-  app.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
+  app.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.set('Permissions-Policy','geolocation=(), microphone=(), camera=(), payment=(), sync-xhr=()');next();});
   // Parse JSON before any auth/router middleware so POST bodies are never undefined.
   app.use(express.json({limit:'64kb'}));
   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));

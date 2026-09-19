@@ -1,10 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../backend/src/app';
 import { fixtureDatabase,asUser,USER1,USER2,OUTSIDER,BOOK } from './fixture';
 import { entrySchema, imageExtension } from '../backend/src/validation';
 import { monthEvents, nextEvent } from '../frontend/src/calendar';
 import { countdownLabel, daysTogether, escapeHtml, secondsUntil } from '../frontend/src/utils';
 import type { Book,Entry } from '../frontend/src/types';
+test('security headers are strict enough for a private scrapbook',async()=>{
+ const app=createApp({supabaseUrl:'https://example.supabase.co',supabaseKey:'test-key',origins:['https://app.example.com'],trustProxy:1});
+ const res=await request(app).get('/health').set('Origin','https://app.example.com').expect(200);
+ assert.equal(res.headers['x-frame-options'],'DENY');
+ assert.equal(res.headers['x-content-type-options'],'nosniff');
+ assert.equal(res.headers['referrer-policy'],'no-referrer');
+ assert.equal(res.headers['cross-origin-opener-policy'],'same-origin');
+ assert.match(String(res.headers['content-security-policy']||''),/default-src 'self'/);
+ assert.match(String(res.headers['permissions-policy']||''),/geolocation=\(\)/);
+});
 test('database RLS protects both direct API access and shared writes',async()=>{
  const db=await fixtureDatabase();try{
   const {rows}=await asUser(db,USER1,`insert into public.ivraine_entries(book_id,author_id,kind,title,event_date) values($1,$2,'memory','Private memory','2026-09-02') returning id`,[BOOK,USER1]);const id=(rows[0] as {id:string}).id;
