@@ -1,5 +1,17 @@
--- Create ivraine-voice storage bucket and RLS policies for voice memos
+-- Create ivraine-voice storage bucket, column, and RLS policies for voice memos
 begin;
+
+-- Ensure ivraine_entries has the voice_url column
+alter table public.ivraine_entries
+add column if not exists voice_url text not null default ''
+check(length(voice_url)<=2000 and (voice_url='' or voice_url ~ '^https://.+\.(mp3|m4a|wav|ogg|webm|aac)(\?.*)?$'));
+
+-- Ensure authenticated role can insert and update voice_url
+grant insert(voice_url), update(voice_url) on public.ivraine_entries to authenticated;
+
+-- Ensure kind constraint permits 'voice' kind
+alter table public.ivraine_entries drop constraint if exists ivraine_entries_kind_check;
+alter table public.ivraine_entries add constraint ivraine_entries_kind_check check(kind in ('memory','note','plan','date','song','voice'));
 
 -- Ensure ivraine_user_book_id helper exists in database
 create or replace function public.ivraine_user_book_id(user_uuid uuid) returns uuid language sql security definer stable set search_path = '' as $$
