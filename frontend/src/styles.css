@@ -22,3 +22,104 @@
 .existing-photo img, .photo-thumb-wrap img{width:100%;height:100%;object-fit:cover;}
 .existing-photo .remove-photo, .remove-photo-btn{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .existing-photo.removed, .photo-thumb-wrap.removed{opacity:.3;}
+
+/* ==================== 6 ENHANCED FEATURES STYLES ==================== */
+
+/* 1. "Open When" Letters: Wax Seal & Badging */
+.letter-card{position:relative;transition:transform .2s ease,box-shadow .2s ease;}
+.letter-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(130,60,80,.08);}
+.letter-card.is-opened{border-style:solid;background:linear-gradient(135deg,#fcf8f9,#f7eff2);}
+.letter-card.is-locked{background:linear-gradient(135deg,#fcf9f2,#f8f2e4);border-color:#ebdcc1;}
+.letter-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#854559;background:rgba(255,255,255,.75);padding:4px 10px;border-radius:99px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.letter-state-label{display:block;font-size:11px;margin-top:14px;font-weight:600;color:#794357;}
+.letter-state-label.state-opened{color:#3d7a50;}
+.letter-state-label.state-locked{color:#9e6316;}
+.wax.wax-cracked{background:linear-gradient(135deg,#e8b5c4,#be6d88);color:#fff;box-shadow:inset 0 2px 4px rgba(255,255,255,.6);}
+.wax.wax-locked{background:linear-gradient(135deg,#f9dda0,#cf982e);color:#fff;box-shadow:0 4px 10px rgba(207,152,46,.35);}
+.wax.wax-intact{background:linear-gradient(135deg,#ce3b5f,#8c1836);color:#fff;box-shadow:0 4px 12px rgba(140,24,54,.4);}
+.wax-unseal-stage{display:flex;flex-direction:column;align-items:center;padding:16px 8px;}
+.wax-envelope-wrap{position:relative;width:290px;height:180px;background:#fcf4f6;border-radius:10px;box-shadow:0 14px 36px rgba(90,40,65,.18);border:1px solid #ebd0d9;overflow:visible;}
+.wax-envelope-flap{position:absolute;top:0;left:0;width:0;height:0;border-left:145px solid transparent;border-right:145px solid transparent;border-top:100px solid #f2dbe2;transform-origin:top center;transition:transform .7s cubic-bezier(.4,0,.2,1);z-index:3;}
+.wax-envelope-wrap.is-unsealed .wax-envelope-flap{transform:rotateX(180deg);z-index:1;}
+.interactive-wax-seal{position:absolute;top:72px;left:calc(50% - 32px);width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#e64a72,#9e163c 70%,#690a23);box-shadow:0 6px 18px rgba(105,10,35,.45),inset 0 2px 4px #ff9bb5;border:2px solid rgba(255,255,255,.5);color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;z-index:4;transition:transform .2s,box-shadow .2s;border:none;}
+.interactive-wax-seal:hover{transform:scale(1.08);box-shadow:0 8px 24px rgba(105,10,35,.55);}
+.interactive-wax-seal:active{transform:scale(.95);}
+.seal-heart{font-size:22px;line-height:1;}
+.seal-tap-label{font-size:8px;font-weight:700;letter-spacing:.8px;margin-top:2px;opacity:.9;}
+.interactive-wax-seal.is-cracked{animation:wax-crack-shatter .6s forwards;}
+@keyframes wax-crack-shatter{0%{transform:scale(1);filter:brightness(1.3);}30%{transform:scale(1.15) rotate(5deg);}60%{transform:scale(.9) rotate(-4deg);opacity:.8;}100%{transform:scale(.3) translateY(40px);opacity:0;pointer-events:none;}}
+.opened-stamp-badge{display:inline-block;border:2px dashed #b76e82;padding:10px 16px;border-radius:12px;background:#fff5f8;color:#8b344c;font-size:12px;font-weight:700;margin-top:20px;transform:rotate(-1.5deg);}
+.wax-prompt{font-size:12px;color:var(--muted);margin-top:16px;text-align:center;}
+
+/* 2. Playlist: Embedded Mini-Player & Couple Soundtrack */
+.couple-soundtrack-card{display:grid;grid-template-columns:140px minmax(0,1fr);gap:24px;background:radial-gradient(ellipse at top right,rgba(240,98,146,.15),transparent 70%),linear-gradient(135deg,#fff8fb,#faf0f5);border:1px solid #ebd3dc;border-radius:24px;padding:28px;margin-bottom:32px;box-shadow:0 16px 36px rgba(130,60,90,.08);position:relative;overflow:hidden;}
+.soundtrack-vinyl-wrap{display:flex;align-items:center;justify-content:center;}
+.spinning-vinyl{width:120px;height:120px;border-radius:50%;background:repeating-radial-gradient(#201c22 0 3px,#161318 4px 6px);box-shadow:0 8px 24px rgba(0,0,0,.25);display:grid;place-items:center;animation:vinyl-spin 8s linear infinite;}
+.spinning-vinyl .vinyl-center-dot{width:42px;height:42px;border-radius:50%;background:radial-gradient(circle,#f48fb1,#ad1457);color:white;display:grid;place-items:center;font-size:18px;}
+@keyframes vinyl-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.soundtrack-info{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.soundtrack-eyebrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.soundtrack-tag{font-size:9px;font-weight:700;letter-spacing:1px;color:#854559;text-transform:uppercase;}
+.soundtrack-artist{font-size:14px;color:var(--rose);font-weight:600;}
+.soundtrack-note{font-style:italic;font-size:13px;color:var(--muted);line-height:1.5;}
+.soundtrack-embed,.song-mini-embed{margin-top:12px;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.06);}
+.soundtrack-controls{display:flex;align-items:center;gap:12px;margin-top:8px;}
+.song-header-line{display:flex;align-items:center;gap:8px;}
+.theme-badge{background:#fdf2d0;color:#8f6208;}
+.song-actions-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.theme-toggle-btn{font-size:10px!important;color:var(--rose)!important;font-weight:600;min-height:32px!important;}
+
+/* 3. Memory Gallery: Interactive Map View & Lightbox Zoom */
+.gallery-map-stage{border:1px solid var(--border);border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.05);margin-bottom:24px;}
+.map-view-header{padding:16px 20px;background:#fcf8fa;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.map-view-header h3{font-size:18px;margin:0;}
+.map-view-header span{font-size:12px;color:var(--muted);font-weight:600;}
+.interactive-leaflet-map-host,.interactive-leaflet-map{width:100%;height:520px;z-index:1;}
+.custom-leaflet-heart-pin{display:flex;flex-direction:column;align-items:center;}
+.pin-heart-disc{width:30px;height:30px;border-radius:50%;background:#e91e63;color:white;display:grid;place-items:center;font-size:16px;box-shadow:0 4px 10px rgba(233,30,99,.4);border:2px solid white;}
+.pin-stem{width:2px;height:8px;background:#c2185b;}
+.map-popup-card{display:flex;flex-direction:column;gap:6px;padding:4px;}
+.map-popup-thumb{width:100%;height:120px;object-fit:cover;border-radius:8px;}
+.map-popup-body h4{margin:4px 0;font-size:15px;font-family:Georgia,serif;}
+.map-popup-btn{width:100%;min-height:36px!important;padding:6px 12px!important;font-size:11px!important;margin-top:6px;}
+.segmented-control{display:inline-flex;background:#eee5e8;border-radius:12px;padding:3px;gap:2px;}
+.segmented-control .chip{border:0;background:transparent;padding:6px 14px;border-radius:9px;}
+.segmented-control .chip.active{background:white;box-shadow:0 2px 6px rgba(0,0,0,.1);font-weight:600;}
+.lightbox-stage{overflow:hidden;position:relative;width:100%;height:65dvh;display:grid;place-items:center;touch-action:none;}
+.lightbox-stage img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;user-select:none;-webkit-user-drag:none;}
+
+/* 4. Milestone Calendar: Custom Countdowns */
+.pinned-countdown-card{background:linear-gradient(135deg,#fff7fa 0%,#f6e8ee 100%);border:1px solid #e9d1dc;border-radius:24px;padding:24px 28px;margin-bottom:24px;box-shadow:0 12px 28px rgba(110,40,70,.06);}
+.countdown-badge-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;}
+.countdown-target{font-size:12px;color:var(--rose);font-weight:600;}
+.countdown-title{font-size:clamp(22px,3vw,32px);margin:6px 0 16px;}
+.countdown-timer-display{display:flex;align-items:center;gap:12px;margin:16px 0;flex-wrap:wrap;}
+.time-unit{display:flex;flex-direction:column;align-items:center;background:white;padding:10px 16px;border-radius:14px;border:1px solid #eed8e2;min-width:60px;box-shadow:0 4px 12px rgba(80,30,50,.05);}
+.time-unit .unit-num{font-family:Georgia,serif;font-size:28px;font-weight:600;color:#7c2d46;}
+.time-unit .unit-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-top:2px;}
+.unit-colon{font-size:24px;font-weight:700;color:#b78a9c;padding-bottom:12px;}
+.countdown-card-footer{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);border-top:1px solid #eed6e0;padding-top:12px;margin-top:12px;flex-wrap:wrap;gap:8px;}
+
+/* 5. Bucket List: Linked Memory Badge & Confetti */
+.linked-memory-preview{display:flex;align-items:center;gap:14px;background:#fbf3f6;border:1px solid #ebd6df;border-radius:14px;padding:10px 14px;margin:14px 0 6px;cursor:pointer;transition:transform .2s,background .2s;}
+.linked-memory-preview:hover{background:#faeaf1;transform:translateY(-1px);}
+.linked-memory-thumb{width:54px;height:54px;object-fit:cover;border-radius:10px;flex-shrink:0;}
+.linked-memory-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.linked-memory-copy strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.linked-memory-copy small{font-size:10px;color:var(--muted);}
+.linked-tag{align-self:flex-start;font-size:8px!important;padding:3px 6px!important;background:#eed8e2!important;color:#79374d!important;}
+.confetti-burst-overlay{position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;}
+.confetti-particle{position:absolute;opacity:1;user-select:none;}
+@keyframes confetti-fall{0%{transform:translate3d(0,0,0) rotate(0deg) scale(.8);opacity:1;}80%{opacity:1;}100%{transform:translate3d(var(--confetti-x,0px),105vh,0) rotate(720deg) scale(1.1);opacity:0;}}
+
+/* 6. "I Miss You" Touch: Custom Quick Notes & Radiant Gold */
+.heart-quick-notes{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 16px;}
+.quick-note-chip{border:1px solid #dfc6d2;background:rgba(255,255,255,.7);color:#774358;font-size:11px;padding:6px 12px;border-radius:20px;min-height:32px;transition:all .2s;}
+.quick-note-chip:hover{background:#fff;border-color:#b76e88;}
+.quick-note-chip.active{background:#7d354e;color:white;border-color:#7d354e;font-weight:600;}
+.quick-note-input{width:100%;margin-top:6px;font-size:12px;padding:8px 12px;border-radius:10px;}
+.heart-button.is-simultaneous{background:linear-gradient(145deg,#fffbee,#fae29c)!important;border-color:#ffd700!important;box-shadow:0 0 25px rgba(255,215,0,.8),0 0 50px rgba(255,180,0,.45),0 10px 0 #caa028,inset 0 3px 10px #ffffff!important;animation:radiant-gold-pulse 2s ease-in-out infinite alternate!important;}
+.heart-button.is-simultaneous .heart-button-label{color:#7d5204!important;}
+.heart-button.is-simultaneous .heart-orbit{border-color:rgba(255,215,0,.6)!important;}
+.heart-button.is-simultaneous .heart-orbit:after{background:#ffd700!important;box-shadow:0 0 10px #ffd700!important;}
+@keyframes radiant-gold-pulse{0%{transform:rotateX(10deg) scale(1);box-shadow:0 0 20px rgba(255,215,0,.6),0 10px 0 #caa028;}100%{transform:rotateX(12deg) translateY(-4px) scale(1.04);box-shadow:0 0 35px rgba(255,215,0,.95),0 0 65px rgba(255,170,0,.6),0 14px 0 #caa028;}}

@@ -21,6 +21,7 @@ create table ivraine_private.heart_events (
  sender_id uuid not null references auth.users(id) on delete cascade,
  recipient_id uuid not null references auth.users(id) on delete cascade,
  request_id uuid not null,
+ message text not null default '' check(length(message)<=160),
  created_at timestamptz not null default now(),
  check(sender_id<>recipient_id),
  unique(sender_id,request_id)

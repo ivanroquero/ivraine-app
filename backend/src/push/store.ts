@@ -24,7 +24,7 @@ export class PushStore {
  async subscriptionActive(userId:string,endpoint:string,keyId:string|null){const {rows}=await this.pool.query('select 1 from ivraine_private.push_subscriptions where user_id=$1 and endpoint=$2 and key_id=$3',[userId,endpoint,keyId]);return rows.length>0;}
  async unsubscribe(userId:string,endpoint:string){await this.pool.query('delete from ivraine_private.push_subscriptions where user_id=$1 and endpoint=$2',[userId,endpoint]);}
  async unsubscribeAll(userId:string){await this.pool.query('delete from ivraine_private.push_subscriptions where user_id=$1',[userId]);}
- async sendHeart(userId:string,bookId:string,requestId:string,keyId:string|null){
+ async sendHeart(userId:string,bookId:string,requestId:string,keyId:string|null,message=''){
   return this.transaction(async db=>{
    await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[userId]);
    const member=await db.query('select 1 from public.ivraine_members where user_id=$1 and book_id=$2',[userId,bookId]);if(!member.rows.length)throw new PushError(403,'You no longer belong to this scrapbook.');
@@ -35,16 +35,34 @@ export class PushStore {
    const partner=await db.query('select user_id from public.ivraine_members where book_id=$1 and user_id<>$2',[bookId,userId]);
    if(partner.rows.length!==1)throw new PushError(409,'Heart sharing requires exactly two members in this scrapbook.');
    const recipient=partner.rows[0].user_id;
-   const {rows:[event]}=await db.query('insert into ivraine_private.heart_events(book_id,sender_id,recipient_id,request_id) values($1,$2,$3,$4) returning id,created_at',[bookId,userId,recipient,requestId]);
+   let eventRow: any;
+   try{
+    const r=await db.query('insert into ivraine_private.heart_events(book_id,sender_id,recipient_id,request_id,message) values($1,$2,$3,$4,$5) returning id,created_at',[bookId,userId,recipient,requestId,message||'']);
+    eventRow=r.rows[0];
+   }catch(err:any){
+    if(err?.code==='42703'){
+     const r=await db.query('insert into ivraine_private.heart_events(book_id,sender_id,recipient_id,request_id) values($1,$2,$3,$4) returning id,created_at',[bookId,userId,recipient,requestId]);
+     eventRow=r.rows[0];
+    }else throw err;
+   }
    const {rows:devices}=await db.query(`insert into ivraine_private.push_deliveries(event_id,subscription_id)
-     select $1,id from ivraine_private.push_subscriptions where book_id=$2 and user_id=$3 and key_id=$4 returning id`,[event.id,bookId,recipient,keyId]);
-   return {eventId:event.id,queuedDevices:devices.length,nextAllowedAt:new Date(new Date(event.created_at).getTime()+60000).toISOString(),duplicate:false};
+     select $1,id from ivraine_private.push_subscriptions where book_id=$2 and user_id=$3 and key_id=$4 returning id`,[eventRow.id,bookId,recipient,keyId]);
+   return {eventId:eventRow.id,queuedDevices:devices.length,nextAllowedAt:new Date(new Date(eventRow.created_at).getTime()+60000).toISOString(),duplicate:false};
   });
  }
  async state(userId:string,bookId:string,keyId:string|null=null){
-  const result=await this.pool.query(`select e.id,e.sender_id as "senderId",m.display_name as "senderName",e.created_at as "createdAt"
-   from ivraine_private.heart_events e join public.ivraine_members m on m.user_id=e.sender_id and m.book_id=e.book_id
-   where e.recipient_id=$1 and e.book_id=$2 order by e.created_at desc limit 10`,[userId,bookId]);
+  let result;
+  try{
+   result=await this.pool.query(`select e.id,e.sender_id as "senderId",m.display_name as "senderName",coalesce(e.message,'') as message,e.created_at as "createdAt"
+    from ivraine_private.heart_events e join public.ivraine_members m on m.user_id=e.sender_id and m.book_id=e.book_id
+    where e.recipient_id=$1 and e.book_id=$2 order by e.created_at desc limit 10`,[userId,bookId]);
+  }catch(err:any){
+   if(err?.code==='42703'){
+    result=await this.pool.query(`select e.id,e.sender_id as "senderId",m.display_name as "senderName",'' as message,e.created_at as "createdAt"
+     from ivraine_private.heart_events e join public.ivraine_members m on m.user_id=e.sender_id and m.book_id=e.book_id
+     where e.recipient_id=$1 and e.book_id=$2 order by e.created_at desc limit 10`,[userId,bookId]);
+   }else throw err;
+  }
   const sent=await this.pool.query(`select e.id,e.created_at+interval '60 seconds' as "nextAllowedAt",
    count(d.id) filter(where d.status='accepted')::int as accepted,
    count(d.id) filter(where d.status in ('pending','sending'))::int as pending,
@@ -78,10 +96,22 @@ export class PushStore {
    ) update ivraine_private.push_deliveries d set status='sending',attempts=attempts+1,locked_until=now()+interval '60 seconds',lease_id=gen_random_uuid()
      from candidate where d.id=candidate.id returning d.*`);
    const job=rows[0];if(!job)return null;
-   const {rows:targets}=await db.query(`select s.endpoint,s.p256dh,s.auth,s.key_id,e.id as event_id,e.created_at,
-    exists(select 1 from public.ivraine_members m where m.user_id=e.sender_id and m.book_id=e.book_id) and
-    exists(select 1 from public.ivraine_members m where m.user_id=e.recipient_id and m.book_id=e.book_id) as allowed
-    from ivraine_private.push_subscriptions s join ivraine_private.heart_events e on e.id=$1 where s.id=$2 and s.user_id=e.recipient_id and s.book_id=e.book_id`,[job.event_id,job.subscription_id]);
+   let targets:any[]=[];
+   try{
+    const r=await db.query(`select s.endpoint,s.p256dh,s.auth,s.key_id,e.id as event_id,e.created_at,coalesce(e.message,'') as message,
+     exists(select 1 from public.ivraine_members m where m.user_id=e.sender_id and m.book_id=e.book_id) and
+     exists(select 1 from public.ivraine_members m where m.user_id=e.recipient_id and m.book_id=e.book_id) as allowed
+     from ivraine_private.push_subscriptions s join ivraine_private.heart_events e on e.id=$1 where s.id=$2 and s.user_id=e.recipient_id and s.book_id=e.book_id`,[job.event_id,job.subscription_id]);
+    targets=r.rows;
+   }catch(err:any){
+    if(err?.code==='42703'){
+     const r=await db.query(`select s.endpoint,s.p256dh,s.auth,s.key_id,e.id as event_id,e.created_at,'' as message,
+      exists(select 1 from public.ivraine_members m where m.user_id=e.sender_id and m.book_id=e.book_id) and
+      exists(select 1 from public.ivraine_members m where m.user_id=e.recipient_id and m.book_id=e.book_id) as allowed
+      from ivraine_private.push_subscriptions s join ivraine_private.heart_events e on e.id=$1 where s.id=$2 and s.user_id=e.recipient_id and s.book_id=e.book_id`,[job.event_id,job.subscription_id]);
+     targets=r.rows;
+    }else throw err;
+   }
    if(!targets.length || !targets[0].allowed){await db.query("update ivraine_private.push_deliveries set status='failed',last_error='membership_removed',locked_until=null where id=$1",[job.id]);return null;}
    return {...job,...targets[0]};
   });

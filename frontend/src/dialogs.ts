@@ -1,5 +1,5 @@
 import type { Entry, Kind } from './types';
-import { escapeHtml as h, today } from './utils';
+import { escapeHtml as h, today, parseLetterMeta } from './utils';
 export function dialog(title:string,content:string,classes=''){
  const el=document.createElement('dialog');el.className=classes;
  el.innerHTML=`<div class="dialog-heading"><h2 id="dialog-title">${h(title)}</h2><button type="button" class="close-button" aria-label="Close dialog">×</button></div>${content}`;
@@ -62,6 +62,7 @@ export function sheet(title:string,content:string,classes=''){
 export function editor(kind:Kind,entry?:Entry,convert=false,date=today()){
  const names:Record<Kind,string>={memory:'memory',note:'letter',plan:'dream',date:'date',song:'song',voice:'voice note'};
  const e=entry;const editing=!!e&&!convert;
+ const letterMeta=kind==='note'?parseLetterMeta(e?.location):{};
  // Build the photos section differently for new vs edit mode
  const photosSection=kind==='memory'
   ?`<label>Chapter<input name="chapter" maxlength="80" value="${h(e?.chapter||'Our story')}" placeholder="Our firsts, Little adventures…"></label>`
@@ -83,8 +84,11 @@ export function editor(kind:Kind,entry?:Entry,convert=false,date=today()){
   +`<label>${kind==='note'?'Your letter':kind==='song'?'Why this song is ours':'The story'}<textarea name="body" rows="${kind==='note'?8:4}" maxlength="12000" ${kind==='note'?'required':''} placeholder="A little detail you never want to forget\u2026">${h(e?.body)}</textarea></label>`
   +`<div class="form-row">`
   +`<label>${kind==='plan'?'Target date':kind==='date'?'Date':kind==='note'?'Written on':kind==='song'?'Added on':'Memory date'}<input name="event_date" type="date" required value="${h(convert?today():e?.event_date||date)}"></label>`
-  +(kind!=='song'&&kind!=='note'?`<label>Place<input name="location" maxlength="160" value="${h(e?.location)}" placeholder="Where was this?"></label>`:'')
+  +(kind!=='song'&&kind!=='note'?`<label>Place<input name="location" maxlength="160" value="${h(convert&&e?`dream:${e.id}`:e?.location)}" placeholder="Where was this?"></label>`:'')
   +`</div>`
+  +(kind==='note'
+   ?`<label>Lock until date (optional)<input name="lock_until" type="date" value="${h(letterMeta.lockUntil||'')}"></label><p class="field-help">Keep this letter sealed until a future date (e.g. Birthday, Anniversary). Neither of you can open it early.</p>`
+   :'')
   +photosSection
   +(kind==='date'
    ?`<label>Repeat<select name="recurrence"><option value="none" ${e?.recurrence==='none'?'selected':''}>Once</option><option value="monthly" ${e?.recurrence==='monthly'?'selected':''}>Every month</option><option value="yearly" ${e?.recurrence==='yearly'?'selected':''}>Every year (birthdays &amp; anniversaries)</option></select></label>`

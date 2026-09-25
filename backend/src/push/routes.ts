@@ -86,8 +86,8 @@ export function pushRouter(services:PushServices){
  }));
  router.post('/hearts',guarded(async(req,res)=>{
   if(!services.store)throw new PushError(503,'Heart sharing needs the notification database setup.');
-  const {requestId}=heartSchema.parse(req.body);
-  const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId);
+  const {requestId,message}=heartSchema.parse(req.body);
+  const saved=await services.store.sendHeart(res.locals.userId,res.locals.member.book_id,requestId,services.keyId,message);
   // Deliver immediately instead of waiting for the next worker poll, so a phone rings within seconds.
   services.kickWorker?.();
   res.status(saved.duplicate?200:201).json({saved:true,...saved});

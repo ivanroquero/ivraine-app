@@ -9,4 +9,4 @@ export function trustedPushEndpoint(value: string): boolean {
 }
 const encoded=(length:number)=>z.string().regex(/^[A-Za-z0-9_-]+={0,2}$/).refine(value=>Buffer.from(value,'base64url').length===length,'Invalid subscription key');
 export const subscriptionSchema=z.object({endpoint:z.string().max(4096).refine(trustedPushEndpoint,'Unsupported push-service endpoint'),expirationTime:z.number().nullable().optional(),keys:z.object({p256dh:encoded(65),auth:encoded(16)}).strict()}).strict();
-export const heartSchema=z.object({requestId:z.uuid()}).strict();
+export const heartSchema=z.object({requestId:z.uuid(),message:z.string().trim().max(160).optional()}).strict();

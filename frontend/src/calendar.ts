@@ -6,7 +6,12 @@ function clampDay(y:number,m:number,d:number){return Math.min(d,new Date(Date.UT
 export function monthEvents(book:Book,entries:Entry[],year:number,month:number):Occurrence[]{
  const out:Occurrence[]=[];
  const [ay,am,ad]=book.anniversary.split('-').map(Number);
- if(year*12+month>=ay*12+am-1){const isAnniversary=month===am-1 && year>ay;out.push({id:'anniversary',title:isAnniversary?`${year-ay} year${year-ay===1?'':'s'} together`:'Our monthly milestone',date:iso(year,month,clampDay(year,month,ad)),automatic:true});}
+ if(year*12+month>=ay*12+am-1){
+  const isAnniversary=month===am-1 && year>ay;
+  const isFirstDay=month===am-1 && year===ay;
+  const title=isAnniversary?`${year-ay} year${year-ay===1?'':'s'} together`:isFirstDay?'The Day We Met / Our Official Date':'Our monthly milestone';
+  out.push({id:'anniversary',title,date:iso(year,month,clampDay(year,month,ad)),automatic:true});
+ }
  for(const e of entries.filter(e=>e.kind==='date'||(e.kind==='plan'&&!e.completed))){
   const [y,m,d]=e.event_date.split('-').map(Number);
   if(year*12+month<y*12+m-1)continue;
