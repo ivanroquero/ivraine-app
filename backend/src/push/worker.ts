@@ -69,7 +69,7 @@ export async function deliverNext(store:PushStore,deliver:Deliver,keyId:string):
 
  checkCircuitBreaker();
  if (circuitBreaker.isOpen) {
-  await store.finish(job.id,job.lease_id,'failed','push_service_unavailable');
+  await store.finish(job.id,job.lease_id,'pending','push_service_unavailable',60);
   console.warn('push_circuit_breaker_active: Deferring delivery due to circuit breaker');
   return true;
  }
