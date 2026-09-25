@@ -1,6 +1,6 @@
 # Push notifications
 
-The current app includes saved hearts, background Web Push, and a **Send test notification** button for the signed-in device. Local tests simulate the push provider; confirm real delivery on each phone after deployment.
+The current app includes saved hearts and background Web Push. Local tests simulate the push provider; confirm real delivery on each phone after deployment.
 
 ## Deploy the current source
 
@@ -71,11 +71,11 @@ Redeploy Railway, with app sleeping/serverless suspension **disabled** so the pe
 
 1. Sign in as Ivan on Ivan's device and Loraine on Loraine's device.
 2. Open **Our story** and tap **Enable notifications** on each device.
-3. Accept the browser/OS permission prompt, then tap **Send test notification**. This sends a real encrypted push to this device through the server. “Test accepted” means the provider accepted it; check the device notification center to confirm display. Permission is only requested from a button tap.
+3. Accept the browser/OS permission prompt. The card shows "Notifications enabled on this device." Tap **Check notifications** to confirm every step is healthy (storage, VAPID keys, worker, and partner device). Permission is only requested from a button tap.
 4. Tap the 3D **I miss you** button. A heart is saved for the other member, with one send per minute.
 5. Close the recipient's app and send another heart after the cooldown to verify background push delivery on that device.
 
-The self-test is limited to three requests per minute per IP and only accepts a subscription registered to the signed-in account. An expired subscription reveals the enable button again. If the provider rejects VAPID credentials, check the server key pair and contact address.
+An expired subscription reveals the enable button again. If the provider rejects VAPID credentials, check the server key pair and contact address.
 
 The enable/disable controls apply to the current account/device. **Remove all my devices** revokes every subscription belonging to that account. Subscriptions remain registered when the user locks the scrapbook so hearts can still arrive; use the notification controls to stop them. Lock-screen notification text is generic and opening it still requires app authentication. When switching accounts on a shared browser, enabling notifications renews the browser subscription so it cannot be reassigned to the other account silently.
 
@@ -108,7 +108,7 @@ Tap **Check notifications** in the “A little closer” card. It calls the sign
 - A heart is **saved** before push delivery is queued. A provider accepting a request is **not proof of device display or human reading**. The UI uses “queued” and “push service accepted,” never “your partner saw it.”
 - The worker retries transient failures up to five attempts with increasing delays. Jobs expire after one hour. It removes 404/410 expired subscriptions and checks both memberships before delivery.
 - A persisted request ID prevents duplicate hearts when the same send is retried after a lost response. Leased jobs recover after a Railway restart. Push systems can still deliver at least once; the notification tag reduces duplicate display for the same heart.
-- Notifications are rich and modern: app icon, small status-bar glyph (`badge`), large `image`, `timestamp`, vibration pattern, `renotify` so each new heart buzzes instead of replacing silently, and an action row — **Open our scrapbook** and **Send one back ♡**. The heart-back action asks the signed-in app to send a heart from the lock screen (Android/desktop show actions inline; iOS shows them on long-press).
+- Notifications are rich and modern: app icon, small status-bar glyph (`badge`), large `image`, `timestamp`, vibration pattern, `renotify` so each new heart buzzes instead of replacing silently, and an action row — **Open our private space** and **Send one back ♡**. The heart-back action asks the signed-in app to send a heart from the lock screen (Android/desktop show actions inline; iOS shows them on long-press).
 - The service worker keeps the VAPID public key in Cache Storage and re-subscribes on its own when the push service rotates an endpoint (`pushsubscriptionchange`), then hands the new endpoint to the signed-in page to save. A rotated endpoint no longer means silent notifications.
 - The app icon can show a badge dot for unseen hearts (Badging API where the OS supports it) and the badge clears when the heart is seen in the app.
 - The card always names whose phone will ring: “Loraine gets your hearts on their phone. ♡” when the partner has a registered device, or the instruction for them to enable notifications, so a silent heart is never a mystery.

@@ -4,7 +4,7 @@ import './glass.css';
 import { startConnection, stopConnection, paintConnection } from './connection';
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
-import { login, shell, renderPage, pageKind, type Page, type Filters, navigation } from './views';
+import { login, shell, renderPage, renderItems, pageKind, type Page, type Filters, navigation } from './views';
 import { dialog, editor, sheet } from './dialogs';
 import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, partnerDisplayName } from './utils';
 import { unlockLegacy, importLegacy } from './legacy';
@@ -20,7 +20,7 @@ function currentTheme(): 'light'|'dark' {
   if (saved === 'light' || saved === 'dark') return saved;
   return 'dark';
 }
-function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;try{localStorage.setItem('ivraine-theme',theme);}catch{};const button=document.querySelector<HTMLButtonElement>('[data-action="theme"]');if(button){const nextTheme=theme==='dark'?'light':'dark';button.textContent=theme==='dark'?'☀':'☾';button.setAttribute('aria-label',`Switch to ${nextTheme} mode`);button.setAttribute('title',`Switch to ${nextTheme} mode`);}}
+function applyTheme(theme:'light'|'dark'){document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;const themeColor=theme==='dark'?'#17141D':'#F6F3F8';document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach(m=>m.content=themeColor);try{localStorage.setItem('ivraine-theme',theme);}catch{};const button=document.querySelector<HTMLButtonElement>('[data-action="theme"]');if(button){const nextTheme=theme==='dark'?'light':'dark';button.textContent=theme==='dark'?'☀':'☾';button.setAttribute('aria-label',`Switch to ${nextTheme} mode`);button.setAttribute('title',`Switch to ${nextTheme} mode`);}}
 applyTheme(currentTheme());
 function page():Page{return navigation.some(n=>n[0]===location.hash.slice(1))?location.hash.slice(1) as Page:'story';}
 function toast(message:string){const el=document.querySelector('#toast')!;el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),6500);}
@@ -127,7 +127,7 @@ document.addEventListener('click',async event=>{
  }catch(error){toast(message(error));if(button instanceof HTMLButtonElement)button.disabled=false;}
 });
 let searchTimer:ReturnType<typeof setTimeout>;
-document.addEventListener('input',event=>{const input=event.target as HTMLInputElement;if(input.id==='search'){filters.query=input.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{render();const search=document.querySelector<HTMLInputElement>('#search');search?.focus();},220);}});
+document.addEventListener('input',event=>{const input=event.target as HTMLInputElement;if(input.id==='search'){filters.query=input.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{const target=document.querySelector('#page-items');if(target&&info)target.innerHTML=renderItems(page(),info,entries,filters,month,selectedDate);},220);}});
 document.addEventListener('change',event=>{const input=event.target as HTMLSelectElement;if(input.id==='chapter-filter'){filters.chapter=input.value;render();}});
 window.addEventListener('hashchange',()=>{filters={query:'',chapter:'',favorites:false};if(info){render(true);window.scrollTo({top:0,behavior:'smooth'});}});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status){status.textContent=navigator.onLine?'Connected':'Offline';status.classList.toggle('online',navigator.onLine);status.classList.toggle('offline',!navigator.onLine);}toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});

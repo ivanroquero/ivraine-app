@@ -10,3 +10,10 @@ test-results/
 playwright-report/
 *.log
 .vercel/
+
+# Temporary patch/script artifacts
+_*.txt
+_patchparts/
+*.zip
+*.patch
+new update/
