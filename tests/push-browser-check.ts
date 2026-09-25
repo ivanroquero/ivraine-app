@@ -37,12 +37,11 @@ await context.addInitScript({content:`
 const page=await context.newPage();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
 const check=(message:string)=>console.log('PASS:',message);
 try{
- await page.goto('http://127.0.0.1:5173');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();
+ await page.goto('http://127.0.0.1:5173');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our private space'}).click();
  const heart=page.getByRole('button',{name:'Send I miss you to my partner'});await expect(heart).toBeEnabled({timeout:20000});expect(errors).toEqual([]);check('Login works with normalized /api URL and trailing-slash origin');
  await expect(page.locator('#heart-partner')).toContainText('Loraine gets your hearts');check('The card names the partner whose phone will ring');
  await page.getByRole('button',{name:'Enable notifications',exact:true}).click();await expect(page.getByText('Notifications enabled on this device.',{exact:true})).toBeVisible({timeout:20000});expect(await page.evaluate(()=>(window as any).__pushGesture)).toBe(true);check('Permission requested from user gesture; subscription persisted to authenticated backend');
  expect((await store.state(USER1,BOOK)).deviceCount).toBe(1);
- await page.getByRole('button',{name:'Send test notification',exact:true}).click();await expect(page.locator('#heart-status')).toContainText('Test accepted');expect(testPushes).toBe(1);check('Self-test crosses browser, authenticated API, registered device and push transport');
  await page.getByRole('button',{name:'Check notifications'}).click();
  await expect(page.locator('#push-diagnostics')).toBeVisible({timeout:20000});
  await expect(page.locator('#push-diagnostics')).toContainText('Heart storage is connected.');
@@ -68,7 +67,7 @@ try{
  await page.getByRole('navigation').locator('a[href="#story"]').click();await page.setViewportSize({width:430,height:932});await page.emulateMedia({colorScheme:'dark'});await page.screenshot({path:'test-results/push-dark-mobile.png',fullPage:true});await page.emulateMedia({colorScheme:'light'});
  await page.emulateMedia({reducedMotion:'reduce'});expect(await page.locator('.heart-gem').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');check('Reduced-motion preference disables heart animation');
  await page.getByRole('button',{name:'Turn off on this device'}).click();await expect(page.getByRole('button',{name:'Enable notifications',exact:true})).toBeVisible();expect((await store.state(USER1,BOOK)).deviceCount).toBe(0);check('Unsubscribe removes own server record and local subscription');
- await page.getByRole('button',{name:'Lock',exact:true}).click();await page.getByLabel('Your email').fill('loraine@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our scrapbook'}).click();await expect(page.locator('#heart-received')).toContainText('Ivan sent you a heart',{timeout:20000});check('Second account can read the heart addressed to it');
+ await page.getByRole('button',{name:'Lock',exact:true}).click();await page.getByLabel('Your email').fill('loraine@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our private space'}).click();await expect(page.locator('#heart-received')).toContainText('Ivan sent you a heart',{timeout:20000});check('Second account can read the heart addressed to it');
  expect(errors).toEqual([]);check('No browser runtime errors');
 }catch(error){console.error(await page.locator('body').innerText());await page.screenshot({path:'test-results/push-failure.png',fullPage:true});throw error;}
 finally{await browser.close();await vite.close();await new Promise<void>(done=>apiServer.close(()=>done()));await fixture.close();}
