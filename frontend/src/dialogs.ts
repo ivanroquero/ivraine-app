@@ -12,10 +12,11 @@ export function dialog(title:string,content:string,classes=''){
 export function sheet(title:string,content:string,classes=''){
  const overlay=document.createElement('div');overlay.className=`sheet-overlay ${classes}`.trim();
  const panel=document.createElement('div');panel.className='sheet-panel';
- panel.innerHTML=`<div class="sheet-grab" aria-hidden="true"></div><div class="sheet-header"><h2 id="sheet-title">${h(title)}</h2></div>${content}`;
+ panel.innerHTML=`<div class="sheet-grab" aria-hidden="true"></div><div class="sheet-header"><h2 id="sheet-title">${h(title)}</h2><button type="button" class="close-button" aria-label="Close dialog">×</button></div>${content}`;
  overlay.append(panel);document.body.append(overlay);
  document.body.style.overflow='hidden';
  const close=()=>{panel.classList.add('is-closing');setTimeout(()=>{overlay.remove();document.body.style.overflow='';},240);};
+ panel.querySelector('.close-button')?.addEventListener('click',close);
  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
  panel.addEventListener('keydown',e=>{if((e as KeyboardEvent).key==='Escape')close();});
  const interactiveSelector='button, input, textarea, select, a, label, [role="button"], [type="submit"], [type="button"], [type="checkbox"], [type="radio"]';

@@ -17,7 +17,8 @@
     "dev:web": "npm run dev -w frontend",
     "dev:api": "npm run dev -w backend",
     "test:browser": "node --import tsx tests/browser-check.ts",
-    "test:push-browser": "node --import tsx tests/push-browser-check.ts"
+    "test:push-browser": "node --import tsx tests/push-browser-check.ts",
+    "db:push": "supabase db push"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
@@ -29,6 +30,7 @@
     "@types/supertest": "7.2.1",
     "@types/web-push": "3.6.4",
     "agent-browser": "0.38.0",
+    "supabase": "^2.118.0",
     "supertest": "7.2.2",
     "tsx": "4.23.13",
     "typescript": "7.0.2",

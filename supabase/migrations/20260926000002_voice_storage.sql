@@ -1,6 +1,13 @@
 -- Create ivraine-voice storage bucket and RLS policies for voice memos
 begin;
 
+-- Ensure ivraine_user_book_id helper exists in database
+create or replace function public.ivraine_user_book_id(user_uuid uuid) returns uuid language sql security definer stable set search_path = '' as $$
+ select book_id from public.ivraine_members where user_id = user_uuid;
+$$;
+revoke all on function public.ivraine_user_book_id(uuid) from public;
+grant execute on function public.ivraine_user_book_id(uuid) to authenticated;
+
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('ivraine-voice','ivraine-voice',true,16777216,array['audio/webm','audio/mp4','audio/x-m4a','audio/m4a','audio/mpeg','audio/wav','audio/ogg','audio/aac'])
 on conflict (id) do nothing;
