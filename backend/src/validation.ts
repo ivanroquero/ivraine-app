@@ -29,6 +29,7 @@ export const patchSchema = z.object({
   voice_url: z.string().max(2000).refine(s=>{try{return !s || (new URL(s).protocol==='https:' && /^https:\/\/.+\.(mp3|m4a|wav|ogg|webm|aac)(\?.*)?$/i.test(s));}catch{return false;}},'Use a direct HTTPS audio link for the voice note').optional(),
   favorite: z.boolean().optional(),
   completed: z.boolean().optional(),
+  photo_paths: z.array(z.string().max(220)).max(12).optional(),
   updated_at: z.iso.datetime({offset:true}),
 }).strict();
 export function imageExtension(bytes: Buffer): string | null {

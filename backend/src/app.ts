@@ -113,11 +113,11 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   app.get('/api/entries',async(req,res)=>{
     const offset=z.coerce.number().int().min(0).max(1000000).parse(req.query.offset??0);
     const db=res.locals.db as SupabaseClient;
-    const entries=result(await db.from('ivraine_entries').select('*').eq('book_id',res.locals.member.book_id).order('event_date',{ascending:false}).order('id').range(offset,offset+99)) ?? [];
+    const entries=result(await db.from('ivraine_entries').select('*').eq('book_id',res.locals.member.book_id).order('event_date',{ascending:false}).order('id').range(offset,offset+29)) ?? [];
     const paths=[...new Set(entries.flatMap(e=>e.photo_paths))] as string[];
     const urls=new Map<string,string>();
-    if(paths.length){const signed=result(await db.storage.from(bucket).createSignedUrls(paths,300)) ?? []; for(const s of signed) if(s.path && s.signedUrl) urls.set(s.path,s.signedUrl);}
-    res.json({entries:entries.map(e=>({...e,photo_urls:e.photo_paths.map((p:string)=>urls.get(p)??null)})),nextOffset:entries.length===100?offset+100:null});
+    if(paths.length){const signed=result(await db.storage.from(bucket).createSignedUrls(paths,3600)) ?? []; for(const s of signed) if(s.path && s.signedUrl) urls.set(s.path,s.signedUrl);}
+    res.json({entries:entries.map(e=>({...e,photo_urls:e.photo_paths.map((p:string)=>urls.get(p)??null)})),nextOffset:entries.length===30?offset+30:null});
   });
   app.post('/api/entries',async(req,res)=>{
     const body=entrySchema.parse(req.body);const db=res.locals.db as SupabaseClient;
@@ -128,6 +128,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   });
   app.patch('/api/entries/:id',async(req,res)=>{
     const id=idSchema.parse(req.params.id);const {updated_at,...body}=patchSchema.parse(req.body);const db=res.locals.db as SupabaseClient;
+    const bookPrefix=`${res.locals.member.book_id}/`;
+    if(body.photo_paths&&body.photo_paths.some(path=>!path.startsWith(bookPrefix)||!/^[a-f0-9-]+\/[a-f0-9-]+\/[a-f0-9-]+\.(jpg|png|webp)$/.test(path))) throw new HttpError(400,'Invalid photo path.');
     const row=result(await db.from('ivraine_entries').update(body).eq('id',id).eq('book_id',res.locals.member.book_id).eq('updated_at',updated_at).select().maybeSingle());
     if(!row) throw new HttpError(409,'This entry changed or was deleted. Refresh before editing again.');
     res.json(row);

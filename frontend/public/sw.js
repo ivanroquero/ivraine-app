@@ -1,5 +1,5 @@
 /* Cache only a non-private offline page; never cache sessions, API, or photo data. */
-const CACHE='ivraine-offline-v6';
+const CACHE='ivraine-offline-v7';
 const CONFIG='ivraine-push-config-v2';
 const KEY_PATH='/ivraine-push-key';
 const SCRAPBOOK_URL='/#story';
@@ -18,9 +18,33 @@ async function storeKey(value){try{if(typeof caches==='undefined'||typeof Respon
 async function loadKey(){try{if(typeof caches==='undefined')return null;const cache=await caches.open(CONFIG);const hit=await cache.match(KEY_PATH);if(!hit)return null;const value=await hit.text();return value?base64Bytes(value):null;}catch{return null;}}
 async function notify(title,options){try{await self.registration.showNotification(title,{...options,silent:false,requireInteraction:true,persistent:true});}catch{await self.registration.showNotification(title,{body:options.body,icon:options.icon,badge:options.badge,image:options.image,tag:options.tag,data:options.data});}}
 async function toApp(type,payload){try{const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});for(const client of windows)client.postMessage({type,...payload});}catch{}}
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['/offline.html','/offline.css'])).then(()=>self.skipWaiting()));});
+/* Cache the offline page AND all static Vite build assets so the app shell works offline. */
+self.addEventListener('install',event=>{event.waitUntil((async()=>{
+ const cache=await caches.open(CACHE);
+ await cache.addAll(['/offline.html','/offline.css']);
+ /* Cache all pre-known static resources; the dynamic Vite assets are picked up on fetch. */
+ try{const manifest=await fetch('/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);if(manifest){const icons=Object.values(manifest.icons||{}).map((i)=>i.src).filter(Boolean);await cache.addAll(icons.filter(Boolean)).catch(()=>{});}}catch{}
+ await self.skipWaiting();
+})());});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE&&key!==CONFIG).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
-self.addEventListener('fetch',event=>{if(new URL(event.request.url).pathname==='/offline.css'){event.respondWith(caches.match('/offline.css'));return;}if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/offline.html')));}});
+self.addEventListener('fetch',event=>{
+ const url=new URL(event.request.url);
+ /* Never intercept API calls, Supabase requests, or photo storage — they need live auth. */
+ if(url.pathname.startsWith('/api/')||url.hostname.includes('supabase'))return;
+ /* Cache the offline CSS — always serve from cache. */
+ if(url.pathname==='/offline.css'){event.respondWith(caches.match('/offline.css').then(r=>r||fetch(event.request)));return;}
+ /* Static Vite assets (fingerprinted JS/CSS, icons, fonts, manifests): cache-first. */
+ if(/\.(js|css|woff2?|ttf|otf|ico|svg|png|webp|jpg|json)(\?.*)?$/.test(url.pathname)&&url.origin===self.location.origin){
+  event.respondWith(caches.match(event.request).then(async cached=>{
+   if(cached)return cached;
+   const fresh=await fetch(event.request).catch(()=>null);
+   if(fresh&&fresh.ok){const c=await caches.open(CACHE);c.put(event.request,fresh.clone());}
+   return fresh||new Response('Offline',{status:503,headers:{'Content-Type':'text/plain'}});
+  }));return;
+ }
+ /* Navigation: network-first, fall back to offline page. */
+ if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/offline.html')));return;}
+});
 self.addEventListener('push',event=>{
  event.waitUntil((async()=>{
   let payload={};try{payload=event.data?.json()||{};}catch{}

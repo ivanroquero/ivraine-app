@@ -6,10 +6,11 @@ import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
 import { login, shell, renderPage, renderItems, pageKind, type Page, type Filters, navigation } from './views';
 import { dialog, editor, sheet } from './dialogs';
-import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, partnerDisplayName } from './utils';
+import { escapeHtml as h, download, today, dateLabel, countdownLabel, secondsUntil, partnerDisplayName, presenceLabel, isRecentlyActive } from './utils';
 import { unlockLegacy, importLegacy } from './legacy';
 import { install, registerPwa } from './pwa';
 import { monthEvents } from './calendar';
+import { compressImages } from './imageUtils';
 const app=document.querySelector<HTMLDivElement>('#app')!;
 let info:BookResponse|null=null, entries:Entry[]=[], generation=0, refreshing=false, signingOut=false, toastTimer:ReturnType<typeof setTimeout>;
 let filters:Filters={query:'',chapter:'',favorites:false};
@@ -32,34 +33,50 @@ function updatePresenceStatus(){
  if(!currentInfo)return;
  const youName=currentInfo.member.display_name || 'You';
  const partnerName=partnerDisplayName(currentInfo);
+ const partnerActive=currentInfo.partner?.last_active_at;
+ const youActive=currentInfo.member?.last_active_at;
  youNodes.forEach((you)=>{
-  const isHero=you.dataset.presenceRole==='hero';
-  if(isHero){you.textContent=youName;you.classList.remove('is-live');you.removeAttribute('title');return;}
-  you.textContent=youName;you.classList.remove('is-live');you.removeAttribute('title');
+  const label=presenceLabel(youName,youActive,true);
+  you.textContent=youName;you.classList.toggle('is-live',isRecentlyActive(youActive));
+  you.setAttribute('title',label);
  });
  partnerNodes.forEach((partnerEl)=>{
   if(!partnerName){partnerEl.hidden=true;return;}
   partnerEl.hidden=false;
-  const isHero=partnerEl.dataset.presenceRole==='hero';
-  if(isHero){partnerEl.textContent=partnerName;partnerEl.classList.remove('is-live');partnerEl.removeAttribute('title');return;}
-  partnerEl.textContent=partnerName;partnerEl.classList.remove('is-live');partnerEl.removeAttribute('title');
+  const live=isRecentlyActive(partnerActive);
+  const label=presenceLabel(partnerName,partnerActive);
+  partnerEl.textContent=partnerName;partnerEl.classList.toggle('is-live',live);
+  partnerEl.setAttribute('title',label);
  });
 }
-function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
-function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();}
-async function fetchEntries(){const all:Entry[]=[];let offset:number|null=0;while(offset!==null){const r: {entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);all.push(...r.entries);offset=r.nextOffset;}return all;}
-async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const rows=await fetchEntries();if(gen!==generation)return;entries=rows;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
+let lastHeartbeat=0;
+async function heartbeat(){
+ if(!info||!navigator.onLine)return;
+ const now=Date.now();if(now-lastHeartbeat<90000)return;
+ lastHeartbeat=now;
+ try{const r=await api<{last_active_at:string}>('/active','POST');if(info&&r.last_active_at)info.member.last_active_at=r.last_active_at;}
+ catch{ /* Heartbeat is best-effort. */ }
+}
+for(const ev of['click','keydown','touchstart'])document.addEventListener(ev,()=>void heartbeat(),{passive:true,capture:true});
 async function refreshPresence(){if(!info||!navigator.onLine)return;try{const book=await api<BookResponse>('/book');if(!info)return;info.member=book.member;info.partner=book.partner;updatePresenceStatus();}catch{ /* Presence is best-effort and should not block the rest of the app. */ }}
+function updateLiveCountdowns(){document.querySelectorAll<HTMLElement>('[data-live-countdown]').forEach(el=>{const value=el.dataset.liveCountdown;if(!value)return;const total=secondsUntil(value,new Date());el.textContent=total<=0?'Today':countdownLabel(value,new Date());});}
+function render(whole=false){if(!info)return;if(whole)app.innerHTML=shell(info,page());const target=document.querySelector('#content');if(target)target.innerHTML=renderPage(page(),info,entries,filters,month,selectedDate);updateLiveCountdowns();updatePresenceStatus();paintConnection();attachSentinel();}
+let nextOffset:number|null=null,loadingMore=false;
+async function fetchEntries(offset=0){const r:{entries:Entry[];nextOffset:number|null}=await api(`/entries?offset=${offset}`);return r;}
+async function refresh(quiet=false){if(!info||refreshing)return;refreshing=true;const gen=generation;try{const r=await fetchEntries(0);if(gen!==generation)return;entries=r.entries;nextOffset=r.nextOffset;render();if(!quiet)toast('All caught up.');}catch(error){if(gen===generation)toast(message(error));}finally{refreshing=false;}}
+async function loadMore(){if(!info||loadingMore||nextOffset===null||!navigator.onLine)return;loadingMore=true;const gen=generation;try{const r=await fetchEntries(nextOffset);if(gen!==generation)return;entries.push(...r.entries);nextOffset=r.nextOffset;const target=document.querySelector('#page-items');if(target&&info)target.innerHTML=renderItems(page(),info,entries,filters,month,selectedDate);attachSentinel();}catch{ /* best-effort */ }finally{loadingMore=false;}}
+function attachSentinel(){const existing=document.querySelector('#scroll-sentinel');if(existing)existing.remove();if(nextOffset===null)return;const sentinel=document.createElement('div');sentinel.id='scroll-sentinel';sentinel.style.cssText='height:1px;margin-top:40px;';const target=document.querySelector('#page-items');if(!target)return;target.after(sentinel);const io=new IntersectionObserver(entries=>{if(entries[0]?.isIntersecting){io.disconnect();sentinel.remove();void loadMore();}},{rootMargin:'200px'});io.observe(sentinel);}
 async function boot(){const gen=++generation;
+
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,rows]=await Promise.all([api<BookResponse>('/book'),fetchEntries()]);if(gen!==generation)return;info=book;entries=rows;render(true);void refreshPresence();startConnection(info.userId,toast,partnerDisplayName(info));}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
-async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=false){
+async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=false,getAddedFiles?:()=>File[],getRemovedPaths?:()=>string[]){
  const form=el.querySelector<HTMLFormElement>('#entry-form')!;
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(form.dataset.busy)return;form.dataset.busy='true';const button=form.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const status=form.querySelector('#form-status')!;
@@ -68,23 +85,47 @@ async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=
   const edit=!!existing&&!convert;let saved=false;
   try{
    if(!navigator.onLine)throw new Error('Reconnect to save this safely. Your draft is still here.');
-   const files=(data.getAll('photos') as File[]).filter(f=>f.size>0);if(files.length>12)throw new Error('Choose up to 12 photos.');
-   if(files.some(f=>f.size>8388608||!['image/jpeg','image/png','image/webp'].includes(f.type)))throw new Error('Use JPEG, PNG, or WebP photos, each under 8 MB.');
-   for(const [i,file] of files.entries()){status.textContent=`Uploading photo ${i+1} of ${files.length}…`;uploaded.push((await api<{path:string}>('/photos','POST',file)).path);}
+   // In edit mode, use the closure-provided getter for newly added files; otherwise read from form
+   const rawFiles:File[]=edit&&getAddedFiles
+    ?getAddedFiles()
+    :(data.getAll('photos') as File[]).filter(f=>f.size>0);
+   // Sanity size limit before compression (100 MB)
+   if(rawFiles.some(f=>f.size>104857600))throw new Error('One or more files exceeds the 100 MB limit.');
+   const removedPs:string[]=edit&&getRemovedPaths?getRemovedPaths():[];
+   const existingKept=(existing?.photo_paths??[]).filter(p=>!removedPs.includes(p));
+   if(rawFiles.length+existingKept.length>12)throw new Error('Choose up to 12 photos total.');
+   // Compress before upload
+   let blobs:Blob[]=[];
+   if(rawFiles.length){
+    status.textContent='Compressing photos…';
+    blobs=await compressImages(rawFiles);
+   }
+   for(const [i,blob] of blobs.entries()){
+    status.textContent=`Uploading photo ${i+1} of ${blobs.length}…`;
+    const webpBlob=new Blob([blob],{type:'image/webp'});
+    uploaded.push((await api<{path:string}>('/photos','POST',webpBlob)).path);
+   }
    status.textContent='Saving your little moment…';
    const body={title:data.get('title'),body:data.get('body')||'',event_date:data.get('event_date'),location:data.get('location')||'',chapter:data.get('chapter')||existing?.chapter||'Our story',recurrence:data.get('recurrence')||existing?.recurrence||'none',artist:data.get('artist')||'',song_url:data.get('song_url')||'',voice_url:data.get('voice_url')||''};
-   if(edit)await api(`/entries/${existing.id}`,'PATCH',{...body,updated_at:existing.updated_at});
-   else await api('/entries','POST',{...body,id:crypto.randomUUID(),kind,photo_paths:uploaded});
+   if(edit){
+    const newPhotoPaths=[...existingKept,...uploaded];
+    await api(`/entries/${existing.id}`,'PATCH',{...body,photo_paths:newPhotoPaths,updated_at:existing.updated_at});
+    for(const path of removedPs)await api('/photos','DELETE',{path}).catch(()=>undefined);
+   }else{
+    await api('/entries','POST',{...body,id:crypto.randomUUID(),kind,photo_paths:uploaded});
+   }
    saved=true;el.close();await refresh(true);toast(edit?'Changes saved.':'A little moment, kept forever.');
   }catch(error){if(!saved)for(const path of uploaded)await api('/photos','DELETE',{path}).catch(()=>undefined);status.textContent=message(error);}
   finally{button.disabled=false;close.disabled=false;el.removeEventListener('cancel',blockClose);delete form.dataset.busy;}
  });
 }
-function openEditor(kind:Kind,existing?:Entry,convert=false,date?:string){const el=editor(kind,existing,convert,date);void saveEntry(el,kind,existing,convert);}
+function openEditor(kind:Kind,existing?:Entry,convert=false,date?:string){const {el,getAddedFiles,getRemovedPaths}=editor(kind,existing,convert,date);void saveEntry(el,kind,existing,convert,getAddedFiles,getRemovedPaths);}
 function showLetter(entry:Entry){dialog(`Open when ${entry.title.replace(/^open when\s*/i,'')}`,`<div class="letter-reading"><span class="eyebrow">A LETTER FOR MY FAVORITE PERSON</span><p class="preserve">${h(entry.body)}</p><span class="letter-signoff">With love, always. ♡</span><p class="metadata">${h(dateLabel(entry.event_date))}</p></div>`,'reading-dialog');}
 function showViewer(entry:Entry){let index=0;const photos=entry.photo_urls.filter((u):u is string=>!!u);if(!photos.length){toast('The photo link expired or the file is missing. Refresh and try again.');return;}
  const el=dialog(entry.title,`<div class="lightbox"><img alt="${h(entry.title)}"><div class="viewer-controls"><button id="previous-photo" aria-label="Previous photo">←</button><span id="photo-number"></span><button id="next-photo" aria-label="Next photo">→</button><button id="fullscreen-photo" aria-label="Enter fullscreen">⛶ Full screen</button></div><p class="preserve">${h(entry.body)}</p><p class="metadata">${h(entry.chapter)} · ${h(dateLabel(entry.event_date))}</p></div>`,'viewer');
- const draw=()=>{el.querySelector('img')!.src=photos[index];el.querySelector('#photo-number')!.textContent=`${index+1} / ${photos.length}`;};draw();
+ let renewed=false;
+ async function renewPhotoUrls(){if(renewed)return;renewed=true;try{const rows=await api<{entries:typeof entries}>(`/entries?offset=0`);const fresh=rows.entries?.find(r=>r.id===entry.id);if(fresh?.photo_urls)photos.splice(0,photos.length,...fresh.photo_urls.filter((u):u is string=>!!u));draw();}catch{toast('Could not renew photo links. Refresh the page.');}}
+ const draw=()=>{const img=el.querySelector<HTMLImageElement>('img')!;img.src=photos[index];img.onerror=()=>void renewPhotoUrls();el.querySelector('#photo-number')!.textContent=`${index+1} / ${photos.length}`;};draw();
  const step=(dir:number)=>{index=(index+dir+photos.length)%photos.length;draw();};
  el.querySelector('#previous-photo')!.addEventListener('click',()=>step(-1));el.querySelector('#next-photo')!.addEventListener('click',()=>step(1));
  el.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')step(-1);if(event.key==='ArrowRight')step(1);});
@@ -132,7 +173,8 @@ document.addEventListener('change',event=>{const input=event.target as HTMLSelec
 window.addEventListener('hashchange',()=>{filters={query:'',chapter:'',favorites:false};if(info){render(true);window.scrollTo({top:0,behavior:'smooth'});}});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{const status=document.querySelector('#connection');if(status){status.textContent=navigator.onLine?'Connected':'Offline';status.classList.toggle('online',navigator.onLine);status.classList.toggle('offline',!navigator.onLine);}toast(navigator.onLine?'Back online.':'You are offline. Reconnect before saving.');if(navigator.onLine)void refresh(true);});
 document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('hidden-page',document.hidden);if(!document.hidden&&!document.querySelector('dialog[open]')){void refresh(true);}});
-setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();updatePresenceStatus();paintConnection();}},1000);
+setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();paintConnection();}},1000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
+setInterval(()=>{if(info&&!document.hidden&&navigator.onLine)void refreshPresence();},300000);
 if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
 void boot();void registerPwa();

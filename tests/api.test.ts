@@ -21,10 +21,14 @@ test('API: auth, shared CRUD, photo upload, stale edits, and deletion end to end
   const list=await request(app).get('/api/entries').set(auth2).expect(200);assert.equal(list.body.entries.length,1);assert(list.body.entries[0].photo_urls[0].includes('/object/sign/'));
   const favorited=await request(app).patch(`/api/entries/${id}`).set(auth2).send({favorite:true,updated_at:created.body.updated_at}).expect(200);
   assert.equal(favorited.body.chapter,'Our firsts');assert.equal(favorited.body.body,'Private story');assert.equal(favorited.body.favorite,true);
-  await request(app).patch(`/api/entries/${id}`).set(auth1).send({title:'Stale edit',updated_at:created.body.updated_at}).expect(409);
+  const upload2=await request(app).post('/api/photos').set(auth2).set('Content-Type','image/jpeg').send(Buffer.from([255,216,255,0])).expect(201);
+  const updatedPhotos=await request(app).patch(`/api/entries/${id}`).set(auth2).send({photo_paths:[upload2.body.path],updated_at:favorited.body.updated_at}).expect(200);
+  assert.deepEqual(updatedPhotos.body.photo_paths,[upload2.body.path]);
+  await request(app).delete('/api/photos').set(auth1).send({path:upload.body.path}).expect(200);
+  await request(app).delete('/api/photos').set(auth2).send({path:upload2.body.path}).expect(409);
+  await request(app).patch(`/api/entries/${id}`).set(auth1).send({title:'Stale edit',updated_at:favorited.body.updated_at}).expect(409);
   await request(app).post('/api/entries').set(auth1).send({kind:'note',title:'Bad date',event_date:'2026-02-30'}).expect(400);
   await request(app).post('/api/entries').set(auth1).send({kind:'song',title:'Bad link',event_date:'2026-09-02',song_url:'javascript:alert(1)'}).expect(400);
-  await request(app).delete('/api/photos').set(auth1).send({path:upload.body.path}).expect(409);
   await request(app).delete(`/api/entries/${id}`).set(auth2).expect(200);
   const after=await request(app).get('/api/entries').set(auth1).expect(200);assert.equal(after.body.entries.length,0);
   assert.equal((await fixture.db.query('select * from storage.objects')).rows.length,0);
@@ -51,12 +55,13 @@ test('API: presence timestamps are shared and updated for both members',async()=
  }finally{await fixture.close();}
 });
 
-test('Presence labels no longer surface active status in the UI',()=>{
+test('Presence labels surface active status in the UI',()=>{
  const now=Date.parse('2026-09-18T12:00:00Z');
  assert.equal(presenceLabel('You', undefined, true, new Date(now)), 'You · offline');
- assert.equal(presenceLabel('Loraine', '2026-09-18T11:58:00Z', false, new Date(now)), 'Loraine · offline');
- assert.equal(presenceLabel('Loraine', '2026-09-18T11:30:00Z', false, new Date(now)), 'Loraine · offline');
- assert.equal(presenceLabel('Loraine', '2026-09-17T12:00:00Z', false, new Date(now)), 'Loraine · offline');
- assert.equal(isRecentlyActive('2026-09-18T11:58:00Z', new Date(now)), false);
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:59:30Z', false, new Date(now)), 'Loraine · active just now');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T11:58:00Z', false, new Date(now)), 'Loraine · active 2 minutes ago');
+ assert.equal(presenceLabel('Loraine', '2026-09-18T10:00:00Z', false, new Date(now)), 'Loraine · active 2 hours ago');
+ assert.equal(presenceLabel('Loraine', '2026-09-17T11:00:00Z', false, new Date(now)), 'Loraine · offline');
+ assert.equal(isRecentlyActive('2026-09-18T11:58:00Z', new Date(now)), true);
  assert.equal(isRecentlyActive('2026-09-18T11:30:00Z', new Date(now)), false);
 });

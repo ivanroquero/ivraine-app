@@ -62,11 +62,95 @@ export function sheet(title:string,content:string,classes=''){
 export function editor(kind:Kind,entry?:Entry,convert=false,date=today()){
  const names:Record<Kind,string>={memory:'memory',note:'letter',plan:'dream',date:'date',song:'song',voice:'voice note'};
  const e=entry;const editing=!!e&&!convert;
- const form=`<form id="entry-form" class="entry-form"><label>${kind==='note'?'Open when…':kind==='song'?'Song title':'Title'}<input name="title" maxlength="160" required value="${h(e?.title)}" placeholder="${kind==='note'?'you miss me':kind==='plan'?'Watch a sunrise together':'Give this moment a name'}" autofocus></label>${kind==='song'?`<label>Artist<input name="artist" maxlength="160" value="${h(e?.artist)}"></label><label>Song link<input name="song_url" type="url" required maxlength="2000" placeholder="https://open.spotify.com/track/…" value="${h(e?.song_url)}"></label><p class="field-help">Spotify, Apple Music, YouTube, or SoundCloud. Opens only when you press play.</p>`:''}<label>${kind==='note'?'Your letter':kind==='song'?'Why this song is ours':'The story'}<textarea name="body" rows="${kind==='note'?8:4}" maxlength="12000" ${kind==='note'?'required':''} placeholder="A little detail you never want to forget…">${h(e?.body)}</textarea></label><div class="form-row"><label>${kind==='plan'?'Target date':kind==='date'?'Date':kind==='note'?'Written on':kind==='song'?'Added on':'Memory date'}<input name="event_date" type="date" required value="${h(convert?today():e?.event_date||date)}"></label>${kind!=='song'&&kind!=='note'?`<label>Place<input name="location" maxlength="160" value="${h(e?.location)}" placeholder="Where was this?"></label>`:''}</div>${kind==='memory'?`<label>Chapter<input name="chapter" maxlength="80" value="${h(e?.chapter||'Our story')}" placeholder="Our firsts, Little adventures…"></label>${!editing?'<label class="upload-label">Add photos <span>Up to 12 · JPEG, PNG, WebP · 8 MB each</span><input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><div id="photo-previews" class="photo-previews"></div>':`<p class="field-help">${e?.photo_paths.length||0} attached photos. Photo attachments stay with the original memory.</p>`}`:''}${kind==='date'?`<label>Repeat<select name="recurrence"><option value="none" ${e?.recurrence==='none'?'selected':''}>Once</option><option value="monthly" ${e?.recurrence==='monthly'?'selected':''}>Every month</option><option value="yearly" ${e?.recurrence==='yearly'?'selected':''}>Every year (birthdays & anniversaries)</option></select></label>`:''}<p id="form-status" role="status"></p><button type="submit" class="primary">${editing?'Save changes':kind==='note'?'Seal this letter':'Save '+names[kind]} <span>♡</span></button></form>`;
- const el=dialog(`${editing?'Edit':'A new'} ${names[kind]}`,form);let urls:string[]=[];
+ // Build the photos section differently for new vs edit mode
+ const photosSection=kind==='memory'
+  ?`<label>Chapter<input name="chapter" maxlength="80" value="${h(e?.chapter||'Our story')}" placeholder="Our firsts, Little adventures…"></label>`
+   +(editing
+    ?`<div id="existing-photos" class="photo-previews existing-photos"></div>`
+     +`<label class="upload-label">Add more photos <span>Up to 12 total · JPEG, PNG, WebP, HEIC · 8 MB each</span><input name="photos" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple></label>`
+     +`<div id="photo-previews" class="photo-previews"></div>`
+    :`<label class="upload-label">Add photos <span>Up to 12 · JPEG, PNG, WebP, HEIC · 8 MB each</span><input name="photos" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple></label>`
+     +`<div id="photo-previews" class="photo-previews"></div>`)
+  :'';
+ const form=''
+  +`<form id="entry-form" class="entry-form">`
+  +`<label>${kind==='note'?'Open when\u2026':kind==='song'?'Song title':'Title'}<input name="title" maxlength="160" required value="${h(e?.title)}" placeholder="${kind==='note'?'you miss me':kind==='plan'?'Watch a sunrise together':'Give this moment a name'}" autofocus></label>`
+  +(kind==='song'
+   ?`<label>Artist<input name="artist" maxlength="160" value="${h(e?.artist)}"></label>`
+    +`<label>Song link<input name="song_url" type="url" required maxlength="2000" placeholder="https://open.spotify.com/track/\u2026" value="${h(e?.song_url)}"></label>`
+    +`<p class="field-help">Spotify, Apple Music, YouTube, or SoundCloud. Opens only when you press play.</p>`
+   :'')
+  +`<label>${kind==='note'?'Your letter':kind==='song'?'Why this song is ours':'The story'}<textarea name="body" rows="${kind==='note'?8:4}" maxlength="12000" ${kind==='note'?'required':''} placeholder="A little detail you never want to forget\u2026">${h(e?.body)}</textarea></label>`
+  +`<div class="form-row">`
+  +`<label>${kind==='plan'?'Target date':kind==='date'?'Date':kind==='note'?'Written on':kind==='song'?'Added on':'Memory date'}<input name="event_date" type="date" required value="${h(convert?today():e?.event_date||date)}"></label>`
+  +(kind!=='song'&&kind!=='note'?`<label>Place<input name="location" maxlength="160" value="${h(e?.location)}" placeholder="Where was this?"></label>`:'')
+  +`</div>`
+  +photosSection
+  +(kind==='date'
+   ?`<label>Repeat<select name="recurrence"><option value="none" ${e?.recurrence==='none'?'selected':''}>Once</option><option value="monthly" ${e?.recurrence==='monthly'?'selected':''}>Every month</option><option value="yearly" ${e?.recurrence==='yearly'?'selected':''}>Every year (birthdays &amp; anniversaries)</option></select></label>`
+   :'')
+  +`<p id="form-status" role="status"></p>`
+  +`<button type="submit" class="primary">${editing?'Save changes':kind==='note'?'Seal this letter':'Save '+names[kind]} <span>\u2661</span></button>`
+  +`</form>`;
+ const el=dialog(`${editing?'Edit':'A new'} ${names[kind]}`,form);
+ let urls:string[]=[];
+ // Tracks removed existing photo storage paths
+ const removedPaths:string[]=[];
+ // Tracks newly added File objects
+ let addedFiles:File[]=[];
+ // In edit mode for memories, render existing photo thumbnails with ❌ remove buttons
+ if(editing&&kind==='memory'&&e){
+  const existingContainer=el.querySelector<HTMLElement>('#existing-photos');
+  if(existingContainer){
+   const renderExisting=()=>{
+    existingContainer.replaceChildren();
+    let hadVisible=false;
+    (e.photo_urls||[]).forEach((url,i)=>{
+     const path=(e.photo_paths??[])[i];
+     if(!url||!path)return;
+     if(removedPaths.includes(path))return;
+     hadVisible=true;
+     const wrap=document.createElement('div');wrap.className='photo-thumb-wrap';
+     const img=new Image();img.src=url;img.alt=`Photo ${i+1}`;
+     const btn=document.createElement('button');btn.type='button';btn.className='remove-photo-btn';
+     btn.textContent='\u274c';btn.setAttribute('aria-label',`Remove photo ${i+1}`);
+     btn.addEventListener('click',()=>{
+      removedPaths.push(path);
+      renderExisting();
+      syncNewPhotosInput();
+     });
+     wrap.append(img,btn);existingContainer.append(wrap);
+    });
+    if(!hadVisible){
+     const p=document.createElement('p');p.className='field-help';p.textContent='No existing photos.';existingContainer.append(p);
+    }
+   };
+   const syncNewPhotosInput=()=>{
+    const keptCount=(e.photo_paths?.length??0)-removedPaths.length;
+    const maxNew=Math.max(0,12-keptCount);
+    if(addedFiles.length>maxNew){
+     addedFiles=addedFiles.slice(0,maxNew);
+     urls.forEach(URL.revokeObjectURL);urls=[];
+     const preview=el.querySelector('#photo-previews')!;preview.replaceChildren();
+     for(const file of addedFiles){const url=URL.createObjectURL(file);urls.push(url);const img=new Image();img.src=url;img.alt=file.name;preview.append(img);}
+    }
+   };
+   renderExisting();
+  }
+ }
  el.querySelector<HTMLInputElement>('[name="photos"]')?.addEventListener('change',event=>{
-  urls.forEach(URL.revokeObjectURL);urls=[];const input=event.target as HTMLInputElement;const preview=el.querySelector('#photo-previews')!;preview.replaceChildren();
-  for(const file of Array.from(input.files||[]).slice(0,12)){const url=URL.createObjectURL(file);urls.push(url);const img=new Image();img.src=url;img.alt=file.name;preview.append(img);}
+  urls.forEach(URL.revokeObjectURL);urls=[];
+  const input=event.target as HTMLInputElement;
+  const preview=el.querySelector('#photo-previews')!;preview.replaceChildren();
+  const keptCount=(e?.photo_paths?.length??0)-removedPaths.length;
+  const maxNew=Math.max(0,12-keptCount);
+  addedFiles=Array.from(input.files||[]).slice(0,maxNew);
+  for(const file of addedFiles){const url=URL.createObjectURL(file);urls.push(url);const img=new Image();img.src=url;img.alt=file.name;preview.append(img);}
  });
- el.addEventListener('close',()=>urls.forEach(URL.revokeObjectURL));return el;
+ el.addEventListener('close',()=>urls.forEach(URL.revokeObjectURL));
+ return {
+  el,
+  getAddedFiles:():File[]=>addedFiles,
+  getRemovedPaths:():string[]=>[...removedPaths],
+ };
 }

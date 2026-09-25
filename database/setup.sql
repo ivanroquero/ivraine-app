@@ -1,7 +1,7 @@
 -- Run once in a dedicated Supabase project's SQL Editor. Transactional: all or nothing.
 begin;
-create function public.ivraine_valid_photos(paths text[], book uuid, author uuid) returns boolean language sql immutable security invoker set search_path = '' as $$
- select array_position(paths,null) is null and cardinality(paths)<=12 and coalesce(bool_and(length(p)<=220 and p ~ '^[a-f0-9-]+/[a-f0-9-]+/[a-f0-9-]+\.(jpg|png|webp)$' and split_part(p,'/',1)=book::text and split_part(p,'/',2)=author::text),true) from unnest(paths) p;
+create function public.ivraine_valid_photos(paths text[], book uuid, author uuid default null) returns boolean language sql immutable security invoker set search_path = '' as $$
+ select array_position(paths,null) is null and cardinality(paths)<=12 and coalesce(bool_and(length(p)<=220 and p ~ '^[a-f0-9-]+/[a-f0-9-]+/[a-f0-9-]+\.(jpg|png|webp)$' and split_part(p,'/',1)=book::text),true) from unnest(paths) p;
 $$;
 create table public.ivraine_books (
  id uuid primary key default gen_random_uuid(),
@@ -56,7 +56,7 @@ revoke all on public.ivraine_books,public.ivraine_members,public.ivraine_entries
 grant select on public.ivraine_books,public.ivraine_members,public.ivraine_entries to authenticated;
 grant update(last_active_at) on public.ivraine_members to authenticated;
 grant insert(id,book_id,author_id,kind,title,body,event_date,location,photo_paths,chapter,recurrence,song_url,artist,voice_url,favorite,completed) on public.ivraine_entries to authenticated;
-grant update(title,body,event_date,location,chapter,recurrence,song_url,artist,voice_url,favorite,completed) on public.ivraine_entries to authenticated;
+grant update(title,body,event_date,location,photo_paths,chapter,recurrence,song_url,artist,voice_url,favorite,completed) on public.ivraine_entries to authenticated;
 grant delete on public.ivraine_entries to authenticated;
 create policy ivraine_read_members on public.ivraine_members for select to authenticated using(book_id = public.ivraine_user_book_id((select auth.uid())));
 create policy ivraine_update_self_activity on public.ivraine_members for update to authenticated using(user_id=(select auth.uid())) with check(user_id=(select auth.uid()));
