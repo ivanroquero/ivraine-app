@@ -13,6 +13,7 @@ import { install, registerPwa } from './pwa';
 import { monthEvents, nextEvent } from './calendar';
 import { compressImages } from './imageUtils';
 import { renderMemoryMap, cleanupMemoryMap } from './map';
+import { uploadVoiceNote, renderVoicePlayer, initVoicePlayers } from './voiceUtils';
 
 const app=document.querySelector<HTMLDivElement>('#app')!;
 let info:BookResponse|null=null, entries:Entry[]=[], generation=0, refreshing=false, signingOut=false, toastTimer:ReturnType<typeof setTimeout>;
@@ -107,6 +108,7 @@ function render(whole=false){
  updatePresenceStatus();
  paintConnection();
  attachSentinel();
+ initVoicePlayers(target as HTMLElement || app);
 
  if(page()==='gallery'&&filters.viewMode==='map'){
   const mapContainer=document.querySelector<HTMLElement>('#memory-map');
@@ -138,7 +140,7 @@ async function boot(){const gen=++generation;
 
 function passwordDialog(){const el=dialog('A fresh start.','<form id="password-form"><label>New password<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p>Use at least 12 characters.</p><p id="password-status" role="status"></p><button class="primary" type="submit">Update password</button></form>');el.querySelector('form')!.addEventListener('submit',async event=>{event.preventDefault();const button=el.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const value=new FormData(event.target as HTMLFormElement).get('password') as string;const {error}=await supabase!.auth.updateUser({password:value});if(error){el.querySelector('#password-status')!.textContent=error.message;button.disabled=false;}else{el.close();toast('Password updated.');void boot();}});}
 
-async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=false,getAddedFiles?:()=>File[],getRemovedPaths?:()=>string[]){
+async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=false,getAddedFiles?:()=>File[],getRemovedPaths?:()=>string[],getRecordedAudio?:()=>Blob|null,isVoiceRemoved?:()=>boolean){
  const form=el.querySelector<HTMLFormElement>('#entry-form')!;
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(form.dataset.busy)return;form.dataset.busy='true';const button=form.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const status=form.querySelector('#form-status')!;
@@ -162,6 +164,21 @@ async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=
     const webpBlob=new Blob([blob],{type:'image/webp'});
     uploaded.push((await api<{path:string}>('/photos','POST',webpBlob)).path);
    }
+
+   let finalVoiceUrl=existing?.voice_url||'';
+   if(isVoiceRemoved?.()){
+    finalVoiceUrl='';
+   }
+   const recordedBlob=getRecordedAudio?.();
+   if(recordedBlob&&info){
+    status.textContent='Uploading voice memo…';
+    try{
+     finalVoiceUrl=await uploadVoiceNote(recordedBlob,info.book.id,info.userId);
+    }catch(err){
+     throw new Error(`Could not upload voice memo: ${err instanceof Error?err.message:'Upload failed'}`);
+    }
+   }
+
    status.textContent='Saving your little moment…';
 
    let locVal=(data.get('location') as string||'').trim();
@@ -182,7 +199,7 @@ async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=
     recurrence:data.get('recurrence')||existing?.recurrence||'none',
     artist:data.get('artist')||'',
     song_url:data.get('song_url')||'',
-    voice_url:data.get('voice_url')||''
+    voice_url:finalVoiceUrl
    };
 
    if(edit){
@@ -198,7 +215,7 @@ async function saveEntry(el:HTMLDialogElement,kind:Kind,existing?:Entry,convert=
  });
 }
 
-function openEditor(kind:Kind,existing?:Entry,convert=false,date?:string){const {el,getAddedFiles,getRemovedPaths}=editor(kind,existing,convert,date);void saveEntry(el,kind,existing,convert,getAddedFiles,getRemovedPaths);}
+function openEditor(kind:Kind,existing?:Entry,convert=false,date?:string){const {el,getAddedFiles,getRemovedPaths,getRecordedAudio,isVoiceRemoved}=editor(kind,existing,convert,date);void saveEntry(el,kind,existing,convert,getAddedFiles,getRemovedPaths,getRecordedAudio,isVoiceRemoved);}
 
 function showLetter(entry:Entry){
  const myName=(info?.member.display_name||'Ivan').trim();
@@ -249,12 +266,15 @@ function showLetter(entry:Entry){
    ${unsealAnimationHtml}
    <div class="letter-content-body" id="letter-content-body">
     <p class="preserve">${h(entry.body)}</p>
+    ${entry.voice_url?renderVoicePlayer(entry.voice_url,entry.title,'letter-voice-player'):''}
     <span class="letter-signoff">With love, always. ♡</span>
     <p class="metadata">${h(dateLabel(entry.event_date))}</p>
     ${openedStamp}
    </div>
   </div>
  `,'reading-dialog');
+
+ initVoicePlayers(el);
 
  const crackBtn=el.querySelector<HTMLButtonElement>('#crack-wax-btn');
  if(crackBtn&&!entry.completed){

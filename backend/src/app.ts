@@ -11,6 +11,7 @@ import { entrySchema, patchSchema, idSchema, imageExtension } from './validation
 export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; push?:PushServices; }
 export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
 const bucket = 'ivraine-photos';
+const voiceBucket = 'ivraine-voice';
 function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'Our space service could not complete this request. Please retry.'); return r.data; }
 function missingColumn(error:unknown){return !!(error && typeof error==='object' && 'code' in error && (error as {code?:string}).code==='42703');}
 export function createApp(config:Config, clientFactory?:(token:string)=>SupabaseClient) {
@@ -157,6 +158,22 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const used=result(await db.from('ivraine_entries').select('id').contains('photo_paths',[path]).limit(1)) ?? [];
     if(used.length) throw new HttpError(409,'This photo belongs to an entry.');
     result(await db.storage.from(bucket).remove([path]));res.json({deleted:true});
+  });
+  app.post('/api/voice',express.raw({type:['audio/webm','audio/mp4','audio/x-m4a','audio/m4a','audio/mpeg','audio/wav','audio/ogg','audio/aac','application/octet-stream'],limit:'16mb'}),async(req,res)=>{
+    if(!Buffer.isBuffer(req.body)) throw new HttpError(415,'Choose a supported audio recording (WebM, M4A, MP3, WAV).');
+    const contentType=req.headers['content-type']||'audio/webm';
+    const ext=contentType.includes('mp4')||contentType.includes('m4a')?'m4a':contentType.includes('mp3')||contentType.includes('mpeg')?'mp3':contentType.includes('wav')?'wav':contentType.includes('ogg')?'ogg':contentType.includes('aac')?'aac':'webm';
+    const path=`${res.locals.member.book_id}/${res.locals.userId}/${randomUUID()}.${ext}`;
+    const db=res.locals.db as SupabaseClient;
+    const upRes=await db.storage.from(voiceBucket).upload(path,req.body,{contentType,upsert:false,cacheControl:'31536000'});
+    if(upRes.error){
+      const fb=await db.storage.from(bucket).upload(path,req.body,{contentType,upsert:false,cacheControl:'31536000'});
+      if(fb.error) throw new HttpError(502,'Could not upload audio to storage.');
+    }
+    const signed=await db.storage.from(upRes.error?bucket:voiceBucket).createSignedUrl(path,315360000).catch(()=>null);
+    const pub=db.storage.from(upRes.error?bucket:voiceBucket).getPublicUrl(path);
+    const url=signed?.data?.signedUrl||pub?.data?.publicUrl||'';
+    res.status(201).json({path,url});
   });
   app.use((_req,_res,next)=>next(new HttpError(404,'Endpoint not found.')));
   const handler:ErrorRequestHandler=(err,_req,res,_next)=>{

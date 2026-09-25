@@ -39,6 +39,7 @@ export async function startFixture(port=0){
  app.post('/auth/v1/recover',(_req,res)=>res.json({}));
  app.put('/auth/v1/user',(req,res)=>res.json(user(tokenUser(req.headers.authorization)||USER1)));
  app.get('/storage/v1/object/sign/*path',(req,res)=>{const key=String(req.params.path instanceof Array?req.params.path.join('/'):req.params.path);const allowed=signatures.get(String(req.query.token));const blob=blobs.get(key);if(!blob||allowed!==key){res.status(404).end();return;}res.type(blob.type).send(blob.body);});
+ app.get('/storage/v1/object/public/*path',(req,res)=>{const key=String(req.params.path instanceof Array?req.params.path.join('/'):req.params.path);const blob=blobs.get(key);if(!blob){res.status(404).end();return;}res.type(blob.type).send(blob.body);});
  app.use((req,res,next)=>{const id=tokenUser(req.headers.authorization);if(!id){res.status(401).json({message:'Invalid token'});return;}res.locals.id=id;next();});
  app.all('/rest/v1/:table',async(req,res)=>{
   const table=String(req.params.table);if(!['ivraine_books','ivraine_members','ivraine_entries'].includes(table)){res.status(404).end();return;}
@@ -69,7 +70,7 @@ export async function startFixture(port=0){
   for(const path of paths){const {rows}=await asUser(db,res.locals.id,'select name from storage.objects where bucket_id=$1 and name=$2',[req.params.bucket,path]);const key=`${req.params.bucket}/${path}`;const sig=randomUUID();if(rows.length)signatures.set(sig,key);result.push({path,signedURL:rows.length?`/object/sign/${key}?token=${sig}`:null,error:rows.length?null:'not found'});}
   res.json(result);
  });
- app.post('/storage/v1/object/:bucket/*path',express.raw({type:['image/jpeg','image/png','image/webp'],limit:'8mb'}),async(req,res)=>{
+ app.post('/storage/v1/object/:bucket/*path',express.raw({type:['image/jpeg','image/png','image/webp','audio/webm','audio/mp4','audio/x-m4a','audio/m4a','audio/mpeg','audio/wav','audio/ogg','audio/aac'],limit:'16mb'}),async(req,res)=>{
   const path=Array.isArray(req.params.path)?req.params.path.join('/'):String(req.params.path);
   try{await asUser(db,res.locals.id,'insert into storage.objects(bucket_id,name) values($1,$2)',[req.params.bucket,path]);blobs.set(`${req.params.bucket}/${path}`,{body:req.body,type:req.headers['content-type']||'image/jpeg'});res.json({Key:`${req.params.bucket}/${path}`,Id:randomUUID()});}catch{res.status(403).json({message:'Access denied'});}
  });

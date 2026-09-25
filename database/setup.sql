@@ -69,4 +69,8 @@ insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) v
 create policy ivraine_photo_read on storage.objects for select to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
 create policy ivraine_photo_add on storage.objects for insert to authenticated with check(bucket_id='ivraine-photos' and split_part(name,'/',2)=(select auth.uid())::text and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
 create policy ivraine_photo_delete on storage.objects for delete to authenticated using(bucket_id='ivraine-photos' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('ivraine-voice','ivraine-voice',true,16777216,array['audio/webm','audio/mp4','audio/x-m4a','audio/m4a','audio/mpeg','audio/wav','audio/ogg','audio/aac']) on conflict (id) do nothing;
+create policy ivraine_voice_read on storage.objects for select to authenticated using(bucket_id='ivraine-voice' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
+create policy ivraine_voice_add on storage.objects for insert to authenticated with check(bucket_id='ivraine-voice' and split_part(name,'/',2)=(select auth.uid())::text and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
+create policy ivraine_voice_delete on storage.objects for delete to authenticated using(bucket_id='ivraine-voice' and split_part(name,'/',1) = public.ivraine_user_book_id((select auth.uid()))::text);
 commit;
