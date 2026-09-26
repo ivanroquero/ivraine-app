@@ -431,7 +431,7 @@ function updateKpiUi(stats: AdminStats) {
 // MAPBOX / LEAFLET LIVE VISITOR MAP ENGINE (ULTRA-HD, DEEP-ZOOM, GRABBABLE LIVE PIN)
 // -----------------------------------------------------------------------------------------
 
-function updateMapHud(lat: number, lng: number, address?: string, isDraggable: boolean = true) {
+function updateMapHud(lat: number, lng: number, address?: string, isDraggable: boolean = true, deviceTag?: string) {
   const coordsEl = document.getElementById('hud-coordinates');
   if (coordsEl) {
     coordsEl.textContent = `📍 ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
@@ -448,7 +448,8 @@ function updateMapHud(lat: number, lng: number, address?: string, isDraggable: b
   }
   const engineEl = document.getElementById('hud-engine-tag');
   if (engineEl) {
-    engineEl.textContent = mapType === 'mapbox' ? 'Mapbox GL Vector' : 'Leaflet Ultra-HD';
+    const baseEngine = mapType === 'mapbox' ? 'Mapbox GL' : 'Leaflet Ultra-HD';
+    engineEl.textContent = deviceTag ? `${baseEngine} · ${deviceTag}` : baseEngine;
   }
 }
 
@@ -474,7 +475,7 @@ function showMapToast(message: string, durationMs: number = 3500) {
   }, durationMs);
 }
 
-function createLiveMarkerElement(user: string, _isPrimary: boolean = true): HTMLElement {
+function createLiveMarkerElement(user: string, _isPrimary: boolean = true, isPhone: boolean = true): HTMLElement {
   const container = document.createElement('div');
   container.className = 'live-map-marker-container';
   container.setAttribute('role', 'button');
@@ -491,12 +492,12 @@ function createLiveMarkerElement(user: string, _isPrimary: boolean = true): HTML
 
   const emoji = document.createElement('span');
   emoji.className = 'live-marker-emoji';
-  emoji.textContent = '💖';
+  emoji.textContent = isPhone ? '💖' : '📍';
   center.appendChild(emoji);
 
   const pill = document.createElement('div');
   pill.className = 'live-marker-pill';
-  pill.innerHTML = `<span class="pill-dot"></span><span>${escapeHtml(user || 'Loraine')} ♡</span>`;
+  pill.innerHTML = `<span class="pill-dot"></span><span>${escapeHtml(user || 'Loraine')} ${isPhone ? '📱 Live' : '♡'}</span>`;
 
   container.appendChild(wave1);
   container.appendChild(wave2);
@@ -700,7 +701,7 @@ function initVisitorMap() {
 function updateVisitorMap(logs: VisitorLog[]) {
   if (!mapInstance || !mapInitialized || isDraggingPin) return;
 
-  const geoLogs: VisitorLog[] = logs
+  const rawGeoLogs: VisitorLog[] = logs
     .map(l => {
       const lat = typeof l.latitude === 'number' ? l.latitude : (l.latitude ? parseFloat(String(l.latitude)) : null);
       const lng = typeof l.longitude === 'number' ? l.longitude : (l.longitude ? parseFloat(String(l.longitude)) : null);
@@ -708,11 +709,66 @@ function updateVisitorMap(logs: VisitorLog[]) {
     })
     .filter(l => l.latitude != null && l.longitude != null && !isNaN(l.latitude) && !isNaN(l.longitude));
 
+  // Sort descending by timestamp (newest first)
+  rawGeoLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  // Deduplicate strictly by device: ONLY ONE PIN PER DEVICE!
+  // All phone location logs from Loraine/phone collapse into that 1 single live pin.
+  const devicePinMap = new Map<string, VisitorLog>();
+
+  function getDeviceKey(log: VisitorLog): string {
+    const user = (log.user || '').trim().toLowerCase();
+    const act = (log.action || '').toLowerCase();
+    const det = (log.details || '').toLowerCase();
+
+    // Primary mobile / phone device
+    if (user.includes('loraine') || act.includes('phone') || det.includes('phone') || act.includes('pinned') || act.includes('date-location')) {
+      return 'device_loraine_phone';
+    }
+
+    // Other devices grouped by IP and platform
+    const ip = (log.ip || 'unknown_ip').trim();
+    const ua = (log.userAgent || '').toLowerCase();
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
+    return `device_${ip}_${isMobile ? 'mobile' : 'desktop'}`;
+  }
+
+  for (const log of rawGeoLogs) {
+    const key = getDeviceKey(log);
+    if (!devicePinMap.has(key)) {
+      devicePinMap.set(key, log);
+    } else {
+      // If current stored log has no street address or is low precision, but another log has street address/GPS, use the better one
+      const current = devicePinMap.get(key)!;
+      const currentHasAddress = current.fullAddress && current.fullAddress.length > 20;
+      const newHasAddress = log.fullAddress && log.fullAddress.length > 20;
+      if (!currentHasAddress && newHasAddress) {
+        devicePinMap.set(key, log);
+      }
+    }
+  }
+
+  // Deduplicated list: exactly 1 pin per device!
+  const geoLogs: VisitorLog[] = Array.from(devicePinMap.values());
+  // Sort so phone location is always first
+  geoLogs.sort((a, b) => {
+    const aIsPhone = getDeviceKey(a) === 'device_loraine_phone';
+    const bIsPhone = getDeviceKey(b) === 'device_loraine_phone';
+    return aIsPhone === bIsPhone ? 0 : aIsPhone ? -1 : 1;
+  });
+
   renderRecentLocationsDeck(geoLogs);
 
   if (geoLogs.length > 0) {
     const primary = geoLogs[0];
-    updateMapHud(primary.latitude!, primary.longitude!, primary.fullAddress || `${primary.city || ''} ${primary.country || ''}`.trim() || 'Bohol, Philippines');
+    const isPhone = getDeviceKey(primary) === 'device_loraine_phone';
+    updateMapHud(
+      primary.latitude!,
+      primary.longitude!,
+      primary.fullAddress || `${primary.city || ''} ${primary.country || ''}`.trim() || 'Bohol, Philippines',
+      true,
+      isPhone ? '📱 1 Live Phone Pin' : `📍 ${geoLogs.length} Device Pin`
+    );
   }
 
   if (mapType === 'mapbox') {
@@ -729,14 +785,18 @@ function updateVisitorMap(logs: VisitorLog[]) {
       const lat = log.latitude!;
       const lng = log.longitude!;
       const isPrimary = index === 0;
+      const isPhoneDevice = getDeviceKey(log) === 'device_loraine_phone';
 
-      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary);
+      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary, isPhoneDevice);
 
       const popupHtml = `
         <div class="map-popup-header">
           <span>💖</span>
           <span>${escapeHtml(log.user || 'Visitor')}</span>
           <span class="badge-section ${log.section === 'Scrapbook' ? 'scrapbook' : 'space'}">${escapeHtml(log.section)}</span>
+        </div>
+        <div style="font-size:11px;color:#2ecc71;font-weight:700;margin-bottom:4px;">
+          ${isPhoneDevice ? '📱 Verified Single Phone GPS Pin' : '💻 Device Location Pin'}
         </div>
         <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
         <div class="map-popup-meta">
@@ -800,8 +860,9 @@ function updateVisitorMap(logs: VisitorLog[]) {
       const lat = log.latitude!;
       const lng = log.longitude!;
       const isPrimary = index === 0;
+      const isPhoneDevice = getDeviceKey(log) === 'device_loraine_phone';
 
-      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary);
+      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary, isPhoneDevice);
 
       const divIcon = L.divIcon({
         className: 'leaflet-clean-marker',
@@ -816,6 +877,9 @@ function updateVisitorMap(logs: VisitorLog[]) {
           <span>💖</span>
           <span>${escapeHtml(log.user || 'Visitor')}</span>
           <span class="badge-section ${log.section === 'Scrapbook' ? 'scrapbook' : 'space'}">${escapeHtml(log.section)}</span>
+        </div>
+        <div style="font-size:11px;color:#2ecc71;font-weight:700;margin-bottom:4px;">
+          ${isPhoneDevice ? '📱 Verified Single Phone GPS Pin' : '💻 Device Location Pin'}
         </div>
         <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
         <div class="map-popup-meta">

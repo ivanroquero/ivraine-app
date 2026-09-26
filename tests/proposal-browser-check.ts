@@ -270,6 +270,11 @@ async function main() {
     await liveMarker.waitFor({ state: 'visible', timeout: 8000 });
     console.log('PASS: Live radar marker rendered on map');
 
+    // Verify there is strictly ONE single marker for that device on the map (no duplicates/clustering)
+    const markerCount = await adminPage.locator('.live-map-marker-container').count();
+    if (markerCount !== 1) throw new Error(`Expected exactly 1 live pin for the phone device on map, got ${markerCount}`);
+    console.log(`PASS: Verified exactly ONE single live pin on the map for the device (got count: ${markerCount})`);
+
     // Verify radar ping wave exists
     const radarWave = liveMarker.locator('.live-radar-ping').first();
     await radarWave.waitFor({ state: 'attached', timeout: 3000 });
