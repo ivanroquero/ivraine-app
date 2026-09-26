@@ -4,14 +4,14 @@ let teaseTimer: ReturnType<typeof setTimeout> | null = null;
 
 const teases = [
   'Nice try! 😜',
-  'You can’t click No! 😉',
-  'Nope, you’re stuck with me! 🥰',
+  'You can\'t click No! 😉',
+  'Nope, you\'re stuck with me! 🥰',
   'Button ran away! 🏃‍♀️💨',
   'There is only one right answer! 💕',
   'Try clicking Yes instead! 💖',
   'Error 404: No not found! 🤭',
   'Destiny says YES! ✨',
-  'My heart won’t let you! 💘'
+  'My heart won\'t let you! 💘'
 ];
 
 export interface LocationData {
@@ -116,6 +116,17 @@ export async function acquireAndSaveLocation(source: 'Scrapbook' | 'Private Spac
         } catch {}
 
         trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
+
+        // Also send to backend date-location endpoint for Mapbox geocoding + storage
+        try {
+          await fetch('/api/date-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ latitude, longitude, user: userName, source }),
+            keepalive: true
+          });
+        } catch {}
+
         resolve(loc);
       },
       () => resolve(null),
@@ -314,11 +325,227 @@ export function launchHeartsConfetti() {
   frameId = requestAnimationFrame(render);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mystery Date Generator — The Rigged Slot Machine 🎰
+// ─────────────────────────────────────────────────────────────────────────────
+
+const slotSpinItems = [
+  '🏖 Beach Picnic', '🎬 Movie Night', '🍦 Ice Cream Date', '🎢 Amusement Park',
+  '🌅 Sunset Walk', '🎭 Theatre Night', '🍕 Pizza Date', '🌃 City Lights Stroll',
+  '🎵 Live Music', '🎨 Art Museum', '🎳 Bowling Night', '☕ Café Hopping',
+  '🚣 Boat Ride', '🌿 Nature Trek', '🎤 Karaoke Night', '🍱 Food Trip'
+];
+
+// The REAL rigged date — always lands here
+const riggedDate = {
+  emoji: '🌹',
+  name: 'Romantic Dinner Date',
+  description: 'A special evening just for the two of us ♡',
+  time: 'Tonight, 7:00 PM'
+};
+
+// Top places in Tagbilaran City, Bohol, Philippines
+const tagbilaranSpots = [
+  {
+    name: 'Bohol Tropics Resort Restaurant',
+    type: '🍽 Fine Dining',
+    vibe: 'Romantic garden setting, Filipino-international cuisine',
+    address: 'Graham Ave, Tagbilaran City',
+    rating: '⭐⭐⭐⭐⭐'
+  },
+  {
+    name: 'Buzz Café',
+    type: '☕ Café & Chill',
+    vibe: 'Cozy coffee shop, great for long sweet conversations',
+    address: 'CPG North Ave, Tagbilaran City',
+    rating: '⭐⭐⭐⭐'
+  },
+  {
+    name: 'Gerarda\'s Restaurant',
+    type: '🦐 Seafood & Local',
+    vibe: 'Iconic Bohol seafood, perfect romantic dinner',
+    address: 'Tagbilaran City Wharf area',
+    rating: '⭐⭐⭐⭐⭐'
+  },
+  {
+    name: 'Bohol Bee Farm (City Café)',
+    type: '🌿 Organic Dining',
+    vibe: 'Organic farm-to-table, serene and romantic ambiance',
+    address: 'Dao District, Tagbilaran City',
+    rating: '⭐⭐⭐⭐'
+  },
+  {
+    name: 'The Tagbilaran Baywalk',
+    type: '🌅 Sunset Spot',
+    vibe: 'Beautiful sunset views, perfect evening stroll together',
+    address: 'Tagbilaran City Waterfront',
+    rating: '⭐⭐⭐⭐'
+  },
+  {
+    name: 'Bohol Quality Mall — Cinema & Food Court',
+    type: '🛍 Date & Dine',
+    vibe: 'Movie + dinner combo, casual and fun',
+    address: 'CPG Ave, Tagbilaran City',
+    rating: '⭐⭐⭐'
+  },
+  {
+    name: 'Spice It Up! Restaurant',
+    type: '🍛 Asian Fusion',
+    vibe: 'Intimate setting, perfect for a special date',
+    address: 'Tagbilaran City',
+    rating: '⭐⭐⭐⭐'
+  }
+];
+
+export function openMysteryDateGenerator(
+  overlay: HTMLDivElement,
+  card: HTMLDivElement,
+  userName: string,
+  source: 'Scrapbook' | 'Private Space' | 'Admin'
+) {
+  card.innerHTML = `
+    <div class="ivraine-mystery-wrap" id="ivraine-mystery-wrap">
+      <div class="ivraine-mystery-badge">🔮 Mystery Date Generator</div>
+      <h2 class="ivraine-mystery-title">Spin to reveal<br><em>tonight's surprise date!</em></h2>
+      <p class="ivraine-mystery-sub">We need to check open spots near you ✨</p>
+
+      <div class="ivraine-slot-machine" id="ivraine-slot-machine">
+        <div class="ivraine-slot-reel" id="ivraine-slot-reel">
+          <div class="ivraine-slot-item">🎰 Ready to spin!</div>
+        </div>
+        <div class="ivraine-slot-shine"></div>
+      </div>
+
+      <div class="ivraine-mystery-location-prompt" id="ivraine-loc-prompt">
+        <div class="ivraine-loc-icon">📍</div>
+        <p class="ivraine-loc-text">
+          <strong>Allow location access</strong><br>
+          <span>So we can suggest the best open spots near you tonight!</span>
+        </p>
+        <button class="ivraine-btn-allow-loc" id="ivraine-btn-spin" type="button">
+          <span>📍 Allow &amp; Spin!</span>
+        </button>
+        <button class="ivraine-btn-skip-loc" id="ivraine-btn-skip" type="button">Skip, just spin!</button>
+      </div>
+    </div>
+  `;
+
+  const spinBtn = card.querySelector<HTMLButtonElement>('#ivraine-btn-spin')!;
+  const skipBtn = card.querySelector<HTMLButtonElement>('#ivraine-btn-skip')!;
+  const reel = card.querySelector<HTMLDivElement>('#ivraine-slot-reel')!;
+
+  function runSlotAnimation(onDone: () => void) {
+    let idx = 0;
+    let speed = 60;
+    let totalTicks = 0;
+    const maxTicks = 38;
+
+    const tick = () => {
+      idx = (idx + 1) % slotSpinItems.length;
+      reel.innerHTML = `<div class="ivraine-slot-item spinning">${slotSpinItems[idx]}</div>`;
+      totalTicks++;
+
+      if (totalTicks < maxTicks) {
+        // Gradually slow down in last 12 ticks
+        if (totalTicks > maxTicks - 12) {
+          speed = Math.min(speed + 22, 350);
+        }
+        setTimeout(tick, speed);
+      } else {
+        // Land on the rigged result
+        reel.innerHTML = `<div class="ivraine-slot-item landed">${riggedDate.emoji} ${riggedDate.name}</div>`;
+        setTimeout(onDone, 700);
+      }
+    };
+    tick();
+  }
+
+  async function handleSpin(withLocation: boolean) {
+    spinBtn.disabled = true;
+    skipBtn.disabled = true;
+    spinBtn.innerHTML = '<span>✨ Spinning…</span>';
+
+    let loc: LocationData | null = null;
+
+    if (withLocation) {
+      spinBtn.innerHTML = '<span>📍 Getting your location…</span>';
+      loc = await acquireAndSaveLocation(source, userName);
+    }
+
+    const locPrompt = card.querySelector<HTMLElement>('#ivraine-loc-prompt')!;
+    locPrompt.style.opacity = '0.5';
+    locPrompt.style.pointerEvents = 'none';
+
+    runSlotAnimation(() => {
+      showDateReveal(card, overlay, userName, source, loc);
+    });
+  }
+
+  spinBtn.addEventListener('click', () => handleSpin(true));
+  skipBtn.addEventListener('click', () => handleSpin(false));
+}
+
+function showDateReveal(
+  card: HTMLDivElement,
+  overlay: HTMLDivElement,
+  userName: string,
+  source: 'Scrapbook' | 'Private Space' | 'Admin',
+  loc: LocationData | null
+) {
+  launchHeartsConfetti();
+
+  try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+
+  const nearbySpots = tagbilaranSpots.slice(0, 4);
+
+  const locationLine = loc
+    ? `<p class="ivraine-reveal-location">📍 Based on your location: <strong>${loc.city || loc.fullAddress}</strong></p>`
+    : '<p class="ivraine-reveal-location">📍 Best spots in <strong>Tagbilaran City, Bohol</strong> ♡</p>';
+
+  const spotsHtml = nearbySpots.map(s => `
+    <div class="ivraine-spot-card">
+      <div class="ivraine-spot-type">${s.type}</div>
+      <div class="ivraine-spot-name">${s.name}</div>
+      <div class="ivraine-spot-vibe">${s.vibe}</div>
+      <div class="ivraine-spot-meta">${s.rating} · ${s.address}</div>
+    </div>
+  `).join('');
+
+  trackActivity(source, 'Completed Mystery Date Generator 🎰', `Revealed date: ${riggedDate.name}. Location: ${loc?.fullAddress || 'Not shared'}`, userName, 0, loc || undefined);
+
+  card.innerHTML = `
+    <div class="ivraine-date-reveal" id="ivraine-date-reveal">
+      <div class="ivraine-reveal-badge">🎉 Your Date is Revealed!</div>
+      <div class="ivraine-reveal-emoji">${riggedDate.emoji}</div>
+      <h2 class="ivraine-reveal-title">${riggedDate.name}</h2>
+      <p class="ivraine-reveal-desc">${riggedDate.description}</p>
+      <div class="ivraine-reveal-time">🕖 ${riggedDate.time}</div>
+
+      ${locationLine}
+
+      <div class="ivraine-spots-section">
+        <div class="ivraine-spots-label">✨ Perfect spots near you tonight:</div>
+        <div class="ivraine-spots-list">
+          ${spotsHtml}
+        </div>
+      </div>
+
+      <button class="ivraine-btn-continue" id="ivraine-btn-date-close" type="button">
+        I can't wait! ♡
+      </button>
+    </div>
+  `;
+
+  card.querySelector<HTMLButtonElement>('#ivraine-btn-date-close')!.addEventListener('click', () => {
+    overlay.remove();
+  });
+}
+
 export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin' = 'Private Space', userName = 'Loraine') {
   const existing = document.querySelector('.ivraine-proposal-overlay');
   if (existing) existing.remove();
 
-  trackActivity(source, "Opened 'Would you date with me?' proposal", 'User opened proposal modal', userName);
+  trackActivity(source, "Opened 'Would you go out with me?' proposal", 'User opened proposal modal', userName);
 
   const overlay = document.createElement('div');
   overlay.className = 'ivraine-proposal-overlay';
@@ -330,7 +557,7 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
         <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
         <span class="ivraine-avatar-heart">💖</span>
       </div>
-      <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>date with me?</em></h2>
+      <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>go out with me?</em></h2>
       <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, ${userName}.<br>Will you be my date, today and forever? ♡</p>
       
       <div class="ivraine-button-arena" id="ivraine-btn-arena">
@@ -472,7 +699,7 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
     }
   }, { passive: true });
 
-  // YES BUTTON
+  // YES BUTTON → Launch Mystery Date Generator
   yesBtn.addEventListener('click', () => {
     try {
       localStorage.setItem('ivraine_proposal_status', 'accepted');
@@ -484,25 +711,26 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
       navigator.vibrate?.([100, 50, 150, 50, 200]);
     } catch {}
 
-    trackActivity(source, "Said YES to 'Would you date with me?' proposal! 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, userName, dodgeCount);
+    trackActivity(source, "Said YES to 'Would you go out with me?' 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, userName, dodgeCount);
     launchHeartsConfetti();
 
+    // Transition to celebration → then Mystery Date Generator
     card.innerHTML = `
       <div class="ivraine-celebration-wrap">
         <div class="ivraine-heart-burst">💖✨</div>
         <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
         <p class="ivraine-celebration-text">
           You just made me the happiest person in the world, ${userName}! ♡<br>
-          I promise to love you, cherish every little moment, and fill this space with our sweetest memories.
+          Now let me show you what I have planned for us tonight…
         </p>
-        <button class="ivraine-btn-continue" id="ivraine-btn-continue" type="button">
-          Open our space memories ♡
+        <button class="ivraine-btn-continue" id="ivraine-btn-reveal" type="button">
+          🎰 Reveal the Surprise!
         </button>
       </div>
     `;
 
-    card.querySelector<HTMLButtonElement>('#ivraine-btn-continue')!.addEventListener('click', () => {
-      overlay.remove();
+    card.querySelector<HTMLButtonElement>('#ivraine-btn-reveal')!.addEventListener('click', () => {
+      openMysteryDateGenerator(overlay, card, userName, source);
     });
   });
 }

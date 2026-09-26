@@ -90,6 +90,86 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     res.status(201).json({ success: true, ip, log: entry });
   });
+
+  // Mystery Date Generator — Location capture endpoint
+  // Accepts GPS coordinates, reverse-geocodes via Mapbox (falls back to Nominatim),
+  // and saves the exact address to the admin activity log.
+  app.post('/api/date-location', async (req, res) => {
+    const ip = extractClientIp(req);
+    const body = req.body || {};
+    const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) && Math.abs(body.latitude) <= 90 ? body.latitude : null;
+    const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) && Math.abs(body.longitude) <= 180 ? body.longitude : null;
+    const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Visitor';
+    const source = (['Scrapbook', 'Private Space', 'Admin'].includes(body.source) ? body.source : 'Private Space') as 'Scrapbook' | 'Private Space' | 'Admin';
+
+    if (!latitude || !longitude) {
+      res.status(400).json({ error: 'Valid latitude and longitude are required.' });
+      return;
+    }
+
+    let fullAddress = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    let city = '';
+    let country = '';
+    let mapboxPlace = '';
+
+    // Try Mapbox Geocoding API first (requires MAPBOX_SECRET_TOKEN env var)
+    const mapboxToken = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_TOKEN || '';
+    if (mapboxToken) {
+      try {
+        const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxToken}&types=address,place,locality&language=en&limit=1`;
+        const mapboxRes = await fetch(mapboxUrl, { signal: AbortSignal.timeout(5000) });
+        if (mapboxRes.ok) {
+          const mapboxData = await mapboxRes.json() as { features?: Array<{ place_name?: string; context?: Array<{ id?: string; text?: string }> }> };
+          const feature = mapboxData.features?.[0];
+          if (feature) {
+            fullAddress = feature.place_name || fullAddress;
+            const ctx = feature.context || [];
+            city = ctx.find(c => c.id?.startsWith('place.') || c.id?.startsWith('locality.'))?.text || '';
+            country = ctx.find(c => c.id?.startsWith('country.'))?.text || '';
+            mapboxPlace = fullAddress;
+          }
+        }
+      } catch { /* fall through to Nominatim */ }
+    }
+
+    // Fallback: Nominatim (OpenStreetMap) reverse geocoding
+    if (!mapboxPlace) {
+      try {
+        const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
+        const nomRes = await fetch(nomUrl, {
+          headers: { 'Accept-Language': 'en', 'User-Agent': 'ivraine-app/1.0' },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (nomRes.ok) {
+          const nomData = await nomRes.json() as { display_name?: string; address?: Record<string, string> };
+          const addr = nomData.address || {};
+          city = addr['city'] || addr['town'] || addr['municipality'] || addr['village'] || addr['suburb'] || addr['state'] || '';
+          country = addr['country'] || '';
+          fullAddress = nomData.display_name || `${city}, ${country}` || fullAddress;
+        }
+      } catch { /* use raw coords */ }
+    }
+
+    const entry = adminStore.record({
+      ip,
+      section: source,
+      action: 'Date Location Captured \uD83D\uDCCD',
+      details: `Exact Address: ${fullAddress} | Coords: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      user,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '',
+      dodgeCount: 0,
+      latitude,
+      longitude,
+      fullAddress,
+      city,
+      country
+    });
+
+    console.log(`[date-location] ${user} @ ${fullAddress} (${latitude}, ${longitude})`);
+
+    res.status(201).json({ success: true, fullAddress, city, country, latitude, longitude, log: entry });
+  });
+
   app.get('/api/ip', (req, res) => {
     const ip = extractClientIp(req);
     res.json({ ip });
