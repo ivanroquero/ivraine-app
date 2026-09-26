@@ -110,17 +110,31 @@ async function main() {
     if (!celebrationText.toLowerCase().includes('she said yes')) throw new Error('Celebration mismatch');
     console.log('PASS: Proposal acceptance celebration rendered');
 
-    // Verify custom permission card rendered
+    // Verify custom modern permission card rendered
     const customPermCard = desktopPage.locator('.ivraine-loc-card-custom');
     await customPermCard.waitFor({ state: 'visible', timeout: 5000 });
-    console.log('PASS: Custom designed permission card displayed');
+    console.log('PASS: Custom designed modern permission card displayed');
+
+    // Verify text replacements:
+    // Must include "Allow Location so that Google will provide the best places"
+    const cardContent = await customPermCard.innerText();
+    if (!cardContent.includes('Allow Location so that Google will provide the best places')) {
+      throw new Error('Custom prompt missing required Google wording: "Allow Location so that Google will provide the best places"');
+    }
+    // Must NOT reveal "8 places" or "8 romantic places"
+    if (cardContent.includes('8 romantic places') || cardContent.includes('8 handpicked')) {
+      throw new Error('Custom prompt should NOT reveal "8 romantic places" or "8 handpicked"');
+    }
+    // Must NOT have removed phrases
+    if (cardContent.includes('Direct one-tap Google Maps directions') || cardContent.includes('Live location auto-pinned')) {
+      throw new Error('Custom prompt contains old removed phrases');
+    }
+    console.log('PASS: Wording verified (Google recommendation included, 8 places count hidden, old phrases removed)');
 
     // Verify there is only 1 primary action button: #ivraine-btn-prompt-loc
     const promptLocBtn = desktopPage.locator('#ivraine-btn-prompt-loc');
     await promptLocBtn.waitFor({ state: 'visible', timeout: 3000 });
-    const bypassBtnCount = await desktopPage.locator('#ivraine-btn-bypass-loc').count();
-    if (bypassBtnCount !== 0) throw new Error('Expected only 1 primary GPS button, but found extra bypass button');
-    console.log('PASS: Verified only 1 single Phone GPS button on custom permission prompt');
+    console.log('PASS: Verified primary Allow Location button on custom permission prompt');
 
     // Test "Go Back" button from prompt card
     const goBackBtn = desktopPage.locator('#ivraine-btn-go-back-prompt');
@@ -130,19 +144,35 @@ async function main() {
     await restoredYes.waitFor({ state: 'visible', timeout: 3000 });
     console.log('PASS: Go Back button restored proposal question card');
 
-    // Re-open custom prompt and tap the single button to verify automatic bypass unlock
+    // Re-open custom prompt and tap the button WITHOUT geolocation to test strict gating
     await restoredYes.click();
     await desktopPage.locator('#ivraine-btn-prompt-loc').click();
-    const desktopPlaces = desktopPage.locator('.ivraine-places-scroll-list');
-    await desktopPlaces.waitFor({ state: 'visible', timeout: 8000 });
-    console.log('PASS: Single button automatically bypassed GPS rejection and unlocked places list');
+
+    // Verify requesting state appears first
+    const requestingWrap = desktopPage.locator('.ivraine-loc-requesting-wrap');
+    await requestingWrap.waitFor({ state: 'visible', timeout: 3000 });
+
+    // Since geolocation is not permitted on this desktop context, strict gating must show denial screen
+    const deniedWrap = desktopPage.locator('.ivraine-loc-denied-wrap');
+    await deniedWrap.waitFor({ state: 'visible', timeout: 10000 });
+    const deniedText = await desktopPage.locator('.ivraine-loc-denied-desc').innerText();
+    if (!deniedText.includes("won't be able to see the date places and your surprise flower")) {
+      throw new Error(`Denial text mismatch: ${deniedText}`);
+    }
+    // Verify places and flower are NOT open!
+    const deniedPlacesCount = await desktopPage.locator('.ivraine-places-scroll-list').count();
+    const deniedFlowerCount = await desktopPage.locator('#ivraine-d3-flower-container').count();
+    if (deniedPlacesCount !== 0 || deniedFlowerCount !== 0) {
+      throw new Error('Places or flower were opened despite location not being granted!');
+    }
+    console.log('PASS: Strict location gating verified: without permission, places and D3 flower are NOT opened!');
 
     await desktopPage.close();
 
     // ----------------------------------------------------
-    // TEST 2: MOBILE / PHONE TOUCH EVASION & LOCATION UNLOCK
+    // TEST 2: MOBILE / PHONE WITH GEOLOCATION ALLOWED & D3 FLOWER BLOOM
     // ----------------------------------------------------
-    console.log('Testing Mobile Phone Touch Evasion & Location Unlock...');
+    console.log('Testing Mobile Phone Location Unlock & D3 Flower Bloom...');
     const mobileContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
       hasTouch: true,
@@ -177,7 +207,7 @@ async function main() {
     const mobileYesBtn = mobilePage.locator('#ivraine-btn-yes');
     await mobileYesBtn.tap();
 
-    // Tap "Allow Phone Location & Unlock ♡"
+    // Tap "Allow Location to Discover Places & Flower ♡"
     const mobilePromptLocBtn = mobilePage.locator('#ivraine-btn-prompt-loc');
     await mobilePromptLocBtn.waitFor({ state: 'visible', timeout: 5000 });
     await mobilePromptLocBtn.tap();
@@ -185,9 +215,21 @@ async function main() {
     // Verify places scroll list appears!
     const placesList = mobilePage.locator('.ivraine-places-scroll-list');
     await placesList.waitFor({ state: 'visible', timeout: 8000 });
-    console.log('PASS: Places list unlocked with phone location');
+    console.log('PASS: Places list unlocked with phone location granted');
 
-    // Verify all 8 Bohol places requested by user are present
+    // Verify D3 flower is rendered inside #ivraine-d3-flower-container!
+    const d3FlowerSvg = mobilePage.locator('#ivraine-d3-flower-container svg.ivraine-d3-flower-svg');
+    await d3FlowerSvg.waitFor({ state: 'visible', timeout: 5000 });
+    const petalCount = await mobilePage.locator('#ivraine-d3-flower-container path').count();
+    if (petalCount < 10) throw new Error(`Expected at least 10 SVG paths for petals/stem/leaves, got ${petalCount}`);
+    console.log(`PASS: D3 Flower rendered successfully with ${petalCount} SVG floral elements!`);
+
+    // Tap the D3 flower to verify interactive tap particle magic
+    await d3FlowerSvg.tap();
+    await mobilePage.waitForTimeout(300);
+    console.log('PASS: D3 Flower tap interaction verified');
+
+    // Verify all 8 Bohol places requested by user are present without revealing count "8" in text
     const expectedPlaces = [
       'Blood Compact Shrine',
       'Ocean Suites',
@@ -207,7 +249,7 @@ async function main() {
       const match = mobilePage.locator('.ivraine-place-name', { hasText: place });
       await match.first().waitFor({ state: 'visible', timeout: 3000 });
     }
-    console.log('PASS: All 8 Bohol places successfully rendered in proposal reveal');
+    console.log('PASS: All Bohol date places successfully rendered in proposal reveal');
 
     // Verify Google Maps links
     const firstMapUrl = await placeCards.first().getAttribute('href');
@@ -221,8 +263,19 @@ async function main() {
     await mobileContext.close();
 
     // ----------------------------------------------------
-    // TEST 3: ADMIN PANEL AT /admin WITH IP ADDRESS LOGS
+    // TEST 3: PRIVATE SPACE — VERIFY "Open this" IS REMOVED
     // ----------------------------------------------------
+    console.log('Testing Private Space (verifying "Open this" is removed)...');
+    const spacePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await spacePage.goto(`${baseUrl}/index.html?space=true`);
+    await spacePage.waitForTimeout(1000);
+
+    const spacePillCount = await spacePage.locator('.ivraine-proposal-prompt-pill').count();
+    if (spacePillCount !== 0) {
+      throw new Error(`Expected "Open this" pill to be removed from Private Space, but found count: ${spacePillCount}`);
+    }
+    console.log('PASS: Verified "Open this" is completely removed from Private Space!');
+    await spacePage.close();
     console.log('Testing Admin Panel /admin IP Logs...');
     const adminPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await adminPage.goto(`${baseUrl}/admin`);

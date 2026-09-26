@@ -132,14 +132,7 @@ async function loadMore(){if(!info||loadingMore||nextOffset===null||!navigator.o
 function attachSentinel(){const existing=document.querySelector('#scroll-sentinel');if(existing)existing.remove();if(nextOffset===null)return;const sentinel=document.createElement('div');sentinel.id='scroll-sentinel';sentinel.style.cssText='height:1px;margin-top:40px;';const target=document.querySelector('#page-items');if(!target)return;target.after(sentinel);const io=new IntersectionObserver(entries=>{if(entries[0]?.isIntersecting){io.disconnect();sentinel.remove();void loadMore();}},{rootMargin:'200px'});io.observe(sentinel);}
 
 function addProposalPill(){
- if(document.querySelector('.ivraine-proposal-prompt-pill')) return;
- const pill=document.createElement('button');
- pill.className='ivraine-proposal-prompt-pill';
- pill.type='button';
- pill.innerHTML='<span>💌</span><span>Open this</span>';
- pill.setAttribute('aria-label','Open proposal surprise');
- pill.onclick=()=>openProposalModal('Private Space', info?.member.display_name||'Loraine');
- document.body.appendChild(pill);
+  // Removed from Private Space per user request
 }
 
 async function boot(){const gen=++generation;
@@ -149,7 +142,7 @@ async function boot(){const gen=++generation;
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);addProposalPill();void checkAndPromptPermissions('Private Space', info.member.display_name);}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);void checkAndPromptPermissions('Private Space', info.member.display_name);}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 
