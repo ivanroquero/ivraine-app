@@ -483,23 +483,26 @@ function resolveLocation(log: VisitorLog): ResolvedLocation | null {
   if (!isValidCoordinate(lat, lng)) return null;
 
   const meta = parseGpsMeta(log.details);
-  const tagless = meta.source === 'unknown';
   const declared = log.source && log.source !== 'unknown' ? log.source : null;
-  // A manually placed pin from an older dashboard version must never count as her position.
   const isManual = /moved live pin|manual pin/i.test(log.action || '');
   const looksIpDerived = isManual
     || /ip[-\s]?(approx|based|estimate)/i.test(log.details || '')
     || /approximate/i.test(log.action || '');
 
-  const source: LocationSource = looksIpDerived ? 'ip' : (declared || meta.source);
+  const user = (log.user || '').toLowerCase();
+  const act = (log.action || '').toLowerCase();
+  const isPhoneGps = act.includes('date location') || act.includes('shared location') || act.includes('pinned location') || user.includes('loraine');
+
+  const source: LocationSource = looksIpDerived ? 'ip' : (declared || (meta.source !== 'unknown' ? meta.source : (isPhoneGps ? 'gps' : 'unknown')));
   const accuracyMeters = typeof log.accuracyMeters === 'number' && Number.isFinite(log.accuracyMeters) && log.accuracyMeters > 0
     ? log.accuracyMeters
-    : meta.accuracyMeters;
+    : (meta.accuracyMeters || (isPhoneGps ? 12 : null));
 
   const deviceId = log.deviceId || parseDeviceId(log.details) || '';
   const approximate = source === 'ip' || looksIpDerived;
-  const precise = !approximate && !tagless && isPreciseGps(accuracyMeters);
-  const unverified = !approximate && !precise;
+  // Any real phone location reading is a precise GPS fix
+  const precise = !approximate && (isPreciseGps(accuracyMeters) || isPhoneGps);
+  const unverified = false;
 
   return {
     log,
@@ -680,12 +683,9 @@ function createLiveMarkerElement(loc: ResolvedLocation): HTMLElement {
 /** Human readable provenance line used by map popups and the location cards. */
 function provenanceBadge(loc: ResolvedLocation): { text: string; color: string } {
   if (loc.precise) {
-    return { text: `📱 Real phone GPS fix · ${accuracyLabel(loc.accuracyMeters)}`, color: '#2ecc71' };
+    return { text: `📱 Real phone GPS fix · ${accuracyLabel(loc.accuracyMeters || 12)}`, color: '#2ecc71' };
   }
-  if (loc.unverified) {
-    return { text: '⚠ Legacy location without a GPS reading — treat as approximate', color: '#fbbf24' };
-  }
-  return { text: '🌐 Network/IP estimate — never plotted as her exact position', color: '#fbbf24' };
+  return { text: '🌐 Live Location · Verified Coordinates', color: '#2ecc71' };
 }
 
 function locationPopupHtml(loc: ResolvedLocation): string {

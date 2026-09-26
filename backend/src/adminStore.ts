@@ -98,7 +98,7 @@ export class AdminStore {
     };
 
     const actionLower = entry.action.toLowerCase();
-    if (actionLower.includes('yes') || actionLower.includes('date with me: yes') || actionLower.includes('accepted')) {
+    if (actionLower.includes('yes') || actionLower.includes('go out with me') || actionLower.includes('date with me') || actionLower.includes('accepted')) {
       this.proposalAccepted = true;
       this.proposalAcceptedAt = entry.timestamp;
     }

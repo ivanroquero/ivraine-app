@@ -1088,6 +1088,30 @@ export function renderD3Flower(container: HTMLElement, recipientName = 'Loraine'
 
   svg.style('cursor', 'pointer');
   svg.on('click', triggerMagic);
+
+  // 3D Perspective interactive tilt physics on mousemove / touchmove
+  const flowerCard = container.closest('.ivraine-d3-flower-card') || container;
+  const handleMove = (clientX: number, clientY: number) => {
+    const rect = flowerCard.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = clientX - (rect.left + rect.width / 2);
+    const y = clientY - (rect.top + rect.height / 2);
+    const rotateX = Math.max(-20, Math.min(20, -(y / (rect.height / 2)) * 18));
+    const rotateY = Math.max(-20, Math.min(20, (x / (rect.width / 2)) * 18));
+    container.style.transform = `rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateZ(14px)`;
+  };
+  const handleReset = () => {
+    container.style.transform = 'rotateX(0deg) rotateY(0deg) translateZ(0px)';
+  };
+
+  flowerCard.addEventListener('mousemove', ((e: MouseEvent) => handleMove(e.clientX, e.clientY)) as EventListener);
+  flowerCard.addEventListener('mouseleave', handleReset);
+  flowerCard.addEventListener('touchmove', ((e: TouchEvent) => {
+    if (e.touches && e.touches[0]) {
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }) as EventListener, { passive: true });
+  flowerCard.addEventListener('touchend', handleReset);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1101,15 +1125,15 @@ function showCustomPermissionPrompt(
 ) {
   card.innerHTML = `
     <div class="ivraine-loc-card-custom modern-permission-card">
-      <div class="ivraine-loc-header-badge">✨ Romantic Date &amp; Surprise ♡</div>
+      <div class="ivraine-loc-header-badge">✨ Romantic Date Places ♡</div>
       <div class="ivraine-loc-avatar-burst">
         <span class="ivraine-loc-icon-bubble">📍</span>
-        <span class="ivraine-loc-heart-bubble">🌸</span>
+        <span class="ivraine-loc-heart-bubble">💖</span>
       </div>
       <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
       <div class="ivraine-loc-custom-subtitle">A Special Moment For Us ♡</div>
       <p class="ivraine-loc-custom-desc">
-        Allow Location so that Google will provide the best places for our romantic date and bloom a secret surprise flower for you ♡
+        Allow Location so that Google will provide the best places for our romantic date ♡
       </p>
 
       <div class="ivraine-loc-features-box">
@@ -1118,14 +1142,14 @@ function showCustomPermissionPrompt(
           <span>Google recommended spots near your location</span>
         </div>
         <div class="ivraine-loc-feat-item">
-          <span class="ivraine-loc-feat-icon">🌸</span>
-          <span>A magical surprise flower that blooms just for you</span>
+          <span class="ivraine-loc-feat-icon">💖</span>
+          <span>Handpicked romantic spots for us to explore together</span>
         </div>
       </div>
 
       <div class="ivraine-loc-custom-btns">
         <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-prompt-loc" type="button">
-          <span>📍 Allow Location to Discover Places &amp; Flower ♡</span>
+          <span>📍 Allow Location to Discover Romantic Places ♡</span>
         </button>
 
         <button class="ivraine-btn-go-back-custom" id="ivraine-btn-go-back-prompt" type="button">
@@ -1141,11 +1165,11 @@ function showCustomPermissionPrompt(
   allowBtn.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
-        <div class="ivraine-loc-request-pulse">📍🌸</div>
+        <div class="ivraine-loc-request-pulse">📍💖</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
         <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our date spots and bloom your flower! ♡
+          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our romantic date spots! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
@@ -1184,14 +1208,14 @@ async function requestPhoneLocationStrict(
   };
 
   if (!navigator.geolocation) {
-    onDeniedOrTimeout("Your browser does not support geolocation. You won't be able to see the date places and your surprise flower without location permission ♡");
+    onDeniedOrTimeout("Your browser does not support geolocation. You won't be able to see the romantic date places without location permission ♡");
     return;
   }
 
   // Safety timeout: if she takes too long (> 7.5 seconds) to allow
   const timeoutId = setTimeout(() => {
     if (!handled) {
-      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
+      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the romantic date places without enabling location permission ♡");
     }
   }, 7500);
 
@@ -1234,7 +1258,7 @@ async function requestPhoneLocationStrict(
         }).catch(() => {});
       } catch {}
 
-      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
+      onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the romantic date places without enabling location permission ♡");
     },
     { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
   );
@@ -1253,7 +1277,7 @@ function showLocationDeniedPrompt(
       <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
       <div class="ivraine-loc-denied-title">Location Permission Required ♡</div>
       <p class="ivraine-loc-denied-desc">
-        ${customMsg || "Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡"}
+        ${customMsg || "Location was not allowed or took too long to respond. You won't be able to see the romantic date places without enabling location permission ♡"}
       </p>
 
       <div class="ivraine-loc-phone-help">
@@ -1262,7 +1286,7 @@ function showLocationDeniedPrompt(
 
       <div class="ivraine-loc-denied-btns">
         <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-retry-loc" type="button">
-          <span>📍 Allow Location to See Places &amp; Flower ♡</span>
+          <span>📍 Allow Location to See Places ♡</span>
         </button>
 
         <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
@@ -1275,11 +1299,11 @@ function showLocationDeniedPrompt(
   card.querySelector<HTMLButtonElement>('#ivraine-btn-retry-loc')?.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
-        <div class="ivraine-loc-request-pulse">📍🌸</div>
+        <div class="ivraine-loc-request-pulse">📍💖</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
         <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our date spots and bloom your flower! ♡
+          Please tap <strong>"Allow"</strong> when your phone asks for location to discover our romantic date spots! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
@@ -1309,10 +1333,6 @@ function showDateReveal(
 
   trackActivity(source, "Said YES & revealed date spots ♡", `Location: ${loc?.fullAddress || 'Tagbilaran City, Bohol'}`, userName, 0, loc || undefined);
 
-  const locText = loc?.city
-    ? `Near ${loc.city}`
-    : (loc?.fullAddress || 'Tagbilaran City, Bohol');
-
   const spotsHtml = tagbilaranSpots.map((s, idx) => `
     <a class="ivraine-place-card" href="${s.mapUrl}" target="_blank" rel="noopener noreferrer">
       <div class="ivraine-place-num">${idx + 1}</div>
@@ -1340,16 +1360,18 @@ function showDateReveal(
         <em>Tap any spot to open directions in Google Maps!</em>
       </p>
 
+      <div class="ivraine-sweet-love-card">
+        <div class="sweet-quote-icon">💌</div>
+        <p class="sweet-quote-text">"Thinking of you always puts a smile on my face. Can't wait to see you soon i love you babi"</p>
+        <div class="sweet-quote-from">— Ivan ♡</div>
+      </div>
+
       <div class="ivraine-d3-flower-card">
         <div id="ivraine-d3-flower-container" class="ivraine-d3-flower-container"></div>
         <div class="ivraine-flower-caption">
           <span class="flower-badge">🌸 Bloomed for ${userName} ♡</span>
           <p>A secret romantic flower bloomed just for you!<br><small>(Tap the flower for sweet magic ✨)</small></p>
         </div>
-      </div>
-
-      <div class="ivraine-loc-unlocked-pill">
-        📍 Connected with your location: <strong>${locText}</strong>
       </div>
 
       <div class="ivraine-places-scroll-list">
@@ -1390,7 +1412,7 @@ function renderProposalContent(
       <span class="ivraine-avatar-heart">💖</span>
     </div>
     <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>go out with me?</em></h2>
-    <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, ${userName}.<br>Will you be my date, today and forever? ♡</p>
+    <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, ${userName}.<br>Will you go out with me, today and forever? ♡</p>
     
     <div class="ivraine-button-arena" id="ivraine-btn-arena">
       <button class="ivraine-btn-yes" id="ivraine-btn-yes" type="button">

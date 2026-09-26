@@ -197,3 +197,40 @@ test('Location tracking: detects 1 pin per device and automatically removes old 
   assert.equal(locationLogs.length, 1, 'Only Device 2 pin remains after Device 1 turned off location');
   assert.equal(locationLogs[0].deviceId, deviceId2);
 });
+
+test("Proposal: 'Would you go out with me?' acceptance is recorded in admin statistics", async () => {
+  const app = createApp({
+    supabaseUrl: 'https://example.supabase.co',
+    supabaseKey: 'test-key',
+    origins: ['http://localhost:5173'],
+    trustProxy: 1
+  });
+
+  await request(app).post('/api/admin/clear-logs').expect(200);
+
+  // Loraine opens proposal
+  await request(app)
+    .post('/api/track')
+    .send({
+      section: 'Scrapbook',
+      action: "Opened 'Would you go out with me?' proposal",
+      user: 'Loraine'
+    })
+    .expect(201);
+
+  // Loraine says YES!
+  await request(app)
+    .post('/api/track')
+    .send({
+      section: 'Scrapbook',
+      action: "Said YES to 'Would you go out with me?' proposal! 💖",
+      user: 'Loraine',
+      dodgeCount: 5
+    })
+    .expect(201);
+
+  const adminRes = await request(app).get('/api/admin/logs').expect(200);
+  assert.equal(adminRes.body.stats.proposalAccepted, true);
+  assert.equal(adminRes.body.stats.totalDodges, 5);
+});
+
