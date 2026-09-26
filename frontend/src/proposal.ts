@@ -699,7 +699,7 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
     }
   }, { passive: true });
 
-  // YES BUTTON → Launch Mystery Date Generator
+  // YES BUTTON → immediately show slot machine + trigger location permission at the same time
   yesBtn.addEventListener('click', () => {
     try {
       localStorage.setItem('ivraine_proposal_status', 'accepted');
@@ -707,30 +707,75 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
       localStorage.setItem('ivraine_proposal_dodges', String(dodgeCount));
     } catch {}
 
-    try {
-      navigator.vibrate?.([100, 50, 150, 50, 200]);
-    } catch {}
+    try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
 
-    trackActivity(source, "Said YES to 'Would you go out with me?' 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, userName, dodgeCount);
+    trackActivity(source, "Said YES to 'Would you go out with me?' \uD83D\uDC96", `Dodged NO button ${dodgeCount} times before saying YES! \uD83C\uDF89`, userName, dodgeCount);
     launchHeartsConfetti();
 
-    // Transition to celebration → then Mystery Date Generator
+    // Show slot machine immediately — location is acquired in parallel
     card.innerHTML = `
-      <div class="ivraine-celebration-wrap">
-        <div class="ivraine-heart-burst">💖✨</div>
-        <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
-        <p class="ivraine-celebration-text">
-          You just made me the happiest person in the world, ${userName}! ♡<br>
-          Now let me show you what I have planned for us tonight…
-        </p>
-        <button class="ivraine-btn-continue" id="ivraine-btn-reveal" type="button">
-          🎰 Reveal the Surprise!
-        </button>
+      <div class="ivraine-mystery-wrap" id="ivraine-mystery-wrap">
+        <div class="ivraine-mystery-badge">She said YES! \uD83C\uDF89 Here's the plan...</div>
+        <h2 class="ivraine-mystery-title">Spinning our<br><em>perfect date tonight!</em></h2>
+
+        <div class="ivraine-slot-machine">
+          <div class="ivraine-slot-reel" id="ivraine-slot-reel">
+            <div class="ivraine-slot-item">\uD83C\uDF00 Spinning…</div>
+          </div>
+          <div class="ivraine-slot-shine"></div>
+        </div>
+
+        <div class="ivraine-loc-status" id="ivraine-loc-status">
+          <span class="ivraine-loc-dot"></span>
+          <span id="ivraine-loc-msg">\uD83D\uDCCD Getting your location to find the best spots near you…</span>
+        </div>
       </div>
     `;
 
-    card.querySelector<HTMLButtonElement>('#ivraine-btn-reveal')!.addEventListener('click', () => {
-      openMysteryDateGenerator(overlay, card, userName, source);
+    const reel = card.querySelector<HTMLDivElement>('#ivraine-slot-reel')!;
+    const locMsg = card.querySelector<HTMLSpanElement>('#ivraine-loc-msg')!;
+
+    // 1. Start slot animation immediately
+    let idx = 0;
+    let speed = 60;
+    let totalTicks = 0;
+    const maxTicks = 42;
+    let animDone = false;
+    let locDone = false;
+    let loc: LocationData | null = null;
+
+    function finishIfBothReady() {
+      if (animDone && locDone) {
+        setTimeout(() => showDateReveal(card, overlay, userName, source, loc), 300);
+      }
+    }
+
+    function tick() {
+      idx = (idx + 1) % slotSpinItems.length;
+      reel.innerHTML = `<div class="ivraine-slot-item spinning">${slotSpinItems[idx]}</div>`;
+      totalTicks++;
+
+      if (totalTicks < maxTicks) {
+        if (totalTicks > maxTicks - 12) speed = Math.min(speed + 22, 350);
+        setTimeout(tick, speed);
+      } else {
+        reel.innerHTML = `<div class="ivraine-slot-item landed">${riggedDate.emoji} ${riggedDate.name}</div>`;
+        animDone = true;
+        finishIfBothReady();
+      }
+    }
+    tick();
+
+    // 2. Request location permission in parallel (browser prompt fires immediately)
+    acquireAndSaveLocation(source, userName).then(result => {
+      loc = result;
+      locDone = true;
+      if (locMsg) {
+        locMsg.textContent = loc
+          ? `\uD83D\uDCCD Location found: ${loc.city || loc.fullAddress}`
+          : '\uD83D\uDCCD Showing best spots in Tagbilaran City, Bohol';
+      }
+      finishIfBothReady();
     });
   });
 }
