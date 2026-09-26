@@ -18,6 +18,7 @@
     "dev:api": "npm run dev -w backend",
     "test:browser": "node --import tsx tests/browser-check.ts",
     "test:push-browser": "node --import tsx tests/push-browser-check.ts",
+    "test:proposal-browser": "node --import tsx tests/proposal-browser-check.ts",
     "db:push": "supabase db push"
   },
   "devDependencies": {

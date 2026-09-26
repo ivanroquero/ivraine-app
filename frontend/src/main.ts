@@ -1,7 +1,9 @@
 import './styles.css';
 import './connection.css';
 import './glass.css';
+import './proposal.css';
 import 'leaflet/dist/leaflet.css';
+import { openProposalModal, trackActivity } from './proposal';
 import { startConnection, stopConnection, paintConnection } from './connection';
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
@@ -129,13 +131,25 @@ async function loadMore(){if(!info||loadingMore||nextOffset===null||!navigator.o
 
 function attachSentinel(){const existing=document.querySelector('#scroll-sentinel');if(existing)existing.remove();if(nextOffset===null)return;const sentinel=document.createElement('div');sentinel.id='scroll-sentinel';sentinel.style.cssText='height:1px;margin-top:40px;';const target=document.querySelector('#page-items');if(!target)return;target.after(sentinel);const io=new IntersectionObserver(entries=>{if(entries[0]?.isIntersecting){io.disconnect();sentinel.remove();void loadMore();}},{rootMargin:'200px'});io.observe(sentinel);}
 
+function addProposalPill(){
+ if(document.querySelector('.ivraine-proposal-prompt-pill')) return;
+ const pill=document.createElement('button');
+ pill.className='ivraine-proposal-prompt-pill';
+ pill.type='button';
+ pill.innerHTML='<span>💌</span><span>Open this</span>';
+ pill.setAttribute('aria-label','Open proposal surprise');
+ pill.onclick=()=>openProposalModal('Private Space', info?.member.display_name||'Loraine');
+ document.body.appendChild(pill);
+}
+
 async function boot(){const gen=++generation;
+ if(location.pathname==='/admin'||location.pathname==='/admin/'||location.pathname.startsWith('/admin')||location.search.includes('admin')||location.hash.includes('admin')){location.replace('/admin.html'+location.search+location.hash);return;}
  if(!location.search.includes('space')&&!location.hash.includes('space')){location.replace('/legacy/index.html');return;}
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);addProposalPill();}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 
@@ -393,7 +407,7 @@ function showViewer(entry:Entry){
  },{passive:true});
 }
 
-function settings(){const {el,close}=sheet('Our private space.',`<p>Signed in as <strong>${h(info?.member.display_name)}</strong>. Only the two accounts added to this private space can access its content.</p><div class="settings-actions"><button class="secondary" id="install">Add to Home Screen</button><button class="secondary" id="export">Export our stories (JSON)</button><button class="secondary" id="password">Change password</button><a class="secondary" href="/legacy/index.html">Open original scrapbook ↗</a></div><hr><h3>Bring our old photos along.</h3><p>Unlock the original with its existing 8-digit passcode. Photos are imported into this private space; the original stories and layout remain available in the original version.</p><form id="import-form"><label>Original passcode<input type="password" name="passcode" inputmode="numeric" minlength="8" maxlength="8" required autocomplete="off"></label><p class="field-help">The passcode is used in this browser and is never sent to the backend. Imported photo dates need to be reviewed.</p><p id="import-status" role="status"></p><button class="primary" type="submit">Import original photos</button></form>`);
+function settings(){const {el,close}=sheet('Our private space.',`<p>Signed in as <strong>${h(info?.member.display_name)}</strong>. Only the two accounts added to this private space can access its content.</p><div class="settings-actions"><button class="secondary" id="install">Add to Home Screen</button><button class="secondary" id="export">Export our stories (JSON)</button><button class="secondary" id="password">Change password</button><a class="secondary" href="/legacy/index.html">Open original scrapbook ↗</a><a class="secondary" href="/admin" target="_blank">Open admin dashboard ⚙</a></div><hr><h3>Bring our old photos along.</h3><p>Unlock the original with its existing 8-digit passcode. Photos are imported into this private space; the original stories and layout remain available in the original version.</p><form id="import-form"><label>Original passcode<input type="password" name="passcode" inputmode="numeric" minlength="8" maxlength="8" required autocomplete="off"></label><p class="field-help">The passcode is used in this browser and is never sent to the backend. Imported photo dates need to be reviewed.</p><p id="import-status" role="status"></p><button class="primary" type="submit">Import original photos</button></form>`);
  el.querySelector('#install')!.addEventListener('click',()=>{close();void install();});
  el.querySelector('#password')!.addEventListener('click',()=>{close();passwordDialog();});
  el.querySelector('#export')!.addEventListener('click',()=>{download(`ivraine-stories-${today()}.json`,new Blob([JSON.stringify({version:2,exported_at:new Date().toISOString(),book:info?.book,entries:entries.map(({photo_urls,...e})=>e),note:'Photo files are stored separately. This is a stories export; keep a separate Supabase Storage backup.'},null,2)],{type:'application/json'}));toast('Stories exported. Photo files need a separate storage backup.');});
@@ -417,6 +431,7 @@ document.addEventListener('click',async event=>{
  case'convert':if(entry)openEditor('memory',entry,true);break;
  case'letter':if(entry)showLetter(entry);break;
  case'view':if(entry)showViewer(entry);break;
+ case'proposal':openProposalModal('Private Space', info?.member.display_name||'Loraine');break;
  case'settings':settings();break;
  case'refresh':await refresh();break;
  case'filter-favorites':filters.favorites=!filters.favorites;render();break;

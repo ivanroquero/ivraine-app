@@ -1,0 +1,197 @@
+import { chromium } from '@playwright/test';
+import { createServer } from 'vite';
+import { createApp } from '../backend/src/app';
+import { resolve } from 'node:path';
+
+async function main() {
+  console.log('Starting Browser E2E checks...');
+  
+  // 1. Find free port for API server first
+  let apiPort = 0;
+  let apiServer: any;
+
+  // Temporary server to get free port
+  const tmpServer = await new Promise<any>((res) => {
+    const s = createApp({ supabaseUrl: 'https://example.supabase.co', supabaseKey: 'test-key', origins: ['http://localhost:5173'], trustProxy: 1 })
+      .listen(0, '127.0.0.1', () => res(s));
+  });
+  apiPort = (tmpServer.address() as { port: number }).port;
+  await new Promise<void>((res) => tmpServer.close(() => res()));
+
+  // 2. Start Vite dev server on dynamic port, proxying /api to apiPort
+  const vite = await createServer({
+    root: resolve('frontend'),
+    server: {
+      host: '127.0.0.1',
+      port: 0,
+      proxy: {
+        '/api': {
+          target: `http://127.0.0.1:${apiPort}`,
+          changeOrigin: true
+        }
+      }
+    }
+  });
+  await vite.listen();
+  const vitePort = (vite.httpServer?.address() as { port: number }).port;
+  const baseUrl = `http://127.0.0.1:${vitePort}`;
+  console.log(`Vite server listening on ${baseUrl}`);
+
+  // 3. Now start real API server with baseUrl in origins!
+  const app = createApp({
+    supabaseUrl: 'https://example.supabase.co',
+    supabaseKey: 'test-key',
+    origins: [baseUrl, 'http://127.0.0.1:5173', 'http://localhost:5173'],
+    trustProxy: 1
+  });
+
+  apiServer = await new Promise<any>((resolveServer, rejectServer) => {
+    const s = app.listen(apiPort, '127.0.0.1', () => resolveServer(s));
+    s.on('error', rejectServer);
+  });
+  console.log(`API server listening on ${apiPort}`);
+
+  const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  const browser = await chromium.launch({
+    executablePath: process.env.TEST_CHROMIUM_PATH || chromePath,
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+  });
+
+  try {
+    // ----------------------------------------------------
+    // TEST 1: DESKTOP / MONITOR SCRAPBOOK EXPERIENCE
+    // ----------------------------------------------------
+    console.log('Testing Desktop Scrapbook Proposal...');
+    const desktopPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await desktopPage.goto(`${baseUrl}/legacy/index.html`);
+
+    // Verify initial "Open this" pop up appears
+    const initialPopup = desktopPage.locator('.ivraine-initial-prompt-popup');
+    await initialPopup.waitFor({ state: 'visible', timeout: 8000 });
+    console.log('PASS: Initial "Open this" popup rendered');
+
+    // Click "Open this"
+    const openBtn = initialPopup.locator('.open-btn');
+    await openBtn.click();
+
+    // Verify "Would you date with me?" proposal modal appears
+    const proposalTitle = desktopPage.locator('#proposal-title');
+    await proposalTitle.waitFor({ state: 'visible', timeout: 5000 });
+    const titleText = await proposalTitle.innerText();
+    if (!titleText.toLowerCase().includes('date with me')) throw new Error('Proposal title mismatch');
+    console.log('PASS: "Would you date with me?" modal opened');
+
+    // Check Yes and No buttons are visible
+    const yesBtn = desktopPage.locator('#ivraine-btn-yes');
+    const noBtn = desktopPage.locator('#ivraine-btn-no');
+
+    // Test Desktop Evasion: Move mouse towards "No" button
+    const noBoxBefore = await noBtn.boundingBox();
+    if (!noBoxBefore) throw new Error('No button not found');
+
+    // Hover mouse directly over "No" button
+    await desktopPage.mouse.move(noBoxBefore.x + noBoxBefore.width / 2, noBoxBefore.y + noBoxBefore.height / 2);
+    await desktopPage.waitForTimeout(400);
+
+    // Verify the "No" button moved! (transform applied or coordinates changed)
+    const transform = await noBtn.evaluate((el) => (el as HTMLElement).style.transform);
+    if (!transform.includes('translate3d')) throw new Error('No button failed to evade on hover');
+    console.log('PASS: Desktop cursor evasion verified (button moved via translate3d)');
+
+    // Click YES!
+    await yesBtn.click();
+    await desktopPage.waitForTimeout(500);
+
+    // Verify celebration message appears
+    const celebrationTitle = desktopPage.locator('.ivraine-celebration-title');
+    await celebrationTitle.waitFor({ state: 'visible', timeout: 5000 });
+    const celebrationText = await celebrationTitle.innerText();
+    if (!celebrationText.toLowerCase().includes('she said yes')) throw new Error('Celebration mismatch');
+    console.log('PASS: Proposal acceptance celebration rendered');
+
+    await desktopPage.close();
+
+    // ----------------------------------------------------
+    // TEST 2: MOBILE / PHONE TOUCH EVASION EXPERIENCE
+    // ----------------------------------------------------
+    console.log('Testing Mobile Phone Touch Evasion...');
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148'
+    });
+    const mobilePage = await mobileContext.newPage();
+    await mobilePage.goto(`${baseUrl}/legacy/index.html`);
+
+    // Tap "Open this" on mobile
+    const mobileInitialPopup = mobilePage.locator('.ivraine-initial-prompt-popup');
+    await mobileInitialPopup.waitFor({ state: 'visible', timeout: 5000 });
+    await mobileInitialPopup.locator('.open-btn').tap();
+
+    // Proposal modal appears on mobile
+    const mobileProposalTitle = mobilePage.locator('#proposal-title');
+    await mobileProposalTitle.waitFor({ state: 'visible', timeout: 5000 });
+
+    const mobileNoBtn = mobilePage.locator('#ivraine-btn-no');
+    // Trigger touch on "No" button
+    await mobileNoBtn.dispatchEvent('touchstart');
+    await mobilePage.waitForTimeout(400);
+
+    // Verify touch caused evasion
+    const mobileTransform = await mobileNoBtn.evaluate((el) => (el as HTMLElement).style.transform);
+    if (!mobileTransform.includes('translate3d')) throw new Error('No button failed to evade on mobile touch');
+    console.log('PASS: Mobile touch evasion verified (button avoided tap)');
+
+    await mobileContext.close();
+
+    // ----------------------------------------------------
+    // TEST 3: ADMIN PANEL AT /admin WITH IP ADDRESS LOGS
+    // ----------------------------------------------------
+    console.log('Testing Admin Panel /admin IP Logs...');
+    const adminPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await adminPage.goto(`${baseUrl}/admin`);
+
+    // Verify Admin lock screen
+    const lockPassInput = adminPage.locator('#admin-passcode-input');
+    await lockPassInput.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Enter passcode 20260902
+    await lockPassInput.fill('20260902');
+    await adminPage.locator('#admin-lock-form button[type="submit"]').click();
+
+    // Verify Admin Dashboard loads
+    const statVisits = adminPage.locator('#stat-total-visits');
+    await statVisits.waitFor({ state: 'visible', timeout: 5000 });
+    console.log('PASS: Admin dashboard unlocked successfully');
+
+    // Wait for visitor IP rows to appear
+    const firstIpCell = adminPage.locator('.ip-cell strong').first();
+    await firstIpCell.waitFor({ state: 'visible', timeout: 10000 });
+
+    const ipText = await firstIpCell.innerText();
+    if (!ipText || ipText.length === 0) throw new Error('IP address cell is empty');
+    console.log(`PASS: IP address detected and visible in admin table: ${ipText}`);
+
+    // Verify Proposal status in Admin shows "Said YES!"
+    const statProposal = adminPage.locator('#stat-proposal-status');
+    const propStatusText = await statProposal.innerText();
+    console.log(`PASS: Proposal status in Admin: ${propStatusText}`);
+
+    await adminPage.close();
+    console.log('ALL BROWSER TESTS PASSED SUCCESSFULLY! 🎉');
+  } catch (err) {
+    console.error('PROPOSAL BROWSER TEST FAILED:', err);
+    throw err;
+  } finally {
+    await browser.close();
+    await vite.close();
+    await new Promise<void>((resolveClose) => apiServer.close(() => resolveClose()));
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

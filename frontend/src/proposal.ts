@@ -1,0 +1,323 @@
+// Proposal modal with evasive "No" button and confetti celebration
+let dodgeCount = 0;
+let teaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+const teases = [
+  'Nice try! 😜',
+  'You can’t click No! 😉',
+  'Nope, you’re stuck with me! 🥰',
+  'Button ran away! 🏃‍♀️💨',
+  'There is only one right answer! 💕',
+  'Try clicking Yes instead! 💖',
+  'Error 404: No not found! 🤭',
+  'Destiny says YES! ✨',
+  'My heart won’t let you! 💘'
+];
+
+export function trackActivity(section: 'Scrapbook' | 'Private Space' | 'Admin', action: string, details = '', user = '', dodges = 0) {
+  try {
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        section,
+        action,
+        details,
+        user,
+        dodgeCount: dodges
+      }),
+      keepalive: true
+    }).catch(() => {});
+  } catch {}
+}
+
+export function launchHeartsConfetti() {
+  let canvas = document.getElementById('ivraine-confetti-canvas') as HTMLCanvasElement | null;
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'ivraine-confetti-canvas';
+    document.body.appendChild(canvas);
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  let width = canvas.width = window.innerWidth;
+  let height = canvas.height = window.innerHeight;
+
+  const onResize = () => {
+    if (!canvas) return;
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  };
+  window.addEventListener('resize', onResize);
+
+  const particles: Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    size: number;
+    color: string;
+    emoji: string | null;
+    rotation: number;
+    rotationSpeed: number;
+    gravity: number;
+    opacity: number;
+  }> = [];
+
+  const colors = ['#e83e8c', '#ff6b81', '#ff758c', '#ffd166', '#a29bfe', '#ff9ff3'];
+  const emojis = ['❤️', '💖', '💕', '✨', '🌸'];
+
+  for (let i = 0; i < 90; i++) {
+    particles.push({
+      x: width / 2 + (Math.random() - 0.5) * 100,
+      y: height / 2 + (Math.random() - 0.5) * 60,
+      vx: (Math.random() - 0.5) * 16,
+      vy: -Math.random() * 14 - 4,
+      size: Math.random() * 16 + 10,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      emoji: Math.random() > 0.4 ? emojis[Math.floor(Math.random() * emojis.length)] : null,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 10,
+      gravity: 0.35,
+      opacity: 1
+    });
+  }
+
+  let frameId: number;
+  const startTime = Date.now();
+
+  function render() {
+    if (!ctx || !canvas) return;
+    ctx.clearRect(0, 0, width, height);
+    let alive = false;
+
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += p.gravity;
+      p.rotation += p.rotationSpeed;
+      p.opacity -= 0.007;
+
+      if (p.opacity > 0 && p.y < height + 40) {
+        alive = true;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+
+        if (p.emoji) {
+          ctx.font = `${p.size}px sans-serif`;
+          ctx.fillText(p.emoji, -p.size / 2, p.size / 2);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        }
+        ctx.restore();
+      }
+    }
+
+    if (alive && Date.now() - startTime < 6000) {
+      frameId = requestAnimationFrame(render);
+    } else {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', onResize);
+      canvas.remove();
+    }
+  }
+
+  frameId = requestAnimationFrame(render);
+}
+
+export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin' = 'Private Space', userName = 'Loraine') {
+  const existing = document.querySelector('.ivraine-proposal-overlay');
+  if (existing) existing.remove();
+
+  trackActivity(source, "Opened 'Would you date with me?' proposal", 'User opened proposal modal', userName);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ivraine-proposal-overlay';
+  overlay.innerHTML = `
+    <div class="ivraine-proposal-card" role="dialog" aria-modal="true" aria-labelledby="proposal-title">
+      <button class="ivraine-close-proposal" type="button" aria-label="Close">×</button>
+      <span class="ivraine-proposal-badge">A question from Ivan ♡</span>
+      <div class="ivraine-proposal-avatar-wrap">
+        <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
+        <span class="ivraine-avatar-heart">💖</span>
+      </div>
+      <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>date with me?</em></h2>
+      <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, ${userName}.<br>Will you be my date, today and forever? ♡</p>
+      
+      <div class="ivraine-button-arena" id="ivraine-btn-arena">
+        <button class="ivraine-btn-yes" id="ivraine-btn-yes" type="button">
+          <span>Yes! 🥰💖</span>
+        </button>
+        
+        <button class="ivraine-btn-no" id="ivraine-btn-no" type="button">
+          <span>No 🙈</span>
+          <div class="ivraine-tease-bubble" id="ivraine-tease">Nice try! 😜</div>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const closeBtn = overlay.querySelector<HTMLButtonElement>('.ivraine-close-proposal')!;
+  const arena = overlay.querySelector<HTMLDivElement>('#ivraine-btn-arena')!;
+  const yesBtn = overlay.querySelector<HTMLButtonElement>('#ivraine-btn-yes')!;
+  const noBtn = overlay.querySelector<HTMLButtonElement>('#ivraine-btn-no')!;
+  const teaseBubble = overlay.querySelector<HTMLDivElement>('#ivraine-tease')!;
+  const card = overlay.querySelector<HTMLDivElement>('.ivraine-proposal-card')!;
+
+  closeBtn.addEventListener('click', () => overlay.remove());
+
+  let currentX = 0;
+  let currentY = 0;
+
+  function dodge(isTouch = false) {
+    dodgeCount++;
+    const arenaRect = arena.getBoundingClientRect();
+    const yesRect = yesBtn.getBoundingClientRect();
+    const noRect = noBtn.getBoundingClientRect();
+
+    const teaseText = teases[dodgeCount % teases.length];
+    teaseBubble.textContent = teaseText;
+    teaseBubble.classList.add('visible');
+    if (teaseTimer) clearTimeout(teaseTimer);
+    teaseTimer = setTimeout(() => teaseBubble.classList.remove('visible'), 1500);
+
+    try {
+      navigator.vibrate?.([30]);
+    } catch {}
+
+    const padding = 15;
+    const maxX = (arenaRect.width / 2) - (noRect.width / 2) - padding;
+    const maxY = (arenaRect.height / 2) - (noRect.height / 2) - padding;
+
+    let newX = 0;
+    let newY = 0;
+    let attempts = 0;
+
+    while (attempts < 15) {
+      attempts++;
+      const rx = (Math.random() * 2 - 1) * maxX;
+      const ry = (Math.random() * 2 - 1) * maxY;
+
+      const distFromCurrent = Math.hypot(rx - currentX, ry - currentY);
+      if (distFromCurrent < 60) continue;
+
+      const arenaCenterX = arenaRect.left + arenaRect.width / 2;
+      const arenaCenterY = arenaRect.top + arenaRect.height / 2;
+      const prospectiveNoCenterX = arenaCenterX + rx;
+      const prospectiveNoCenterY = arenaCenterY + ry;
+
+      const yesCenterX = yesRect.left + yesRect.width / 2;
+      const yesCenterY = yesRect.top + yesRect.height / 2;
+      const distFromYes = Math.hypot(prospectiveNoCenterX - yesCenterX, prospectiveNoCenterY - yesCenterY);
+
+      if (distFromYes > 90) {
+        newX = rx;
+        newY = ry;
+        break;
+      }
+    }
+
+    currentX = newX;
+    currentY = newY;
+    noBtn.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+
+    if (dodgeCount % 3 === 0) {
+      trackActivity(source, 'Tried to click NO (button avoided cursor)', `Dodged ${dodgeCount} times`, userName, 1);
+    }
+  }
+
+  // DESKTOP: Proximity and Hover evasion
+  arena.addEventListener('mousemove', (e) => {
+    const noRect = noBtn.getBoundingClientRect();
+    const noCenterX = noRect.left + noRect.width / 2;
+    const noCenterY = noRect.top + noRect.height / 2;
+    const distance = Math.hypot(e.clientX - noCenterX, e.clientY - noCenterY);
+
+    if (distance < 75) {
+      dodge(false);
+    }
+  });
+
+  noBtn.addEventListener('mouseenter', () => dodge(false));
+  noBtn.addEventListener('mouseover', () => dodge(false));
+  noBtn.addEventListener('pointerenter', () => dodge(false));
+
+  noBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dodge(e.pointerType === 'touch');
+  }, { capture: true });
+
+  noBtn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dodge(false);
+  }, { capture: true });
+
+  noBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dodge(false);
+  }, { capture: true });
+
+  // MOBILE: Avoid on touchstart
+  noBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dodge(true);
+  }, { passive: false, capture: true });
+
+  arena.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches[0]) {
+      const touch = e.touches[0];
+      const noRect = noBtn.getBoundingClientRect();
+      const noCenterX = noRect.left + noRect.width / 2;
+      const noCenterY = noRect.top + noRect.height / 2;
+      const distance = Math.hypot(touch.clientX - noCenterX, touch.clientY - noCenterY);
+
+      if (distance < 70) {
+        dodge(true);
+      }
+    }
+  }, { passive: true });
+
+  // YES BUTTON
+  yesBtn.addEventListener('click', () => {
+    try {
+      localStorage.setItem('ivraine_proposal_status', 'accepted');
+      localStorage.setItem('ivraine_proposal_date', new Date().toISOString());
+      localStorage.setItem('ivraine_proposal_dodges', String(dodgeCount));
+    } catch {}
+
+    try {
+      navigator.vibrate?.([100, 50, 150, 50, 200]);
+    } catch {}
+
+    trackActivity(source, "Said YES to 'Would you date with me?' proposal! 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, userName, dodgeCount);
+    launchHeartsConfetti();
+
+    card.innerHTML = `
+      <div class="ivraine-celebration-wrap">
+        <div class="ivraine-heart-burst">💖✨</div>
+        <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
+        <p class="ivraine-celebration-text">
+          You just made me the happiest person in the world, ${userName}! ♡<br>
+          I promise to love you, cherish every little moment, and fill this space with our sweetest memories.
+        </p>
+        <button class="ivraine-btn-continue" id="ivraine-btn-continue" type="button">
+          Open our space memories ♡
+        </button>
+      </div>
+    `;
+
+    card.querySelector<HTMLButtonElement>('#ivraine-btn-continue')!.addEventListener('click', () => {
+      overlay.remove();
+    });
+  });
+}

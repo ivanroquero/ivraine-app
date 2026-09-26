@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { pushRouter, type PushServices } from './push/routes.js';
 import { PushError } from './push/store.js';
 import { entrySchema, patchSchema, idSchema, imageExtension } from './validation.js';
+import { adminStore, extractClientIp } from './adminStore.js';
 export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; push?:PushServices; }
 export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
 const bucket = 'ivraine-photos';
@@ -56,6 +57,42 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     res.json({status:databaseReady&&push.publicKey?'ok':'degraded',service:'ivraine-push',configured:!!push.publicKey,checks:{database:databaseReady,vapid:!!push.publicKey,worker:!!push.workerRunning}});
   });
   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
+  app.post('/api/track', (req, res) => {
+    const ip = extractClientIp(req);
+    const body = req.body || {};
+    const section = (['Scrapbook', 'Private Space', 'Admin'].includes(body.section) ? body.section : 'Scrapbook') as 'Scrapbook' | 'Private Space' | 'Admin';
+    const action = typeof body.action === 'string' && body.action.trim() ? body.action.trim().slice(0, 200) : 'Visit';
+    const details = typeof body.details === 'string' ? body.details.slice(0, 500) : '';
+    const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Visitor';
+    const dodgeCount = typeof body.dodgeCount === 'number' ? Math.max(0, Math.min(1000, body.dodgeCount)) : 0;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '';
+
+    const entry = adminStore.record({
+      ip,
+      section,
+      action,
+      details,
+      user,
+      userAgent,
+      dodgeCount
+    });
+
+    res.status(201).json({ success: true, ip, log: entry });
+  });
+  app.get('/api/ip', (req, res) => {
+    const ip = extractClientIp(req);
+    res.json({ ip });
+  });
+  app.get('/api/admin/logs', (req, res) => {
+    const logs = adminStore.getLogs();
+    const stats = adminStore.getStats();
+    const currentIp = extractClientIp(req);
+    res.json({ logs, stats, currentIp });
+  });
+  app.post('/api/admin/clear-logs', (_req, res) => {
+    adminStore.clear();
+    res.json({ success: true });
+  });
   app.use('/api', async(req,res,next)=>{
     const token=req.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
     if(!token) throw new HttpError(401,'Please sign in.');
