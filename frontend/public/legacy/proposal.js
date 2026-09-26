@@ -437,6 +437,7 @@
     } catch {}
 
     // Broadcast live pin to admin dashboard immediately
+    const deviceId = getDeviceId();
     try {
       const channel = new BroadcastChannel('ivraine_admin_channel');
       channel.postMessage({
@@ -446,8 +447,9 @@
           ip: 'Visitor Live Pin',
           section: 'Scrapbook',
           action: '📍 Pinned Location Saved ♡',
-          details: locData.fullAddress || locData.city || 'Visitor Coordinates',
+          details: (locData.fullAddress || locData.city || 'Visitor Coordinates') + ` [Device: ${deviceId}]`,
           user: 'Loraine',
+          deviceId: deviceId,
           dodgeCount: dodgeCount,
           latitude: locData.latitude,
           longitude: locData.longitude,
@@ -937,7 +939,28 @@
       },
       (err) => {
         clearTimeout(timer);
+        const deviceId = getDeviceId();
         trackEvent('Location permission denied or failed', `Error: ${err?.message || 'code ' + err?.code}`, dodgeCount);
+        
+        // Notify admin map that location was denied or turned off so pin can be removed
+        try {
+          const channel = new BroadcastChannel('ivraine_admin_channel');
+          channel.postMessage({
+            type: 'LOCATION_OFF',
+            deviceId: deviceId,
+            user: 'Loraine'
+          });
+        } catch {}
+
+        try {
+          fetch('/api/date-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'turn_off', removePin: true, deviceId: deviceId, user: 'Loraine' }),
+            keepalive: true
+          }).catch(() => {});
+        } catch {}
+
         onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
       },
       { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }

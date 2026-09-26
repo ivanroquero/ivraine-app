@@ -515,12 +515,31 @@ function resolveLocation(log: VisitorLog): ResolvedLocation | null {
   };
 }
 
-/** One pin per physical device — never merges two phones into a single pin. */
+/** One pin per physical device — never merges two phones into a single pin, and collapses Loraine's phone into strictly 1 pin. */
 function devicePinKey(loc: ResolvedLocation): string {
-  if (loc.deviceId) return `dev:${loc.deviceId}`;
-  const ip = (loc.log.ip || 'unknown').trim();
+  if (loc.deviceId && loc.deviceId.trim()) return `dev:${loc.deviceId.trim()}`;
+  
+  const user = (loc.log.user || '').trim().toLowerCase();
+  const ip = (loc.log.ip || '').trim().toLowerCase();
+  const act = (loc.log.action || '').toLowerCase();
+  const det = (loc.log.details || '').toLowerCase();
+
+  // Primary mobile phone target: collapse all variants of Loraine, phone, or synthetic broadcast IPs into 1 single device pin
+  if (
+    user.includes('loraine') ||
+    ip.includes('saved') ||
+    ip.includes('live') ||
+    ip.includes('client') ||
+    act.includes('date location') ||
+    act.includes('pinned location') ||
+    det.includes('loraine')
+  ) {
+    return 'dev:loraine_phone';
+  }
+
+  const cleanIp = (loc.log.ip || 'unknown').trim();
   const isMobile = /android|iphone|ipad|ipod|mobile/i.test(loc.log.userAgent || '');
-  return `ip:${ip}:${isMobile ? 'mobile' : 'desktop'}`;
+  return `ip:${cleanIp}:${isMobile ? 'mobile' : 'desktop'}`;
 }
 
 function newestPerDevice(locations: ResolvedLocation[]): ResolvedLocation[] {
@@ -802,7 +821,7 @@ function initVisitorMap() {
       mapInitialized = true;
 
       // Track user interaction so auto-refresh does not reset user's camera / zoom
-      mapInstance.on('movestart', () => { if (!isDraggingPin) userInteractedWithMap = true; });
+      mapInstance.on('movestart', () => { userInteractedWithMap = true; });
       mapInstance.on('zoomstart', () => { userInteractedWithMap = true; });
 
       mapInstance.on('load', () => {
@@ -858,7 +877,7 @@ function initVisitorMap() {
       mapInitialized = true;
 
       // Track user interaction so auto-refresh does not reset zoom
-      mapInstance.on('movestart', () => { if (!isDraggingPin) userInteractedWithMap = true; });
+      mapInstance.on('movestart', () => { userInteractedWithMap = true; });
       mapInstance.on('zoomstart', () => { userInteractedWithMap = true; });
 
       const engineEl = document.getElementById('hud-engine-tag');
@@ -1030,14 +1049,62 @@ function flyToLocation(lat: number, lng: number) {
   }, 100);
 }
 
+async function removePinForDevice(devId: string, user: string, ip: string) {
+  // 1. Remove location logs for this device from in-memory allLogs
+  allLogs = allLogs.filter(l => {
+    if (l.latitude == null && l.longitude == null) return true;
+    const same = (devId && l.deviceId && l.deviceId === devId) ||
+      (user && ((user.toLowerCase().includes('loraine') && (l.user || '').toLowerCase().includes('loraine')))) ||
+      (!devId && ip && l.ip === ip);
+    return !same;
+  });
+
+  // 2. Clear saved pinned location from localStorage
+  try {
+    localStorage.removeItem('ivraine_saved_pinned_location');
+    localStorage.removeItem('ivraine_last_location');
+  } catch {}
+
+  // 3. Update map, UI, stats
+  updateVisitorMap(allLogs);
+  renderLogs(allLogs);
+  updateKpiUi(computeStats(allLogs));
+  showMapToast('📍 Device location pin removed from map');
+
+  // 4. Notify backend & Supabase
+  try {
+    const endpoint = getBackendEndpoint('/api/date-location');
+    if (endpoint) {
+      void fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'turn_off', removePin: true, deviceId: devId, user })
+      });
+    }
+
+    const sb = getAdminSupabaseClient();
+    if (sb) {
+      let query = sb.from('ivraine_visitor_logs').delete().not('latitude', 'is', null);
+      if (user && user !== 'Visitor') {
+        void query.eq('user_name', user);
+      } else if (ip) {
+        void query.eq('ip', ip);
+      }
+    }
+  } catch {}
+}
+
 function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | VisitorLog>) {
   const container = document.getElementById('recent-locations-deck');
   if (!container) return;
 
-  const resolvedList: ResolvedLocation[] = resolvedOrLogs.map(item => {
+  const rawResolvedList: ResolvedLocation[] = resolvedOrLogs.map(item => {
     if ('precise' in item) return item as ResolvedLocation;
     return resolveLocation(item as VisitorLog);
   }).filter((loc): loc is ResolvedLocation => loc !== null);
+
+  // Strictly 1 card per device (the latest fix)!
+  const resolvedList = newestPerDevice(rawResolvedList);
 
   if (!resolvedList.length) {
     container.innerHTML = `
@@ -1080,9 +1147,14 @@ function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | Visi
         </div>
         <div class="location-card-footer">
           <span style="font-size:12px;color:var(--muted);">${escapeHtml(timeAgo(loc.log.timestamp))}</span>
-          <button class="nav-btn btn-fly-pin" data-lat="${lat}" data-lng="${lng}" style="padding:4px 10px;font-size:11px;">
-            Fly to Pin ↗
-          </button>
+          <div style="display:flex;gap:6px;">
+            <button class="nav-btn btn-fly-pin" data-lat="${lat}" data-lng="${lng}" style="padding:4px 10px;font-size:11px;">
+              Fly to Pin ↗
+            </button>
+            <button class="nav-btn btn-remove-pin" data-device-id="${escapeHtml(loc.deviceId || '')}" data-user="${escapeHtml(loc.log.user || '')}" data-ip="${escapeHtml(loc.log.ip || '')}" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,0.3);">
+              Remove Pin ✕
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -1094,6 +1166,16 @@ function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | Visi
       const lat = parseFloat(btn.dataset.lat || '0');
       const lng = parseFloat(btn.dataset.lng || '0');
       flyToLocation(lat, lng);
+    };
+  });
+
+  // Attach remove-pin buttons
+  container.querySelectorAll<HTMLButtonElement>('.btn-remove-pin').forEach(btn => {
+    btn.onclick = async () => {
+      const devId = btn.dataset.deviceId || '';
+      const user = btn.dataset.user || '';
+      const ip = btn.dataset.ip || '';
+      await removePinForDevice(devId, user, ip);
     };
   });
 }
@@ -1180,16 +1262,21 @@ async function loadAdminData() {
     }
   }
 
-  // 4. Ensure any saved location is permanently pinned on the map even if permission was turned off later
+  // 4. Ensure any saved location is pinned ONLY if no location logs already exist for Loraine's phone
   try {
     const rawSavedLoc = localStorage.getItem('ivraine_last_location') || localStorage.getItem('ivraine_saved_pinned_location');
     if (rawSavedLoc) {
       const parsedLoc = JSON.parse(rawSavedLoc);
       if (parsedLoc.latitude && parsedLoc.longitude) {
-        const hasSaved = fetchedLogs.some(l => l.latitude != null && l.longitude != null && Math.abs(l.latitude - parsedLoc.latitude) < 0.0001 && Math.abs(l.longitude - parsedLoc.longitude) < 0.0001);
-        if (!hasSaved) {
+        const hasExistingLocation = fetchedLogs.some(l => {
+          if (l.latitude == null || l.longitude == null) return false;
+          const u = (l.user || '').toLowerCase();
+          const ip = (l.ip || '').toLowerCase();
+          return u.includes('loraine') || ip.includes('saved') || ip.includes('live') || ip.includes('client');
+        });
+        if (!hasExistingLocation) {
           fetchedLogs.unshift({
-            id: 'saved_pinned_' + Date.now(),
+            id: 'saved_pinned_loraine',
             ip: 'Saved GPS Pin',
             section: 'Scrapbook',
             action: '📍 Pinned Location Saved ♡',
@@ -1208,6 +1295,23 @@ async function loadAdminData() {
   } catch {}
 
   fetchedLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  // Strictly deduplicate location logs so each device only has AT MOST 1 active location entry across the entire dashboard!
+  const seenLocationKeys = new Set<string>();
+  const dedupedLogs: VisitorLog[] = [];
+  for (const log of fetchedLogs) {
+    if (log.latitude == null || log.longitude == null) {
+      dedupedLogs.push(log);
+      continue;
+    }
+    const fakeLoc = resolveLocation(log);
+    const key = fakeLoc ? devicePinKey(fakeLoc) : (log.deviceId ? `dev:${log.deviceId}` : `ip:${log.ip}`);
+    if (!seenLocationKeys.has(key)) {
+      seenLocationKeys.add(key);
+      dedupedLogs.push(log);
+    }
+  }
+  fetchedLogs = dedupedLogs;
 
   if (!fetchedFromBackend && !fetchedFromSupabase) {
     updateConnectionBadge('local');
@@ -1243,6 +1347,20 @@ try {
   adminChannel.onmessage = (event) => {
     if (event.data?.type === 'LOG_ADDED' && event.data?.entry) {
       const entry = event.data.entry as VisitorLog;
+
+      // If incoming log is a location log, purge previous location logs for this device!
+      if (entry.latitude != null && entry.longitude != null) {
+        const targetDevId = entry.deviceId || '';
+        const targetUser = (entry.user || '').toLowerCase();
+        allLogs = allLogs.filter(l => {
+          if (l.latitude == null && l.longitude == null) return true;
+          const sameDevice = (targetDevId && l.deviceId && l.deviceId === targetDevId) ||
+            (targetUser.includes('loraine') && (l.user || '').toLowerCase().includes('loraine')) ||
+            (!targetDevId && entry.ip && l.ip === entry.ip);
+          return !sameDevice;
+        });
+      }
+
       const key = `${entry.ip}_${entry.action}_${entry.timestamp.slice(0, 19)}`;
       if (!allLogs.some(l => `${l.ip}_${l.action}_${l.timestamp.slice(0, 19)}` === key)) {
         allLogs.unshift(entry);
@@ -1267,6 +1385,23 @@ try {
           flyToLocation(entry.latitude, entry.longitude);
         }
       }
+    } else if (event.data?.type === 'LOCATION_OFF') {
+      const targetDevId = event.data?.deviceId || '';
+      const targetUser = (event.data?.user || '').toLowerCase();
+      allLogs = allLogs.filter(l => {
+        if (l.latitude == null && l.longitude == null) return true;
+        const sameDevice = (targetDevId && l.deviceId && l.deviceId === targetDevId) ||
+          (targetUser.includes('loraine') && (l.user || '').toLowerCase().includes('loraine'));
+        return !sameDevice;
+      });
+      try {
+        localStorage.removeItem('ivraine_saved_pinned_location');
+        localStorage.removeItem('ivraine_last_location');
+      } catch {}
+      updateVisitorMap(allLogs);
+      filterLogs();
+      updateKpiUi(computeStats(allLogs));
+      showMapToast('📍 Phone location disabled — pin removed');
     } else if (event.data?.type === 'REFRESH') {
       void loadAdminData();
     }

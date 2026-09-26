@@ -22,6 +22,7 @@ alter table public.ivraine_visitor_logs add column if not exists longitude doubl
 alter table public.ivraine_visitor_logs add column if not exists full_address text not null default '';
 alter table public.ivraine_visitor_logs add column if not exists city text not null default '';
 alter table public.ivraine_visitor_logs add column if not exists country text not null default '';
+alter table public.ivraine_visitor_logs add column if not exists device_id text not null default '';
 
 alter table public.ivraine_visitor_logs enable row level security;
 
