@@ -9,7 +9,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   animation: ivraineFadeIn 0.3s ease-out;
 }
 @keyframes ivraineFadeIn {
@@ -20,12 +22,15 @@
   background: #ffffff;
   color: #202025;
   width: min(92vw, 440px);
+  max-height: 92vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: 24px;
-  padding: 32px 26px 28px;
+  padding: 28px 22px 24px;
   text-align: center;
   box-shadow: 0 20px 50px rgba(0,0,0,0.35), 0 0 0 1px rgba(232,62,140,0.15);
   position: relative;
-  overflow: visible;
+  margin: auto;
   animation: ivraineCardPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 @keyframes ivraineCardPop {

@@ -257,7 +257,9 @@ async function main() {
     console.log('PASS: Google Maps links properly configured for all places');
 
     // Click continue to finish
-    await mobilePage.locator('#ivraine-btn-continue').tap();
+    const continueBtn = mobilePage.locator('#ivraine-btn-continue');
+    await continueBtn.scrollIntoViewIfNeeded();
+    await continueBtn.click();
     await mobilePage.waitForTimeout(300);
 
     await mobileContext.close();
