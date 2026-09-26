@@ -14,21 +14,206 @@ const teases = [
   'My heart won’t let you! 💘'
 ];
 
-export function trackActivity(section: 'Scrapbook' | 'Private Space' | 'Admin', action: string, details = '', user = '', dodges = 0) {
+export interface LocationData {
+  latitude: number;
+  longitude: number;
+  fullAddress: string;
+  city: string;
+  country: string;
+}
+
+export async function reverseGeocode(lat: number, lng: number): Promise<{ fullAddress: string; city: string; country: string }> {
   try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+      headers: { 'Accept-Language': 'en' },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const addr = data.address || {};
+      const city = addr.city || addr.town || addr.municipality || addr.village || addr.suburb || addr.state || '';
+      const country = addr.country || '';
+      return {
+        fullAddress: data.display_name || `${city}, ${country}`,
+        city,
+        country
+      };
+    }
+  } catch {}
+  return { fullAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, city: '', country: '' };
+}
+
+export function trackActivity(
+  section: 'Scrapbook' | 'Private Space' | 'Admin',
+  action: string,
+  details = '',
+  user = '',
+  dodges = 0,
+  location?: Partial<LocationData>
+) {
+  try {
+    const payload = {
+      section,
+      action,
+      details,
+      user,
+      dodgeCount: dodges,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
+      fullAddress: location?.fullAddress,
+      city: location?.city,
+      country: location?.country
+    };
+
     fetch('/api/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        section,
-        action,
-        details,
-        user,
-        dodgeCount: dodges
-      }),
+      body: JSON.stringify(payload),
       keepalive: true
     }).catch(() => {});
+
+    try {
+      const channel = new BroadcastChannel('ivraine_admin_channel');
+      channel.postMessage({
+        type: 'LOG_ADDED',
+        entry: {
+          id: String(Date.now()),
+          ip: 'Client',
+          section,
+          action,
+          details,
+          user,
+          userAgent: navigator.userAgent,
+          dodgeCount: dodges,
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+          fullAddress: location?.fullAddress ?? '',
+          city: location?.city ?? '',
+          country: location?.country ?? '',
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch {}
   } catch {}
+}
+
+export async function acquireAndSaveLocation(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor'): Promise<LocationData | null> {
+  if (!navigator.geolocation) return null;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const geo = await reverseGeocode(latitude, longitude);
+        const loc: LocationData = {
+          latitude,
+          longitude,
+          fullAddress: geo.fullAddress,
+          city: geo.city,
+          country: geo.country
+        };
+        try {
+          localStorage.setItem('ivraine_last_location', JSON.stringify(loc));
+        } catch {}
+
+        trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
+        resolve(loc);
+      },
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  });
+}
+
+export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor') {
+  let hasLocation = false;
+  let hasNotification = false;
+
+  try {
+    if (navigator.permissions) {
+      const geoStatus = await navigator.permissions.query({ name: 'geolocation' });
+      hasLocation = geoStatus.state === 'granted';
+    }
+  } catch {}
+
+  try {
+    if ('Notification' in window) {
+      hasNotification = Notification.permission === 'granted';
+    }
+  } catch {}
+
+  // If already granted, silently acquire location in background
+  if (hasLocation) {
+    void acquireAndSaveLocation(source, userName);
+  }
+
+  // If already granted both or dismissed recently, skip prompt
+  const dismissedTime = localStorage.getItem('ivraine_perm_prompt_dismissed');
+  if (dismissedTime && (Date.now() - Number(dismissedTime)) < 24 * 60 * 60 * 1000) {
+    return;
+  }
+
+  if (hasLocation && (hasNotification || !('Notification' in window))) {
+    return;
+  }
+
+  // Show friendly permission modal
+  setTimeout(() => {
+    if (document.querySelector('.ivraine-perm-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ivraine-perm-overlay';
+    overlay.innerHTML = `
+      <div class="ivraine-perm-card">
+        <div class="ivraine-perm-icon">📍✨</div>
+        <h3 class="ivraine-perm-title">Welcome to Our Space ♡</h3>
+        <p class="ivraine-perm-desc">
+          To unlock the interactive visitor map and stay connected with real-time heart notifications, please enable permissions:
+        </p>
+        <div class="ivraine-perm-features">
+          <div class="ivraine-perm-feature-item">
+            <span class="icon">🗺</span>
+            <span><strong>Live Map Pin</strong> — Pin your spot on our memories journey map</span>
+          </div>
+          <div class="ivraine-perm-feature-item">
+            <span class="icon">🔔</span>
+            <span><strong>Heart Notifications</strong> — Instant alerts whenever Ivan or Loraine taps a heart</span>
+          </div>
+        </div>
+        <button class="ivraine-perm-btn-allow" type="button">
+          <span>Allow Permissions</span>
+          <span>♡</span>
+        </button>
+        <button class="ivraine-perm-btn-dismiss" type="button">Maybe Later</button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const allowBtn = overlay.querySelector<HTMLButtonElement>('.ivraine-perm-btn-allow')!;
+    const dismissBtn = overlay.querySelector<HTMLButtonElement>('.ivraine-perm-btn-dismiss')!;
+
+    allowBtn.addEventListener('click', async () => {
+      allowBtn.disabled = true;
+      allowBtn.textContent = 'Enabling…';
+
+      try {
+        if ('Notification' in window && Notification.permission !== 'granted') {
+          await Notification.requestPermission();
+        }
+      } catch {}
+
+      try {
+        await acquireAndSaveLocation(source, userName);
+      } catch {}
+
+      overlay.remove();
+    });
+
+    dismissBtn.addEventListener('click', () => {
+      localStorage.setItem('ivraine_perm_prompt_dismissed', String(Date.now()));
+      overlay.remove();
+    });
+  }, 1200);
 }
 
 export function launchHeartsConfetti() {
