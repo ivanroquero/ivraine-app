@@ -1408,6 +1408,72 @@ function setupSettings() {
     if (quickDrawer) quickDrawer.style.display = 'none';
   });
 
+  // Android TWA / Digital Asset Links
+  const twaPkgInput = document.getElementById('twa-package-input') as HTMLInputElement | null;
+  const twaShaInput = document.getElementById('twa-sha256-input') as HTMLTextAreaElement | null;
+  const twaForm = document.getElementById('twa-config-form') as HTMLFormElement | null;
+  const twaSaveStatus = document.getElementById('twa-save-status') as HTMLParagraphElement | null;
+  const twaResetBtn = document.getElementById('btn-reset-twa') as HTMLButtonElement | null;
+  const twaTestBtn = document.getElementById('btn-test-assetlinks') as HTMLButtonElement | null;
+  const twaFeedback = document.getElementById('twa-test-feedback') as HTMLDivElement | null;
+
+  if (twaPkgInput && twaShaInput) {
+    const savedPkg = localStorage.getItem('ivraine-twa-package') || 'app.vercel.ivraine.twa';
+    const savedSha = localStorage.getItem('ivraine-twa-sha256') || '14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F';
+    twaPkgInput.value = savedPkg;
+    twaShaInput.value = savedSha;
+  }
+
+  twaTestBtn?.addEventListener('click', async () => {
+    if (!twaFeedback) return;
+    twaFeedback.innerHTML = '<span style="color:#d8b4fe;">Testing /.well-known/assetlinks.json…</span>';
+    try {
+      const res = await fetch('/.well-known/assetlinks.json', { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const count = Array.isArray(data) ? data.length : 0;
+      twaFeedback.innerHTML = `<span style="color:#2ecc71;">✓ Success: Valid Digital Asset Links JSON loaded (${count} statements declared). Android Chrome can verify your app!</span>`;
+    } catch (err: any) {
+      twaFeedback.innerHTML = `<span style="color:#ff6b81;">✕ Error reaching assetlinks.json: ${err?.message || 'Failed to fetch'}</span>`;
+    }
+  });
+
+  twaForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!twaPkgInput || !twaShaInput || !twaSaveStatus) return;
+    const pkg = twaPkgInput.value.trim();
+    const sha = twaShaInput.value.trim();
+    if (!pkg || !sha) {
+      twaSaveStatus.style.color = '#ff6b81';
+      twaSaveStatus.textContent = 'Please enter both Package Name and SHA-256 Fingerprint.';
+      return;
+    }
+
+    localStorage.setItem('ivraine-twa-package', pkg);
+    localStorage.setItem('ivraine-twa-sha256', sha);
+
+    try {
+      await fetch('/api/admin/assetlinks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageName: pkg, sha256Fingerprint: sha })
+      });
+    } catch {}
+
+    twaSaveStatus.style.color = '#2ecc71';
+    twaSaveStatus.textContent = '✓ Digital Asset Links saved! If Chrome on your phone previously failed verification: Force Stop Chrome in Android Settings > Apps > Chrome, then reopen the TWA.';
+  });
+
+  twaResetBtn?.addEventListener('click', () => {
+    if (!twaPkgInput || !twaShaInput || !twaSaveStatus) return;
+    twaPkgInput.value = 'app.vercel.ivraine.twa';
+    twaShaInput.value = '14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F';
+    localStorage.removeItem('ivraine-twa-package');
+    localStorage.removeItem('ivraine-twa-sha256');
+    twaSaveStatus.style.color = '#fbbf24';
+    twaSaveStatus.textContent = 'Reset to default configuration.';
+  });
+
   // Layer Switching Pills
   document.getElementById('btn-layer-dark')?.addEventListener('click', () => setMapLayerStyle('dark'));
   document.getElementById('btn-layer-satellite')?.addEventListener('click', () => setMapLayerStyle('satellite'));

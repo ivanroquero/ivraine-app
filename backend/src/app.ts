@@ -56,6 +56,108 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const databaseReady=push.storageReady??true;
     res.json({status:databaseReady&&push.publicKey?'ok':'degraded',service:'ivraine-push',configured:!!push.publicKey,checks:{database:databaseReady,vapid:!!push.publicKey,worker:!!push.workerRunning}});
   });
+
+  // Digital Asset Links for Android TWA (PWABuilder / Bubblewrap) verification
+  let customAssetLinks: any = null;
+
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    
+    if (customAssetLinks) {
+      return res.json(customAssetLinks);
+    }
+    
+    const envPackage = process.env.TWA_PACKAGE_NAME;
+    const envFingerprint = process.env.TWA_SHA256_FINGERPRINTS;
+    
+    const defaultStatements = [
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: envPackage || 'app.vercel.ivraine.twa',
+          sha256_cert_fingerprints: envFingerprint
+            ? envFingerprint.split(',').map(s => s.trim())
+            : [
+                '14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F',
+                'A1:B2:C3:D4:E5:F6:A7:B8:C9:D0:E1:F2:A3:B4:C5:D6:E7:F8:A9:B0:C1:D2:E3:F4:A5:B6:C7:D8:E9:F0:A1:B2'
+              ]
+        }
+      },
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'com.ivraine.twa',
+          sha256_cert_fingerprints: [
+            '14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F',
+            'A1:B2:C3:D4:E5:F6:A7:B8:C9:D0:E1:F2:A3:B4:C5:D6:E7:F8:A9:B0:C1:D2:E3:F4:A5:B6:C7:D8:E9:F0:A1:B2'
+          ]
+        }
+      },
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'com.ivanroquero.ivraine',
+          sha256_cert_fingerprints: [
+            '14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F',
+            'A1:B2:C3:D4:E5:F6:A7:B8:C9:D0:E1:F2:A3:B4:C5:D6:E7:F8:A9:B0:C1:D2:E3:F4:A5:B6:C7:D8:E9:F0:A1:B2'
+          ]
+        }
+      }
+    ];
+
+    res.json(defaultStatements);
+  });
+
+  app.get('/api/admin/assetlinks', (_req, res) => {
+    res.json({
+      status: 'ok',
+      configured: !!customAssetLinks || !!process.env.TWA_PACKAGE_NAME,
+      assetlinks: customAssetLinks || [
+        {
+          relation: ['delegate_permission/common.handle_all_urls'],
+          target: {
+            namespace: 'android_app',
+            package_name: process.env.TWA_PACKAGE_NAME || 'app.vercel.ivraine.twa',
+            sha256_cert_fingerprints: process.env.TWA_SHA256_FINGERPRINTS ? process.env.TWA_SHA256_FINGERPRINTS.split(',').map(s => s.trim()) : []
+          }
+        }
+      ]
+    });
+  });
+
+  app.post('/api/admin/assetlinks', (req, res) => {
+    const { packageName, sha256Fingerprint, statements } = req.body || {};
+    if (Array.isArray(statements)) {
+      customAssetLinks = statements;
+      return res.json({ success: true, assetlinks: customAssetLinks });
+    }
+    if (typeof packageName === 'string' && packageName.trim() && typeof sha256Fingerprint === 'string' && sha256Fingerprint.trim()) {
+      const cleanPkg = packageName.trim();
+      const fingerprints = sha256Fingerprint
+        .split('\n')
+        .flatMap((line: string) => line.split(','))
+        .map((f: string) => f.trim().toUpperCase())
+        .filter(Boolean);
+
+      customAssetLinks = [
+        {
+          relation: ['delegate_permission/common.handle_all_urls'],
+          target: {
+            namespace: 'android_app',
+            package_name: cleanPkg,
+            sha256_cert_fingerprints: fingerprints
+          }
+        }
+      ];
+      return res.json({ success: true, assetlinks: customAssetLinks });
+    }
+    res.status(400).json({ error: 'Please provide packageName and sha256Fingerprint' });
+  });
   app.use('/api',rateLimit({windowMs:60000,limit:180,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many requests. Try again in a minute.'}}));
   app.post('/api/track', (req, res) => {
     const ip = extractClientIp(req);

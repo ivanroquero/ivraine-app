@@ -29,8 +29,8 @@ self.addEventListener('install',event=>{event.waitUntil((async()=>{
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE&&key!==CONFIG).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{
  const url=new URL(event.request.url);
- /* Never intercept API calls, Supabase requests, or photo storage — they need live auth. */
- if(url.pathname.startsWith('/api/')||url.hostname.includes('supabase'))return;
+ /* Never intercept API calls, .well-known Digital Asset Links, or Supabase requests — they need live network. */
+ if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/.well-known/')||url.hostname.includes('supabase'))return;
  /* Cache the offline CSS — always serve from cache. */
  if(url.pathname==='/offline.css'){event.respondWith(caches.match('/offline.css').then(r=>r||fetch(event.request)));return;}
  /* Static Vite assets (fingerprinted JS/CSS, icons, fonts, manifests): cache-first. */

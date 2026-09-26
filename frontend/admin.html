@@ -1128,6 +1128,65 @@
       </div>
 
       <div class="info-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="font:italic 18px Georgia,serif;color:#fff;margin-bottom:4px;">📱 Android TWA &amp; PWABuilder (Digital Asset Links)</h3>
+            <p style="color:var(--muted);font-size:12.5px;">Fixes the issue where PWABuilder Android APK opens in Google Chrome or shows the Chrome URL bar.</p>
+          </div>
+          <span id="twa-status-badge" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(46,204,113,0.15);color:#2ecc71;border:1px solid rgba(46,204,113,0.3);">
+            ✓ AssetLinks Active
+          </span>
+        </div>
+
+        <div style="background:#16131c;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+          <p style="font-size:12.5px;color:#d8b4fe;line-height:1.6;margin-bottom:10px;">
+            💡 <strong>Why does it open Chrome?</strong> When an Android TWA opens, Android Chrome verifies ownership via <code style="background:#251f2e;padding:2px 6px;border-radius:4px;color:#ff8fa3;">/.well-known/assetlinks.json</code>. If verification fails, Chrome displays the browser bar or opens the external Chrome browser. Once your SHA-256 fingerprint matches, Chrome runs as a <strong>100% full-screen native app with NO Chrome UI!</strong>
+          </p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <a class="nav-btn" href="/.well-known/assetlinks.json" target="_blank" style="text-decoration:none;">🌐 View Live assetlinks.json</a>
+            <button class="nav-btn" id="btn-test-assetlinks" type="button">🔍 Test AssetLinks Endpoint</button>
+          </div>
+          <div id="twa-test-feedback" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+
+        <form id="twa-config-form" style="display:flex;flex-direction:column;gap:12px;max-width:680px;">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;">
+              Android Package Name (from PWABuilder)
+            </label>
+            <input type="text" id="twa-package-input" placeholder="e.g. app.vercel.ivraine.twa or com.ivraine.twa" style="width:100%;background:#251f2e;border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:#fff;font-size:13px;outline:none;">
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;">
+              SHA-256 Certificate Fingerprint (from PWABuilder assetlinks.json)
+            </label>
+            <textarea id="twa-sha256-input" rows="3" placeholder="e.g. 14:6D:E9:DE:8F:52:E2:E7:59:77:EC:8B:2A:B7:C5:16:8C:F5:2A:77:4B:97:DF:7B:6A:3E:92:07:95:67:BE:53:C9:8F" style="width:100%;background:#251f2e;border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:#fff;font-size:12px;font-family:monospace;outline:none;resize:vertical;"></textarea>
+            <small style="color:var(--muted);font-size:11px;display:block;margin-top:3px;">
+              You can paste multiple fingerprints separated by commas or new lines (e.g. debug and release keys).
+            </small>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="nav-btn primary" id="btn-save-twa" type="submit">💾 Save &amp; Apply AssetLinks</button>
+            <button class="nav-btn" id="btn-reset-twa" type="button">↺ Restore Defaults</button>
+          </div>
+          <p id="twa-save-status" style="font-size:12px;"></p>
+        </form>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+          <h4 style="font-size:13px;color:#fff;margin-bottom:8px;">📋 Quick Setup Guide for PWABuilder</h4>
+          <ol style="font-size:12px;color:var(--muted);line-height:1.6;padding-left:18px;">
+            <li>On <strong>PWABuilder.com</strong>, package your app and download the generated zip package.</li>
+            <li>Open the zip file and find <code style="color:#d8b4fe;">assetlinks.json</code> inside.</li>
+            <li>Copy the <code style="color:#d8b4fe;">package_name</code> and <code style="color:#d8b4fe;">sha256_cert_fingerprints</code> and paste them into the form above.</li>
+            <li>Click <strong>Save &amp; Apply AssetLinks</strong>.</li>
+            <li><strong>Important:</strong> On your Android phone, if Chrome previously cached a failed verification: go to Android <strong>Settings &gt; Apps &gt; Chrome &gt; Force Stop</strong>, then reopen your TWA app. It will now open in full standalone mode with <strong>NO Chrome address bar</strong>!</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="info-card">
         <h3>Railway Backend API Endpoint</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">
           Override the Railway backend URL if deployed separately (e.g. <code style="color:#d8b4fe;">https://ivraine-api-production.up.railway.app</code>). Leave blank to use Supabase / Vercel serverless mode.

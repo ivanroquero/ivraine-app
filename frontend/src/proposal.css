@@ -9,9 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 12px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  padding: 20px;
   animation: ivraineFadeIn 0.3s ease-out;
 }
 @keyframes ivraineFadeIn {
@@ -22,15 +20,12 @@
   background: #ffffff;
   color: #202025;
   width: min(92vw, 440px);
-  max-height: 92vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   border-radius: 24px;
-  padding: 28px 22px 24px;
+  padding: 32px 26px 28px;
   text-align: center;
   box-shadow: 0 20px 50px rgba(0,0,0,0.35), 0 0 0 1px rgba(232,62,140,0.15);
   position: relative;
-  margin: auto;
+  overflow: visible;
   animation: ivraineCardPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 @keyframes ivraineCardPop {
@@ -963,138 +958,5 @@
 .ivraine-btn-go-back-custom:hover {
   background: #ebe5ef;
   color: #333;
-}
-
-/* ── Modern Permission Card & Glowing Accents ── */
-.modern-permission-card {
-  position: relative;
-  border-radius: 20px;
-}
-
-.modern-permission-card .ivraine-loc-header-badge {
-  background: linear-gradient(135deg, #fff0f6, #fde4ef);
-  color: #c2185b;
-  border: 1px solid #f8bbd0;
-  box-shadow: 0 2px 10px rgba(233, 30, 99, 0.12);
-}
-
-.modern-permission-card .ivraine-loc-features-box {
-  background: linear-gradient(135deg, #fffafd 0%, #fdf5f9 100%);
-  border: 1px solid #f9d2e2;
-  border-radius: 16px;
-  box-shadow: inset 0 1px 3px rgba(214, 51, 132, 0.04);
-}
-
-.modern-permission-card .ivraine-loc-feat-item {
-  color: #3b3543;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.modern-permission-card .ivraine-btn-allow-loc-main {
-  background: linear-gradient(135deg, #e91e63, #ff4081 50%, #ff6b8b 100%);
-  box-shadow: 0 6px 20px rgba(233, 30, 99, 0.35);
-  font-size: 15px;
-  letter-spacing: 0.2px;
-  position: relative;
-  overflow: hidden;
-}
-
-.modern-permission-card .ivraine-btn-allow-loc-main::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-  animation: ivraineShine 3s infinite;
-}
-
-@keyframes ivraineShine {
-  0% { left: -100%; }
-  25%, 100% { left: 100%; }
-}
-
-/* ── D3 Blooming Flower Card & Interactive Animations ── */
-.ivraine-d3-flower-card {
-  background: linear-gradient(180deg, #fff7fa 0%, #ffffff 100%);
-  border: 1.5px solid #f8bbd0;
-  border-radius: 20px;
-  padding: 12px 10px 14px;
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(214, 51, 132, 0.08);
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: manipulation;
-}
-
-.ivraine-d3-flower-container {
-  width: 100%;
-  max-width: 260px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 220px;
-}
-
-.ivraine-d3-flower-svg {
-  width: 100%;
-  height: auto;
-  max-height: 230px;
-  overflow: visible;
-  filter: drop-shadow(0 4px 12px rgba(233, 30, 99, 0.15));
-}
-
-.ivraine-flower-head-inner {
-  transform-origin: 0 0;
-  animation: ivraineFlowerBreathe 4.5s infinite ease-in-out;
-}
-
-@keyframes ivraineFlowerBreathe {
-  0%, 100% {
-    transform: scale(1) rotate(0deg);
-  }
-  50% {
-    transform: scale(1.035) rotate(1.5deg);
-  }
-}
-
-.ivraine-flower-caption {
-  margin: 8px 0 0;
-  text-align: center;
-}
-
-.ivraine-flower-caption .flower-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #c2185b;
-  background: #fce4ec;
-  border: 1px solid #f8bbd0;
-  padding: 3px 12px;
-  border-radius: 20px;
-  margin-bottom: 4px;
-}
-
-.ivraine-flower-caption p {
-  font-size: 12.5px;
-  color: #5d5366;
-  margin: 0;
-  line-height: 1.4;
-}
-
-.ivraine-flower-caption small {
-  color: #d81b60;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ivraine-tap-particles text {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
