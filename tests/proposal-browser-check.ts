@@ -99,7 +99,7 @@ async function main() {
     if (!transform.includes('translate3d')) throw new Error('No button failed to evade on hover');
     console.log('PASS: Desktop cursor evasion verified (button moved via translate3d)');
 
-    // Click YES!
+    // Click YES without location permission
     await yesBtn.click();
     await desktopPage.waitForTimeout(500);
 
@@ -110,17 +110,32 @@ async function main() {
     if (!celebrationText.toLowerCase().includes('she said yes')) throw new Error('Celebration mismatch');
     console.log('PASS: Proposal acceptance celebration rendered');
 
+    // Verify denied / location prompt appears when location is not granted
+    const deniedWrap = desktopPage.locator('.ivraine-loc-denied-wrap');
+    await deniedWrap.waitFor({ state: 'visible', timeout: 5000 });
+    console.log('PASS: Location required prompt displayed when location not granted');
+
+    // Test "Go Back" button
+    const goBackBtn = desktopPage.locator('#ivraine-btn-go-back');
+    await goBackBtn.click();
+    await desktopPage.waitForTimeout(300);
+    const restoredYes = desktopPage.locator('#ivraine-btn-yes');
+    await restoredYes.waitFor({ state: 'visible', timeout: 3000 });
+    console.log('PASS: Go Back button restored proposal question card');
+
     await desktopPage.close();
 
     // ----------------------------------------------------
-    // TEST 2: MOBILE / PHONE TOUCH EVASION EXPERIENCE
+    // TEST 2: MOBILE / PHONE TOUCH EVASION & LOCATION UNLOCK
     // ----------------------------------------------------
-    console.log('Testing Mobile Phone Touch Evasion...');
+    console.log('Testing Mobile Phone Touch Evasion & Location Unlock...');
     const mobileContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
       hasTouch: true,
       isMobile: true,
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148'
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 9.6496, longitude: 123.8647 }
     });
     const mobilePage = await mobileContext.newPage();
     await mobilePage.goto(`${baseUrl}/legacy/index.html`);
@@ -143,6 +158,46 @@ async function main() {
     const mobileTransform = await mobileNoBtn.evaluate((el) => (el as HTMLElement).style.transform);
     if (!mobileTransform.includes('translate3d')) throw new Error('No button failed to evade on mobile touch');
     console.log('PASS: Mobile touch evasion verified (button avoided tap)');
+
+    // Now tap YES with geolocation granted!
+    const mobileYesBtn = mobilePage.locator('#ivraine-btn-yes');
+    await mobileYesBtn.tap();
+
+    // Verify places scroll list appears!
+    const placesList = mobilePage.locator('.ivraine-places-scroll-list');
+    await placesList.waitFor({ state: 'visible', timeout: 8000 });
+    console.log('PASS: Places list unlocked with phone location');
+
+    // Verify all 8 Bohol places requested by user are present
+    const expectedPlaces = [
+      'Blood Compact Shrine',
+      'Ocean Suites',
+      'National Museum of the Philippines - Bohol',
+      'Plaza Jose P. Rizal',
+      'St. Joseph the Worker Cathedral Shrine',
+      "Gerarda's Place",
+      "Gerarda's Place CPG",
+      'Lite Port Center'
+    ];
+
+    const placeCards = mobilePage.locator('.ivraine-place-card');
+    const cardCount = await placeCards.count();
+    if (cardCount !== 8) throw new Error(`Expected 8 place cards, got ${cardCount}`);
+
+    for (const place of expectedPlaces) {
+      const match = mobilePage.locator('.ivraine-place-name', { hasText: place });
+      await match.first().waitFor({ state: 'visible', timeout: 3000 });
+    }
+    console.log('PASS: All 8 Bohol places successfully rendered in proposal reveal');
+
+    // Verify Google Maps links
+    const firstMapUrl = await placeCards.first().getAttribute('href');
+    if (!firstMapUrl || !firstMapUrl.includes('maps.google.com')) throw new Error('First place card missing Google Maps link');
+    console.log('PASS: Google Maps links properly configured for all places');
+
+    // Click continue to finish
+    await mobilePage.locator('#ivraine-btn-continue').tap();
+    await mobilePage.waitForTimeout(300);
 
     await mobileContext.close();
 

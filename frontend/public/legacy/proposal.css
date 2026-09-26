@@ -477,3 +477,258 @@
   color: #333;
 }
 
+/* ── Location Requesting Screen ── */
+.ivraine-loc-requesting-wrap {
+  text-align: center;
+  padding: 10px 0;
+  animation: ivraineFadeIn 0.3s ease-out;
+}
+.ivraine-loc-request-pulse {
+  font-size: 50px;
+  margin-bottom: 12px;
+  animation: ivrainePulse 1.2s infinite ease-in-out;
+}
+.ivraine-loc-prompt-title {
+  font: italic bold 24px Georgia, serif;
+  color: #d63384;
+  margin: 0 0 10px;
+}
+.ivraine-loc-prompt-desc {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+.ivraine-loc-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fdf2f7;
+  border: 1px solid #f9d2e2;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #d63384;
+  font-weight: 600;
+}
+.ivraine-loc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d63384;
+  animation: ivraineDotPulse 1s infinite ease-in-out;
+}
+@keyframes ivraineDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.6); }
+}
+
+/* ── Location Denied Screen ── */
+.ivraine-loc-denied-wrap {
+  text-align: center;
+  padding: 8px 0;
+  animation: ivraineFadeIn 0.3s ease-out;
+}
+.ivraine-loc-denied-icon {
+  font-size: 46px;
+  margin-bottom: 10px;
+}
+.ivraine-loc-denied-title {
+  font: italic bold 22px Georgia, serif;
+  color: #c2185b;
+  margin: 0 0 10px;
+}
+.ivraine-loc-denied-desc {
+  font-size: 13.5px;
+  color: #4a4252;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.ivraine-loc-phone-help {
+  background: #fff8eb;
+  border: 1px solid #ffe1a6;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #8c5700;
+  text-align: left;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.ivraine-loc-denied-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ivraine-btn-retry-loc {
+  width: 100%;
+  background: linear-gradient(135deg, #d63384, #ff6b81);
+  color: #fff;
+  border: none;
+  border-radius: 25px;
+  padding: 13px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(214, 51, 132, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.ivraine-btn-retry-loc:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(214, 51, 132, 0.45);
+}
+.ivraine-btn-go-back {
+  background: #f5f2f7;
+  color: #6d6675;
+  border: 1px solid #e0d8e6;
+  border-radius: 25px;
+  padding: 10px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ivraine-btn-go-back:hover {
+  background: #ebe5ef;
+  color: #333;
+}
+
+/* ── Unlocked Places Screen ── */
+.ivraine-places-unlocked-wrap {
+  text-align: center;
+  animation: ivraineCardPop 0.35s ease-out;
+  padding: 4px 0;
+}
+.ivraine-places-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #d63384;
+  background: #fdf2f7;
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid #f9d2e2;
+  margin-bottom: 8px;
+}
+.ivraine-loc-unlocked-pill {
+  background: #f6f0fa;
+  border: 1px solid #ecdff2;
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #6b4088;
+  margin: 0 0 16px;
+  text-align: center;
+}
+.ivraine-loc-unlocked-pill strong {
+  color: #d63384;
+}
+.ivraine-places-scroll-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 290px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+.ivraine-places-scroll-list::-webkit-scrollbar {
+  width: 5px;
+}
+.ivraine-places-scroll-list::-webkit-scrollbar-track {
+  background: #f9f5fa;
+  border-radius: 10px;
+}
+.ivraine-places-scroll-list::-webkit-scrollbar-thumb {
+  background: #e2cad8;
+  border-radius: 10px;
+}
+
+.ivraine-place-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #ffffff, #fffafc);
+  border: 1.5px solid #f3dbe6;
+  border-radius: 16px;
+  padding: 12px 14px;
+  text-decoration: none;
+  color: inherit;
+  text-align: left;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.ivraine-place-card:hover {
+  transform: translateY(-2px);
+  border-color: #d63384;
+  box-shadow: 0 6px 18px rgba(214, 51, 132, 0.15);
+}
+.ivraine-place-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: #d63384;
+  background: #fdf0f5;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ivraine-place-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.ivraine-place-body {
+  flex: 1;
+  min-width: 0;
+}
+.ivraine-place-type {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #c2185b;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.ivraine-place-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #202025;
+  margin-bottom: 3px;
+  line-height: 1.25;
+}
+.ivraine-place-vibe {
+  font-size: 12px;
+  color: #6d6675;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+.ivraine-place-addr {
+  font-size: 11px;
+  color: #9b93a3;
+}
+.ivraine-place-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #fbf5f8;
+  border: 1px solid #ebd4e0;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #d63384;
+  flex-shrink: 0;
+  gap: 2px;
+}
+

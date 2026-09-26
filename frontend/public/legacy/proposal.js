@@ -20,21 +20,131 @@
     'My heart won’t let you! 💘'
   ];
 
-  // IP / Activity tracking helper
-  function trackEvent(action, details = '', dodges = 0) {
+  // The 8 special places Ivan wants to visit in Bohol ♡
+  const SURPRISE_PLACES = [
+    {
+      name: 'Blood Compact Shrine',
+      type: '🏛 Historic Landmark',
+      vibe: 'Where history meets romance — the historic site of the Sandugo treaty of friendship ♡',
+      address: 'Bool, Tagbilaran City, Bohol',
+      mapUrl: 'https://maps.google.com/?q=Blood+Compact+Shrine+Tagbilaran+City+Bohol',
+      emoji: '🤝'
+    },
+    {
+      name: 'Ocean Suites',
+      type: '🌊 Scenic Stay & Dining',
+      vibe: 'Breathtaking cliffside ocean views, relaxing infinity pool and dreamy moments together ♡',
+      address: 'Bool, Tagbilaran City, Bohol',
+      mapUrl: 'https://maps.google.com/?q=Ocean+Suites+Bohol+Boutique+Hotel+Tagbilaran',
+      emoji: '🌊'
+    },
+    {
+      name: 'National Museum of the Philippines - Bohol',
+      type: '🖼 Culture & Heritage',
+      vibe: 'Exploring rich Boholano art, archaeology, and history side by side ♡',
+      address: 'Old Provincial Capitol, Tagbilaran City, Bohol',
+      mapUrl: 'https://maps.google.com/?q=National+Museum+of+the+Philippines+Bohol+Tagbilaran',
+      emoji: '🏛'
+    },
+    {
+      name: 'Plaza Jose P. Rizal',
+      type: '🌳 City Square & Stroll',
+      vibe: 'A peaceful tree-lined plaza in the center of the city for quiet evening walks ♡',
+      address: 'Tagbilaran City, Bohol',
+      mapUrl: 'https://maps.google.com/?q=Plaza+Jose+P+Rizal+Tagbilaran+Bohol',
+      emoji: '🌳'
+    },
+    {
+      name: 'St. Joseph the Worker Cathedral Shrine',
+      type: '⛪ Sacred Cathedral',
+      vibe: 'A historic sanctuary to visit, reflect, and say a heartfelt prayer for our journey ♡',
+      address: 'Tagbilaran City, Bohol',
+      mapUrl: 'https://maps.google.com/?q=St+Joseph+the+Worker+Cathedral+Shrine+Tagbilaran+Bohol',
+      emoji: '⛪'
+    },
+    {
+      name: "Gerarda's Place",
+      type: '🍽 Boholano Dining',
+      vibe: 'Iconic family-style dining with legendary Boholano cuisine and warm hospitality ♡',
+      address: '30 J.S. Torralba St, Tagbilaran City, Bohol',
+      mapUrl: "https://maps.google.com/?q=Gerardas+Place+Tagbilaran+Bohol",
+      emoji: '🍽'
+    },
+    {
+      name: "Gerarda's Place CPG",
+      type: '🥘 Beloved Dining Spot',
+      vibe: 'Beloved CPG branch — amazing food, cozy ambiance, and sweet memories ♡',
+      address: 'CPG Ave, Tagbilaran City, Bohol',
+      mapUrl: "https://maps.google.com/?q=Gerardas+Place+CPG+Tagbilaran+Bohol",
+      emoji: '🥘'
+    },
+    {
+      name: 'Lite Port Center',
+      type: '🛍 Portside Leisure & Dining',
+      vibe: 'A vibrant portside hub with cafes, shops, and fresh sea breeze to end our day ♡',
+      address: 'Tagbilaran City Port Area, Bohol',
+      mapUrl: 'https://maps.google.com/?q=Lite+Port+Center+Tagbilaran+Bohol',
+      emoji: '🌟'
+    }
+  ];
+
+  async function reverseGeocode(lat, lng) {
     try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+        headers: { 'Accept-Language': 'en' },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const addr = data.address || {};
+        const city = addr.city || addr.town || addr.municipality || addr.village || addr.suburb || addr.state || '';
+        const country = addr.country || '';
+        return {
+          fullAddress: data.display_name || `${city}, ${country}`,
+          city,
+          country
+        };
+      }
+    } catch {}
+    return { fullAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, city: '', country: '' };
+  }
+
+  // IP / Activity tracking helper
+  function trackEvent(action, details = '', dodges = 0, loc = null) {
+    try {
+      const payload = {
+        section: 'Scrapbook',
+        action: action,
+        details: details,
+        user: 'Loraine',
+        dodgeCount: dodges,
+        latitude: loc?.latitude ?? null,
+        longitude: loc?.longitude ?? null,
+        fullAddress: loc?.fullAddress ?? '',
+        city: loc?.city ?? '',
+        country: loc?.country ?? ''
+      };
+
       fetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          section: 'Scrapbook',
-          action: action,
-          details: details,
-          user: 'Loraine',
-          dodgeCount: dodges
-        }),
+        body: JSON.stringify(payload),
         keepalive: true
       }).catch(() => {});
+
+      if (loc?.latitude && loc?.longitude) {
+        fetch('/api/date-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            user: 'Loraine',
+            source: 'Scrapbook'
+          }),
+          keepalive: true
+        }).catch(() => {});
+      }
     } catch {}
   }
 
@@ -123,54 +233,40 @@
     frameId = requestAnimationFrame(render);
   }
 
-  // Open Full Proposal Modal
-  function openProposalModal() {
-    // Remove existing if any
-    const existing = document.querySelector('.ivraine-proposal-overlay');
-    if (existing) existing.remove();
-
-    trackEvent("Opened 'Would you date with me?' proposal", "User clicked Open this");
-
-    const overlay = document.createElement('div');
-    overlay.className = 'ivraine-proposal-overlay';
-    overlay.innerHTML = `
-      <div class="ivraine-proposal-card" role="dialog" aria-modal="true" aria-labelledby="proposal-title">
-        <button class="ivraine-close-proposal" type="button" aria-label="Close">×</button>
-        <span class="ivraine-proposal-badge">A question from Ivan ♡</span>
-        <div class="ivraine-proposal-avatar-wrap">
-          <img class="ivraine-proposal-avatar" src="icons/couple-192.png" alt="Ivan and Loraine">
-          <span class="ivraine-avatar-heart">💖</span>
-        </div>
-        <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>date with me?</em></h2>
-        <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, Loraine.<br>Will you be my date, today and forever? ♡</p>
+  // Render the initial proposal question (Would you date with me?)
+  function renderProposalQuestion(card, overlay) {
+    card.innerHTML = `
+      <button class="ivraine-close-proposal" type="button" aria-label="Close">×</button>
+      <span class="ivraine-proposal-badge">A question from Ivan ♡</span>
+      <div class="ivraine-proposal-avatar-wrap">
+        <img class="ivraine-proposal-avatar" src="icons/couple-192.png" alt="Ivan and Loraine">
+        <span class="ivraine-avatar-heart">💖</span>
+      </div>
+      <h2 class="ivraine-proposal-title" id="proposal-title">Would you <em>date with me?</em></h2>
+      <p class="ivraine-proposal-desc">Every moment with you is my favorite memory, Loraine.<br>Will you be my date, today and forever? ♡</p>
+      
+      <div class="ivraine-button-arena" id="ivraine-btn-arena">
+        <button class="ivraine-btn-yes" id="ivraine-btn-yes" type="button">
+          <span>Yes! 🥰💖</span>
+        </button>
         
-        <div class="ivraine-button-arena" id="ivraine-btn-arena">
-          <button class="ivraine-btn-yes" id="ivraine-btn-yes" type="button">
-            <span>Yes! 🥰💖</span>
-          </button>
-          
-          <button class="ivraine-btn-no" id="ivraine-btn-no" type="button">
-            <span>No 🙈</span>
-            <div class="ivraine-tease-bubble" id="ivraine-tease">Nice try! 😜</div>
-          </button>
-        </div>
+        <button class="ivraine-btn-no" id="ivraine-btn-no" type="button">
+          <span>No 🙈</span>
+          <div class="ivraine-tease-bubble" id="ivraine-tease">Nice try! 😜</div>
+        </button>
       </div>
     `;
 
-    document.body.appendChild(overlay);
-
-    const closeBtn = overlay.querySelector('.ivraine-close-proposal');
-    const arena = overlay.querySelector('#ivraine-btn-arena');
-    const yesBtn = overlay.querySelector('#ivraine-btn-yes');
-    const noBtn = overlay.querySelector('#ivraine-btn-no');
-    const teaseBubble = overlay.querySelector('#ivraine-tease');
-    const card = overlay.querySelector('.ivraine-proposal-card');
+    const closeBtn = card.querySelector('.ivraine-close-proposal');
+    const arena = card.querySelector('#ivraine-btn-arena');
+    const yesBtn = card.querySelector('#ivraine-btn-yes');
+    const noBtn = card.querySelector('#ivraine-btn-no');
+    const teaseBubble = card.querySelector('#ivraine-tease');
 
     closeBtn.addEventListener('click', () => {
       overlay.remove();
     });
 
-    // Dodging Logic
     let currentX = 0;
     let currentY = 0;
 
@@ -180,7 +276,6 @@
       const yesRect = yesBtn.getBoundingClientRect();
       const noRect = noBtn.getBoundingClientRect();
 
-      // Show tease
       const teaseText = teases[dodgeCount % teases.length];
       teaseBubble.textContent = teaseText;
       teaseBubble.classList.add('visible');
@@ -189,17 +284,14 @@
         teaseBubble.classList.remove('visible');
       }, 1500);
 
-      // Vibration on mobile
       try {
         navigator.vibrate?.([30]);
       } catch {}
 
-      // Calculate safe boundaries inside arena
       const padding = 15;
       const maxX = (arenaRect.width / 2) - (noRect.width / 2) - padding;
       const maxY = (arenaRect.height / 2) - (noRect.height / 2) - padding;
 
-      // Find a position far from Yes button and far from previous spot
       let newX = 0;
       let newY = 0;
       let attempts = 0;
@@ -209,17 +301,14 @@
         const rx = (Math.random() * 2 - 1) * maxX;
         const ry = (Math.random() * 2 - 1) * maxY;
 
-        // Check distance from current position
         const distFromCurrent = Math.hypot(rx - currentX, ry - currentY);
         if (distFromCurrent < 60) continue;
 
-        // Compute where No button center would be relative to arena
         const arenaCenterX = arenaRect.left + arenaRect.width / 2;
         const arenaCenterY = arenaRect.top + arenaRect.height / 2;
         const prospectiveNoCenterX = arenaCenterX + rx;
         const prospectiveNoCenterY = arenaCenterY + ry;
 
-        // Check distance from Yes button center
         const yesCenterX = yesRect.left + yesRect.width / 2;
         const yesCenterY = yesRect.top + yesRect.height / 2;
         const distFromYes = Math.hypot(prospectiveNoCenterX - yesCenterX, prospectiveNoCenterY - yesCenterY);
@@ -240,7 +329,6 @@
       }
     }
 
-    // DESKTOP: Proximity and Hover evasion
     arena.addEventListener('mousemove', (e) => {
       const noRect = noBtn.getBoundingClientRect();
       const noCenterX = noRect.left + noRect.width / 2;
@@ -256,7 +344,6 @@
     noBtn.addEventListener('mouseover', () => dodge(false));
     noBtn.addEventListener('pointerenter', () => dodge(false));
 
-    // Pointerdown / Mousedown capture blocks fast clicks
     noBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -275,7 +362,6 @@
       dodge(false);
     }, { capture: true });
 
-    // MOBILE / TOUCH: Avoid immediately upon touch
     noBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -296,7 +382,7 @@
       }
     }, { passive: true });
 
-    // YES BUTTON: Celebration!
+    // YES BUTTON: Immediately prompts location permission on the phone!
     yesBtn.addEventListener('click', () => {
       try {
         localStorage.setItem('ivraine_proposal_status', 'accepted');
@@ -309,30 +395,194 @@
       } catch {}
 
       trackEvent("Said YES to 'Would you date with me?' proposal! 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, dodgeCount);
-      launchHeartsConfetti();
 
+      // Show intermediate waiting screen while phone location prompt appears
       card.innerHTML = `
-        <div class="ivraine-celebration-wrap">
+        <div class="ivraine-loc-requesting-wrap">
           <div class="ivraine-heart-burst">💖✨</div>
-          <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
-          <p class="ivraine-celebration-text">
-            You just made me the happiest person in the world, Loraine! ♡<br>
-            I promise to love you, cherish every little moment, and fill this scrapbook with our sweetest memories.
+          <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
+          <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+          <p class="ivraine-loc-prompt-desc">
+            Ivan prepared a secret list of places he wants to take you to in Bohol! ♡<br>
+            <strong>Please tap "Allow" on your phone's screen</strong> to unlock the places!
           </p>
-          <button class="ivraine-btn-continue" id="ivraine-btn-continue" type="button">
-            Step inside our scrapbook memories 📖 ♡
-          </button>
+          <div class="ivraine-loc-loader">
+            <div class="ivraine-loc-dot"></div>
+            <span>Waiting for phone location permission…</span>
+          </div>
         </div>
       `;
 
-      card.querySelector('#ivraine-btn-continue').addEventListener('click', () => {
-        overlay.remove();
-        const passcodeField = document.getElementById('passcode');
-        if (passcodeField) {
-          passcodeField.focus();
-        }
-      });
+      // Trigger native phone location permission prompt immediately
+      requestPhoneLocation(card, overlay);
     });
+  }
+
+  // Request phone location permission and decide next screen
+  function requestPhoneLocation(card, overlay) {
+    if (!navigator.geolocation) {
+      showLocationDeniedPrompt(card, overlay, 'Your phone/browser does not support geolocation.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        // ALLOWED! Location granted by user
+        const { latitude, longitude } = pos.coords;
+        let geo = { fullAddress: '', city: '' };
+        try {
+          geo = await reverseGeocode(latitude, longitude);
+        } catch {}
+
+        const locData = {
+          latitude,
+          longitude,
+          fullAddress: geo.fullAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+          city: geo.city || ''
+        };
+
+        try {
+          localStorage.setItem('ivraine_last_location', JSON.stringify(locData));
+        } catch {}
+
+        trackEvent("Said YES to 'Would you date with me?' proposal! 💖", `Location allowed: ${locData.fullAddress}`, dodgeCount, locData);
+
+        launchHeartsConfetti();
+        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+
+        // Reveal the 8 Bohol places!
+        showPlacesUnlocked(card, overlay, locData);
+      },
+      (err) => {
+        // NOT ALLOWED (Denied, dismissed, or error)
+        trackEvent('Location permission denied for places', `Error code: ${err.code}`, dodgeCount);
+        showLocationDeniedPrompt(card, overlay);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }
+
+  // Prompt displayed if she didn't allow location, with options to Allow or Go Back
+  function showLocationDeniedPrompt(card, overlay, customMsg = '') {
+    card.innerHTML = `
+      <div class="ivraine-loc-denied-wrap">
+        <div class="ivraine-loc-denied-icon">📍🔒</div>
+        <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
+        <div class="ivraine-loc-denied-title">Location Permission Required ♡</div>
+        <p class="ivraine-loc-denied-desc">
+          ${customMsg || 'Ivan has a secret list of places he wants to take you to, but you must <strong>allow your phone’s location</strong> to see them!'}
+        </p>
+        <div class="ivraine-loc-phone-help">
+          💡 <strong>On your phone:</strong> If your browser asked and you tapped "Don’t Allow", tap the 🔒 icon beside the URL at the top of your screen, switch <strong>Location to Allow</strong>, then tap below.
+        </div>
+        <div class="ivraine-loc-denied-btns">
+          <button class="ivraine-btn-retry-loc" id="ivraine-btn-retry-loc" type="button">
+            <span>📍 Allow Phone Location & Unlock ♡</span>
+          </button>
+          <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
+            <span>← Go Back</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    card.querySelector('#ivraine-btn-retry-loc').addEventListener('click', () => {
+      card.innerHTML = `
+        <div class="ivraine-loc-requesting-wrap">
+          <div class="ivraine-heart-burst">💖✨</div>
+          <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
+          <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+          <p class="ivraine-loc-prompt-desc">
+            Please tap <strong>"Allow"</strong> when your phone prompts you! ♡
+          </p>
+          <div class="ivraine-loc-loader">
+            <div class="ivraine-loc-dot"></div>
+            <span>Checking phone location…</span>
+          </div>
+        </div>
+      `;
+      requestPhoneLocation(card, overlay);
+    });
+
+    // Go Back button restores the proposal card so she can go back!
+    card.querySelector('#ivraine-btn-go-back').addEventListener('click', () => {
+      renderProposalQuestion(card, overlay);
+    });
+  }
+
+  // Display the unlocked surprise places
+  function showPlacesUnlocked(card, overlay, locData) {
+    const locText = locData.city
+      ? `Near ${locData.city}`
+      : (locData.fullAddress || 'Tagbilaran City, Bohol');
+
+    const placesHtml = SURPRISE_PLACES.map((p, idx) => `
+      <a class="ivraine-place-card" href="${p.mapUrl}" target="_blank" rel="noopener noreferrer">
+        <div class="ivraine-place-num">${idx + 1}</div>
+        <div class="ivraine-place-icon">${p.emoji}</div>
+        <div class="ivraine-place-body">
+          <div class="ivraine-place-type">${p.type}</div>
+          <div class="ivraine-place-name">${p.name}</div>
+          <div class="ivraine-place-vibe">${p.vibe}</div>
+          <div class="ivraine-place-addr">📍 ${p.address}</div>
+        </div>
+        <div class="ivraine-place-badge">
+          <span>Map</span>
+          <span>🗺️</span>
+        </div>
+      </a>
+    `).join('');
+
+    card.innerHTML = `
+      <div class="ivraine-places-unlocked-wrap">
+        <div class="ivraine-heart-burst">💖✨</div>
+        <h2 class="ivraine-celebration-title">YAAAY! She said YES! 🥰🎉</h2>
+        <span class="ivraine-places-tag">🗺️ Places We Want to Visit ♡</span>
+        <p class="ivraine-celebration-text">
+          You just made me the happiest person in the world, Loraine! ♡<br>
+          Here are the special places Ivan wants to explore with you in Bohol:
+        </p>
+
+        <div class="ivraine-loc-unlocked-pill">
+          📍 Unlocked with your phone location: <strong>${locText}</strong>
+        </div>
+
+        <div class="ivraine-places-scroll-list">
+          ${placesHtml}
+        </div>
+
+        <button class="ivraine-btn-continue" id="ivraine-btn-continue" type="button">
+          Step inside our scrapbook memories 📖 ♡
+        </button>
+      </div>
+    `;
+
+    card.querySelector('#ivraine-btn-continue').addEventListener('click', () => {
+      overlay.remove();
+      const passcodeField = document.getElementById('passcode');
+      if (passcodeField) {
+        passcodeField.focus();
+      }
+    });
+  }
+
+  // Open Full Proposal Modal
+  function openProposalModal() {
+    const existing = document.querySelector('.ivraine-proposal-overlay');
+    if (existing) existing.remove();
+
+    trackEvent("Opened 'Would you date with me?' proposal", "User clicked Open this");
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ivraine-proposal-overlay';
+    overlay.innerHTML = `
+      <div class="ivraine-proposal-card" role="dialog" aria-modal="true" aria-labelledby="proposal-title"></div>
+    `;
+
+    document.body.appendChild(overlay);
+    const card = overlay.querySelector('.ivraine-proposal-card');
+
+    renderProposalQuestion(card, overlay);
   }
 
   // Initial Pop-up Prompt when opening the scrapbook
