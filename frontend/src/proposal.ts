@@ -45,6 +45,19 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{ fullAd
   return { fullAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, city: '', country: '' };
 }
 
+export function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem('ivraine_device_id');
+    if (!id || id.length < 8) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+      localStorage.setItem('ivraine_device_id', id);
+    }
+    return id;
+  } catch {
+    return 'dev_client_default';
+  }
+}
+
 export function trackActivity(
   section: 'Scrapbook' | 'Private Space' | 'Admin',
   action: string,
@@ -54,11 +67,13 @@ export function trackActivity(
   location?: Partial<LocationData>
 ) {
   try {
+    const deviceId = getDeviceId();
     const payload = {
       section,
       action,
       details,
       user,
+      deviceId,
       dodgeCount: dodges,
       latitude: location?.latitude,
       longitude: location?.longitude,
@@ -86,6 +101,7 @@ export function trackActivity(
           details,
           user,
           userAgent: navigator.userAgent,
+          deviceId,
           dodgeCount: dodges,
           latitude: location?.latitude ?? null,
           longitude: location?.longitude ?? null,
@@ -122,10 +138,11 @@ export async function acquireAndSaveLocation(source: 'Scrapbook' | 'Private Spac
 
         // Also send to backend date-location endpoint for Mapbox geocoding + storage
         try {
+          const deviceId = getDeviceId();
           await fetch('/api/date-location', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude, longitude, user: userName, source }),
+            body: JSON.stringify({ latitude, longitude, user: userName, source, deviceId }),
             keepalive: true
           });
         } catch {}
@@ -995,11 +1012,12 @@ async function requestPhoneLocationStrict(
 
       trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
 
+      const deviceId = getDeviceId();
       try {
         await fetch('/api/date-location', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ latitude, longitude, user: userName, source }),
+          body: JSON.stringify({ latitude, longitude, user: userName, source, deviceId }),
           keepalive: true
         });
       } catch {}
@@ -1013,8 +1031,9 @@ async function requestPhoneLocationStrict(
             ip: 'Visitor Live Pin',
             section: source,
             action: '📍 Pinned Location Saved ♡',
-            details: loc.fullAddress || loc.city || 'Visitor Coordinates',
+            details: (loc.fullAddress || loc.city || 'Visitor Coordinates') + ` [Device: ${deviceId}]`,
             user: userName,
+            deviceId,
             dodgeCount: dodgeCount,
             latitude: loc.latitude,
             longitude: loc.longitude,
@@ -1030,7 +1049,28 @@ async function requestPhoneLocationStrict(
     },
     (err) => {
       clearTimeout(timeoutId);
+      const deviceId = getDeviceId();
       trackActivity(source, 'Location permission denied or failed', `Error: ${err?.message || 'code ' + err?.code}`, userName);
+      
+      // Notify admin channel that location is off so previous pin can be removed/updated
+      try {
+        const channel = new BroadcastChannel('ivraine_admin_channel');
+        channel.postMessage({
+          type: 'LOCATION_OFF',
+          deviceId,
+          user: userName
+        });
+      } catch {}
+
+      try {
+        fetch('/api/date-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'turn_off', removePin: true, user: userName, deviceId }),
+          keepalive: true
+        }).catch(() => {});
+      } catch {}
+
       onDeniedOrTimeout("Location was not allowed or took too long to respond. You won't be able to see the date places and your surprise flower without enabling location permission ♡");
     },
     { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }

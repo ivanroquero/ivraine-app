@@ -28,10 +28,41 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body); } catch {}
   }
 
-  let latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
-  let longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
+  const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() ? body.deviceId.trim().slice(0, 100) : '';
   const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Loraine';
   const source = body.source || 'Scrapbook';
+
+  const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  // Handle location turn off or remove pin
+  const isRemove = body.removePin === true || body.action === 'turn_off' || (typeof body.action === 'string' && body.action.toLowerCase().includes('turned off'));
+  if (isRemove) {
+    globalThis.__ivraine_logs = (globalThis.__ivraine_logs || []).filter(l => {
+      const isTarget = (deviceId && l.deviceId === deviceId) ||
+        (user && l.user && user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
+        (!deviceId && l.ip === ip);
+      return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
+    });
+
+    if (sbUrl && sbKey) {
+      try {
+        const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          }
+        });
+      } catch {}
+    }
+
+    return res.status(200).json({ status: 'ok', success: true, removed: true, deviceId });
+  }
+
+  let latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
+  let longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
 
   // Fallback to Vercel edge IP geolocation if coordinates not provided
   if ((!latitude || !longitude) && req.headers['x-vercel-ip-latitude']) {
@@ -51,16 +82,19 @@ export default async function handler(req, res) {
     fullAddress = city ? `${city}, Bohol, Philippines` : 'Tagbilaran City, Bohol, Philippines';
   }
 
+  const detailsStr = `Location: ${fullAddress} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})${deviceId ? ' [Device: ' + deviceId + ']' : ''}`;
+
   const logEntry = {
     id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     ip,
     section: source,
     action: '📍 Date Location Captured ♡',
-    details: `Location: ${fullAddress} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+    details: detailsStr,
     user_name: user,
     user,
     user_agent: req.headers['user-agent'] || '',
     userAgent: req.headers['user-agent'] || '',
+    deviceId,
     dodge_count: 0,
     dodgeCount: 0,
     latitude,
@@ -73,17 +107,30 @@ export default async function handler(req, res) {
     timestamp: new Date().toISOString()
   };
 
-  // Shared in-memory cache for Vercel serverless functions
-  globalThis.__ivraine_logs = globalThis.__ivraine_logs || [];
+  // Shared in-memory cache for Vercel serverless functions:
+  // Automatically purge prior location entries for this device so only 1 pin exists!
+  globalThis.__ivraine_logs = (globalThis.__ivraine_logs || []).filter(l => {
+    const isTarget = (deviceId && l.deviceId === deviceId) ||
+      (user && l.user && user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
+      (!deviceId && l.ip === ip);
+    return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
+  });
+
   globalThis.__ivraine_logs.unshift(logEntry);
   if (globalThis.__ivraine_logs.length > 500) globalThis.__ivraine_logs.length = 500;
 
-  // Record to Supabase
-  const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
+  // Record to Supabase, first purging prior location pins for this user/device
   if (sbUrl && sbKey) {
     try {
+      const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+      await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        }
+      });
+
       await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
         method: 'POST',
         headers: {

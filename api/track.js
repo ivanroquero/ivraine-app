@@ -29,6 +29,7 @@ export default async function handler(req, res) {
   const details = body.details || '';
   const userName = body.user || 'Visitor';
   const userAgent = req.headers['user-agent'] || '';
+  const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() ? body.deviceId.trim().slice(0, 100) : '';
   const dodgeCount = Number(body.dodgeCount) || 0;
   let latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
   let longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
@@ -49,16 +50,19 @@ export default async function handler(req, res) {
     }
   }
 
+  const detailsWithDevice = deviceId && !details.includes('[Device:') ? `${details}${details ? ' ' : ''}[Device: ${deviceId}]` : details;
+
   const logEntry = {
     id: 'track_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     ip,
     section,
     action,
-    details,
+    details: detailsWithDevice,
     user_name: userName,
     user: userName,
     user_agent: userAgent,
     userAgent,
+    deviceId,
     dodge_count: dodgeCount,
     dodgeCount,
     latitude,
@@ -71,8 +75,18 @@ export default async function handler(req, res) {
     timestamp: new Date().toISOString()
   };
 
-  // Shared in-memory cache for Vercel functions
+  // Shared in-memory cache for Vercel functions:
+  // If this entry has coordinates, purge older location entries for this device
   globalThis.__ivraine_logs = globalThis.__ivraine_logs || [];
+  if (latitude != null && longitude != null) {
+    globalThis.__ivraine_logs = globalThis.__ivraine_logs.filter(l => {
+      const isTarget = (deviceId && l.deviceId === deviceId) ||
+        (userName && l.user && userName.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
+        (!deviceId && l.ip === ip);
+      return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
+    });
+  }
+
   globalThis.__ivraine_logs.unshift(logEntry);
   if (globalThis.__ivraine_logs.length > 500) globalThis.__ivraine_logs.length = 500;
 
@@ -82,6 +96,17 @@ export default async function handler(req, res) {
 
   if (sbUrl && sbKey) {
     try {
+      if (latitude != null && longitude != null) {
+        const filterCol = userName && userName !== 'Visitor' ? `user_name=eq.${encodeURIComponent(userName)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          }
+        });
+      }
+
       await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
         method: 'POST',
         headers: {
@@ -94,7 +119,7 @@ export default async function handler(req, res) {
           ip,
           section,
           action,
-          details,
+          details: detailsWithDevice,
           user_name: userName,
           user_agent: userAgent,
           dodge_count: dodgeCount,

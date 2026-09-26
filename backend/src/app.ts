@@ -168,6 +168,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Visitor';
     const dodgeCount = typeof body.dodgeCount === 'number' ? Math.max(0, Math.min(1000, body.dodgeCount)) : 0;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '';
+    const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() ? body.deviceId.trim().slice(0, 100) : '';
 
     const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
     const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
@@ -182,6 +183,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       details,
       user,
       userAgent,
+      deviceId,
       dodgeCount,
       latitude,
       longitude,
@@ -192,6 +194,19 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
+        // If this track log contains GPS coordinates, remove older location logs for this user/ip so only 1 pin exists
+        if (latitude != null && longitude != null) {
+          const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+          void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+            method: 'DELETE',
+            headers: {
+              'apikey': config.supabaseKey,
+              'Authorization': `Bearer ${config.supabaseKey}`
+            }
+          }).catch(() => {});
+        }
+
+        const detailsWithDevice = deviceId ? `${details}${details ? ' ' : ''}[Device: ${deviceId}]` : details;
         void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
           method: 'POST',
           headers: {
@@ -204,7 +219,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
             ip,
             section,
             action,
-            details,
+            details: detailsWithDevice,
             user_name: user,
             user_agent: userAgent,
             dodge_count: dodgeCount,
@@ -223,14 +238,35 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
   // Mystery Date Generator — Location capture endpoint
   // Accepts GPS coordinates, reverse-geocodes via Mapbox (falls back to Nominatim),
-  // and saves the exact address to the admin activity log.
+  // and saves the exact address to the admin activity log. Automatically removes prior device pins.
   app.post('/api/date-location', async (req, res) => {
     const ip = extractClientIp(req);
     const body = req.body || {};
-    const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) && Math.abs(body.latitude) <= 90 ? body.latitude : null;
-    const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) && Math.abs(body.longitude) <= 180 ? body.longitude : null;
+    const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() ? body.deviceId.trim().slice(0, 100) : '';
     const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Visitor';
     const source = (['Scrapbook', 'Private Space', 'Admin'].includes(body.source) ? body.source : 'Private Space') as 'Scrapbook' | 'Private Space' | 'Admin';
+
+    // Check if device turned off location or requested pin removal
+    const isRemove = body.removePin === true || body.action === 'turn_off' || (typeof body.action === 'string' && body.action.toLowerCase().includes('turned off'));
+    if (isRemove) {
+      adminStore.removeDeviceLocation({ deviceId, ip, user });
+      if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+        try {
+          const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+          void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+            method: 'DELETE',
+            headers: {
+              'apikey': config.supabaseKey,
+              'Authorization': `Bearer ${config.supabaseKey}`
+            }
+          }).catch(() => {});
+        } catch {}
+      }
+      return res.status(200).json({ success: true, removed: true, deviceId });
+    }
+
+    const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) && Math.abs(body.latitude) <= 90 ? body.latitude : null;
+    const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) && Math.abs(body.longitude) <= 180 ? body.longitude : null;
 
     if (!latitude || !longitude) {
       res.status(400).json({ error: 'Valid latitude and longitude are required.' });
@@ -280,13 +316,16 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       } catch { /* use raw coords */ }
     }
 
+    const detailsStr = `Exact Address: ${fullAddress} | Coords: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${deviceId ? ' [Device: ' + deviceId + ']' : ''}`;
+
     const entry = adminStore.record({
       ip,
       section: source,
       action: 'Date Location Captured 📍',
-      details: `Exact Address: ${fullAddress} | Coords: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      details: detailsStr,
       user,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '',
+      deviceId,
       dodgeCount: 0,
       latitude,
       longitude,
@@ -297,6 +336,16 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
+        // Delete older location rows so Supabase retains only 1 active pin for this user
+        const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`
+          }
+        }).catch(() => {});
+
         void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
           method: 'POST',
           headers: {
@@ -323,9 +372,9 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       } catch {}
     }
 
-    console.log(`[date-location] ${user} @ ${fullAddress} (${latitude}, ${longitude})`);
+    console.log(`[date-location] ${user} (${deviceId || 'no-id'}) @ ${fullAddress} (${latitude}, ${longitude})`);
 
-    res.status(201).json({ success: true, fullAddress, city, country, latitude, longitude, log: entry });
+    res.status(201).json({ success: true, fullAddress, city, country, latitude, longitude, deviceId, log: entry });
   });
 
   app.get('/api/ip', (req, res) => {

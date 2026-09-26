@@ -22,22 +22,25 @@ export default async function handler(req, res) {
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
-          logs = data.map(row => ({
-            id: row.id,
-            ip: row.ip || '127.0.0.1',
-            section: row.section || 'Scrapbook',
-            action: row.action || 'Visit',
-            details: row.details || '',
-            user: row.user_name || 'Visitor',
-            userAgent: row.user_agent || '',
-            dodgeCount: row.dodge_count || 0,
-            latitude: typeof row.latitude === 'number' ? row.latitude : null,
-            longitude: typeof row.longitude === 'number' ? row.longitude : null,
-            fullAddress: row.full_address || '',
-            city: row.city || '',
-            country: row.country || '',
-            timestamp: row.created_at || new Date().toISOString()
-          }));
+            const devMatch = (row.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/);
+            return {
+              id: row.id,
+              ip: row.ip || '127.0.0.1',
+              section: row.section || 'Scrapbook',
+              action: row.action || 'Visit',
+              details: row.details || '',
+              user: row.user_name || 'Visitor',
+              userAgent: row.user_agent || '',
+              deviceId: row.device_id || (devMatch ? devMatch[1] : ''),
+              dodgeCount: row.dodge_count || 0,
+              latitude: typeof row.latitude === 'number' ? row.latitude : null,
+              longitude: typeof row.longitude === 'number' ? row.longitude : null,
+              fullAddress: row.full_address || '',
+              city: row.city || '',
+              country: row.country || '',
+              timestamp: row.created_at || new Date().toISOString()
+            };
+          });
         }
       }
     } catch {}
@@ -55,6 +58,39 @@ export default async function handler(req, res) {
   }
 
   logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  // Deduplicate location logs so each device has at most 1 location pin!
+  const seenLocationDevices = new Set();
+  const dedupedLogs = [];
+
+  for (const log of logs) {
+    const hasLocation = log.latitude != null && log.longitude != null;
+    if (!hasLocation) {
+      dedupedLogs.push(log);
+      continue;
+    }
+
+    const devId = log.deviceId || ((log.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/)?.[1]) || '';
+    let devKey = devId ? `device_${devId}` : '';
+    if (!devKey) {
+      const user = (log.user || '').toLowerCase();
+      const ip = (log.ip || '').toLowerCase();
+      if (user.includes('loraine') || ip.includes('saved') || ip.includes('live') || ip.includes('client')) {
+        devKey = 'device_loraine_phone';
+      } else {
+        const ua = (log.userAgent || '').toLowerCase();
+        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
+        devKey = `device_${log.ip || 'ip'}_${isMobile ? 'mobile' : 'desktop'}`;
+      }
+    }
+
+    if (!seenLocationDevices.has(devKey)) {
+      seenLocationDevices.add(devKey);
+      dedupedLogs.push(log);
+    }
+  }
+
+  logs = dedupedLogs;
 
   const uniqueIps = new Set(logs.map(l => l.ip)).size;
   const scrapbookVisits = logs.filter(l => l.section === 'Scrapbook').length;

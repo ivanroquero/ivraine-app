@@ -109,14 +109,29 @@
     return { fullAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, city: '', country: '' };
   }
 
+  function getDeviceId() {
+    try {
+      let id = localStorage.getItem('ivraine_device_id');
+      if (!id || id.length < 8) {
+        id = 'dev_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        localStorage.setItem('ivraine_device_id', id);
+      }
+      return id;
+    } catch {
+      return 'dev_legacy_phone';
+    }
+  }
+
   // IP / Activity tracking helper
   function trackEvent(action, details = '', dodges = 0, loc = null) {
     try {
+      const deviceId = getDeviceId();
       const payload = {
         section: 'Scrapbook',
         action: action,
         details: details,
         user: 'Loraine',
+        deviceId: deviceId,
         dodgeCount: dodges,
         latitude: loc?.latitude ?? null,
         longitude: loc?.longitude ?? null,
@@ -140,7 +155,8 @@
             latitude: loc.latitude,
             longitude: loc.longitude,
             user: 'Loraine',
-            source: 'Scrapbook'
+            source: 'Scrapbook',
+            deviceId: deviceId
           }),
           keepalive: true
         }).catch(() => {});

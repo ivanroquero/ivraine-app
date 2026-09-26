@@ -8,6 +8,7 @@ export interface VisitorLog {
   details?: string;
   user?: string;
   userAgent?: string;
+  deviceId?: string;
   dodgeCount?: number;
   latitude?: number | null;
   longitude?: number | null;
@@ -35,6 +36,27 @@ export class AdminStore {
   private proposalAcceptedAt: string | null = null;
   private totalDodges = 0;
 
+  /**
+   * Removes any previous location coordinates/pins for a device so that
+   * every device has strictly AT MOST 1 active pin on the map.
+   */
+  removeDeviceLocation(filter: { deviceId?: string; ip?: string; user?: string }): number {
+    const initialCount = this.logs.length;
+    this.logs = this.logs.filter(l => {
+      // Keep non-location activity logs (e.g. visit, clicks, answers)
+      if (l.latitude == null && l.longitude == null) {
+        return true;
+      }
+      const sameDevice =
+        (Boolean(filter.deviceId && l.deviceId && l.deviceId === filter.deviceId)) ||
+        (Boolean(filter.user && l.user && filter.user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine'))) ||
+        (!filter.deviceId && Boolean(filter.ip && l.ip === filter.ip));
+
+      return !sameDevice;
+    });
+    return initialCount - this.logs.length;
+  }
+
   record(log: {
     ip: string;
     section: 'Scrapbook' | 'Private Space' | 'Admin';
@@ -42,6 +64,7 @@ export class AdminStore {
     details?: string;
     user?: string;
     userAgent?: string;
+    deviceId?: string;
     dodgeCount?: number;
     latitude?: number | null;
     longitude?: number | null;
@@ -49,6 +72,13 @@ export class AdminStore {
     city?: string;
     country?: string;
   }): VisitorLog {
+    // If incoming log is a location update, automatically purge previous location pins for this device!
+    const hasCoords = typeof log.latitude === 'number' && typeof log.longitude === 'number' && !isNaN(log.latitude) && !isNaN(log.longitude);
+    const isLocationAction = log.action.toLowerCase().includes('location');
+    if (hasCoords || (isLocationAction && (log.action.toLowerCase().includes('turned off') || log.action.toLowerCase().includes('denied')))) {
+      this.removeDeviceLocation({ deviceId: log.deviceId, ip: log.ip, user: log.user });
+    }
+
     const entry: VisitorLog = {
       id: randomUUID(),
       ip: log.ip || '127.0.0.1',
@@ -57,6 +87,7 @@ export class AdminStore {
       details: log.details || '',
       user: log.user || 'Visitor',
       userAgent: log.userAgent || '',
+      deviceId: log.deviceId || '',
       dodgeCount: Number(log.dodgeCount) || 0,
       latitude: typeof log.latitude === 'number' ? log.latitude : null,
       longitude: typeof log.longitude === 'number' ? log.longitude : null,
