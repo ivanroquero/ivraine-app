@@ -68,6 +68,7 @@
     frame.title = 'Ivan and Loraine’s scrapbook';
     // Authenticated, locally authored content. Same origin keeps blob photos reliable on mobile.
     frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.setAttribute('allow', 'geolocation');
     frame.srcdoc = html;
     frame.addEventListener('load', () => frame?.focus(), {once: true});
     host.append(frame);
