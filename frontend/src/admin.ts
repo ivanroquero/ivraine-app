@@ -56,8 +56,12 @@ let mapInstance: any = null;
 let mapType: 'mapbox' | 'leaflet' = 'leaflet';
 let mapMarkers: any[] = [];
 let leafletMarkersLayer: any = null;
-let currentMapStyle = 'dark';
+let leafletTileLayers: Record<'dark' | 'satellite' | 'streets', any> = { dark: null, satellite: null, streets: null };
+let currentMapStyle: 'dark' | 'satellite' | 'streets' = 'dark';
 let mapInitialized = false;
+let userInteractedWithMap = false;
+let isDraggingPin = false;
+let latestPinnedCoords: { lat: number; lng: number; address?: string; user?: string } | null = null;
 
 // Passcode handling
 const lockScreen = document.getElementById('admin-lock') as HTMLDivElement;
@@ -424,8 +428,179 @@ function updateKpiUi(stats: AdminStats) {
 }
 
 // -----------------------------------------------------------------------------------------
-// MAPBOX / LEAFLET LIVE VISITOR MAP ENGINE
+// MAPBOX / LEAFLET LIVE VISITOR MAP ENGINE (ULTRA-HD, DEEP-ZOOM, GRABBABLE LIVE PIN)
 // -----------------------------------------------------------------------------------------
+
+function updateMapHud(lat: number, lng: number, address?: string, isDraggable: boolean = true) {
+  const coordsEl = document.getElementById('hud-coordinates');
+  if (coordsEl) {
+    coordsEl.textContent = `📍 ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+  }
+  const addrEl = document.getElementById('hud-address');
+  if (addrEl && address) {
+    addrEl.textContent = address.length > 40 ? address.slice(0, 38) + '…' : address;
+    addrEl.title = address;
+  }
+  const statusEl = document.getElementById('hud-interaction-status');
+  if (statusEl) {
+    statusEl.textContent = isDraggable ? '🖐 Draggable (Grab pin to reposition)' : '📍 Fixed Location';
+    statusEl.style.color = '#2ecc71';
+  }
+  const engineEl = document.getElementById('hud-engine-tag');
+  if (engineEl) {
+    engineEl.textContent = mapType === 'mapbox' ? 'Mapbox GL Vector' : 'Leaflet Ultra-HD';
+  }
+}
+
+function updateHudCoords(lat: number, lng: number) {
+  const coordsEl = document.getElementById('hud-coordinates');
+  if (coordsEl) {
+    coordsEl.textContent = `📍 ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E (Moving...)`;
+  }
+  const statusEl = document.getElementById('hud-interaction-status');
+  if (statusEl) {
+    statusEl.textContent = '🖐 Repositioning Live Pin…';
+    statusEl.style.color = '#ff6b81';
+  }
+}
+
+function showMapToast(message: string, durationMs: number = 3500) {
+  const toast = document.getElementById('map-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.style.display = 'flex';
+  setTimeout(() => {
+    if (toast) toast.style.display = 'none';
+  }, durationMs);
+}
+
+function createLiveMarkerElement(user: string, _isPrimary: boolean = true): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'live-map-marker-container';
+  container.setAttribute('role', 'button');
+  container.setAttribute('aria-label', `Live location pin for ${user}. Drag to move.`);
+
+  const wave1 = document.createElement('div');
+  wave1.className = 'live-radar-ping';
+
+  const wave2 = document.createElement('div');
+  wave2.className = 'live-radar-ping second';
+
+  const center = document.createElement('div');
+  center.className = 'live-marker-center';
+
+  const emoji = document.createElement('span');
+  emoji.className = 'live-marker-emoji';
+  emoji.textContent = '💖';
+  center.appendChild(emoji);
+
+  const pill = document.createElement('div');
+  pill.className = 'live-marker-pill';
+  pill.innerHTML = `<span class="pill-dot"></span><span>${escapeHtml(user || 'Loraine')} ♡</span>`;
+
+  container.appendChild(wave1);
+  container.appendChild(wave2);
+  container.appendChild(center);
+  container.appendChild(pill);
+
+  return container;
+}
+
+async function handlePinRepositioned(newLat: number, newLng: number, user: string = 'Loraine') {
+  updateHudCoords(newLat, newLng);
+  showMapToast(`📍 Pin placed at ${newLat.toFixed(4)}, ${newLng.toFixed(4)}! Resolving address…`);
+
+  let resolvedAddress = `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
+  let resolvedCity = '';
+  let resolvedCountry = 'Philippines';
+
+  // Reverse geocode via Nominatim
+  try {
+    const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLat}&lon=${newLng}&zoom=18&addressdetails=1`;
+    const res = await fetch(geoUrl, {
+      headers: { 'Accept-Language': 'en' },
+      signal: AbortSignal.timeout(3500)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.display_name) {
+        resolvedAddress = data.display_name;
+        resolvedCity = data.address?.city || data.address?.town || data.address?.municipality || data.address?.county || '';
+        resolvedCountry = data.address?.country || 'Philippines';
+      }
+    }
+  } catch {}
+
+  latestPinnedCoords = { lat: newLat, lng: newLng, address: resolvedAddress, user };
+  updateMapHud(newLat, newLng, resolvedAddress);
+  showMapToast(`📍 Pin saved: ${resolvedCity ? resolvedCity + ' · ' : ''}${resolvedAddress.slice(0, 30)} ♡`);
+
+  // Persist locally
+  const locPayload = {
+    latitude: newLat,
+    longitude: newLng,
+    fullAddress: resolvedAddress,
+    city: resolvedCity,
+    country: resolvedCountry,
+    user,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(locPayload));
+    localStorage.setItem('ivraine_last_location', JSON.stringify(locPayload));
+  } catch {}
+
+  // Sync to Backend & Supabase
+  try {
+    const trackPayload = {
+      section: 'Admin',
+      action: '📍 Moved Live Pin on Map ♡',
+      details: resolvedAddress,
+      user,
+      latitude: newLat,
+      longitude: newLng,
+      fullAddress: resolvedAddress,
+      city: resolvedCity,
+      country: resolvedCountry
+    };
+
+    const endpoint = getBackendEndpoint('/api/date-location');
+    if (endpoint) {
+      void fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(trackPayload)
+      });
+    }
+
+    const sb = getAdminSupabaseClient();
+    if (sb) {
+      void sb.from('ivraine_visitor_logs').insert([{
+        ip: currentClientIp,
+        section: 'Admin',
+        action: '📍 Moved Live Pin on Map ♡',
+        details: resolvedAddress,
+        user_name: user,
+        latitude: newLat,
+        longitude: newLng,
+        full_address: resolvedAddress,
+        city: resolvedCity,
+        country: resolvedCountry
+      }]);
+    }
+  } catch {}
+
+  // Update in-memory logs
+  const existingLog = allLogs.find(l => l.latitude != null && l.longitude != null);
+  if (existingLog) {
+    existingLog.latitude = newLat;
+    existingLog.longitude = newLng;
+    existingLog.fullAddress = resolvedAddress;
+    existingLog.city = resolvedCity;
+  }
+  renderRecentLocationsDeck(allLogs.filter(l => l.latitude && l.longitude));
+}
+
 function initVisitorMap() {
   const mapContainer = document.getElementById('admin-visitor-map');
   if (!mapContainer || mapInitialized) return;
@@ -436,46 +611,94 @@ function initVisitorMap() {
   if (mapboxToken && typeof mapboxgl !== 'undefined') {
     try {
       mapboxgl.accessToken = mapboxToken;
+      let styleUrl = 'mapbox://styles/mapbox/dark-v11';
+      if (currentMapStyle === 'satellite') styleUrl = 'mapbox://styles/mapbox/satellite-streets-v12';
+      else if (currentMapStyle === 'streets') styleUrl = 'mapbox://styles/mapbox/streets-v12';
+
       mapInstance = new mapboxgl.Map({
         container: 'admin-visitor-map',
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: [121.0, 14.5], // Default center around Manila/SE Asia
-        zoom: 3
+        style: styleUrl,
+        center: [123.8647, 9.6496], // Bohol / Philippines
+        zoom: 14,
+        maxZoom: 22
       });
 
       mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
       mapType = 'mapbox';
       mapInitialized = true;
 
+      // Track user interaction so auto-refresh does not reset user's camera / zoom
+      mapInstance.on('movestart', () => { if (!isDraggingPin) userInteractedWithMap = true; });
+      mapInstance.on('zoomstart', () => { userInteractedWithMap = true; });
+
       mapInstance.on('load', () => {
         updateVisitorMap(allLogs);
       });
+
+      const engineEl = document.getElementById('hud-engine-tag');
+      if (engineEl) engineEl.textContent = 'Mapbox GL Vector';
       return;
-    } catch {}
+    } catch (err) {
+      console.warn('Mapbox initialization failed, falling back to Leaflet Ultra-HD:', err);
+    }
   }
 
-  // 2. Leaflet Fallback (CartoDB Dark Matter)
+  // 2. Leaflet Fallback with Ultra-HD Tiles & Overzooming (tiles never disappear)
   if (typeof L !== 'undefined') {
     try {
-      mapInstance = L.map('admin-visitor-map', {
-        zoomControl: true
-      }).setView([14.5995, 120.9842], 4);
+      if ((mapContainer as any)._leaflet_id) {
+        (mapContainer as any)._leaflet_id = null;
+      }
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png', {
+      mapInstance = L.map('admin-visitor-map', {
+        zoomControl: true,
+        maxZoom: 22
+      }).setView([9.6496, 123.8647], 14);
+
+      // Dark Matter with maxNativeZoom: 18, maxZoom: 22 so it scales up to 22 without disappearing!
+      leafletTileLayers.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; CartoDB &copy; OpenStreetMap',
-        maxZoom: 19
-      }).addTo(mapInstance);
+        maxNativeZoom: 18,
+        maxZoom: 22
+      });
+
+      // Esri Satellite with maxNativeZoom: 19, maxZoom: 22
+      leafletTileLayers.satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri &copy; Maxar, Earthstar Geographics',
+        maxNativeZoom: 19,
+        maxZoom: 22
+      });
+
+      // Streets with maxNativeZoom: 19, maxZoom: 22
+      leafletTileLayers.streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxNativeZoom: 19,
+        maxZoom: 22
+      });
+
+      const activeLayer = leafletTileLayers[currentMapStyle] || leafletTileLayers.dark;
+      activeLayer.addTo(mapInstance);
 
       leafletMarkersLayer = L.layerGroup().addTo(mapInstance);
       mapType = 'leaflet';
       mapInitialized = true;
+
+      // Track user interaction so auto-refresh does not reset zoom
+      mapInstance.on('movestart', () => { if (!isDraggingPin) userInteractedWithMap = true; });
+      mapInstance.on('zoomstart', () => { userInteractedWithMap = true; });
+
+      const engineEl = document.getElementById('hud-engine-tag');
+      if (engineEl) engineEl.textContent = 'Leaflet Ultra-HD';
+
       updateVisitorMap(allLogs);
-    } catch {}
+    } catch (err) {
+      console.error('Leaflet initialization error:', err);
+    }
   }
 }
 
 function updateVisitorMap(logs: VisitorLog[]) {
-  if (!mapInstance || !mapInitialized) return;
+  if (!mapInstance || !mapInitialized || isDraggingPin) return;
 
   const geoLogs: VisitorLog[] = logs
     .map(l => {
@@ -487,21 +710,27 @@ function updateVisitorMap(logs: VisitorLog[]) {
 
   renderRecentLocationsDeck(geoLogs);
 
+  if (geoLogs.length > 0) {
+    const primary = geoLogs[0];
+    updateMapHud(primary.latitude!, primary.longitude!, primary.fullAddress || `${primary.city || ''} ${primary.country || ''}`.trim() || 'Bohol, Philippines');
+  }
+
   if (mapType === 'mapbox') {
     try { mapInstance.resize(); } catch {}
-    // Clear Mapbox markers
-    mapMarkers.forEach(m => m.remove());
+
+    mapMarkers.forEach(m => {
+      try { m.remove(); } catch {}
+    });
     mapMarkers = [];
 
     const bounds = new mapboxgl.LngLatBounds();
 
-    geoLogs.forEach(log => {
+    geoLogs.forEach((log, index) => {
       const lat = log.latitude!;
       const lng = log.longitude!;
+      const isPrimary = index === 0;
 
-      const el = document.createElement('div');
-      el.className = 'map-heart-marker';
-      el.innerHTML = '💖';
+      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary);
 
       const popupHtml = `
         <div class="map-popup-header">
@@ -511,50 +740,75 @@ function updateVisitorMap(logs: VisitorLog[]) {
         </div>
         <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
         <div class="map-popup-meta">
-          <span>🌐 ${lat.toFixed(4)}, ${lng.toFixed(4)}</span>
+          <span>🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
           <span>💻 IP: ${escapeHtml(log.ip)}</span>
           <span>⏱ ${escapeHtml(timeAgo(log.timestamp))}</span>
+          <span style="color:#2ecc71;font-weight:600;margin-top:4px;">🖐 Drag marker to reposition</span>
         </div>
       `;
 
-      const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHtml);
+      const popup = new mapboxgl.Popup({ offset: 30 }).setHTML(popupHtml);
 
-      const marker = new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({
+        element: el,
+        draggable: true
+      })
         .setLngLat([lng, lat])
         .setPopup(popup)
         .addTo(mapInstance);
+
+      marker.on('dragstart', () => {
+        isDraggingPin = true;
+        userInteractedWithMap = true;
+        el.classList.add('is-dragging');
+        updateHudCoords(marker.getLngLat().lat, marker.getLngLat().lng);
+      });
+
+      marker.on('drag', () => {
+        const pos = marker.getLngLat();
+        updateHudCoords(pos.lat, pos.lng);
+      });
+
+      marker.on('dragend', async () => {
+        isDraggingPin = false;
+        el.classList.remove('is-dragging');
+        const pos = marker.getLngLat();
+        await handlePinRepositioned(pos.lat, pos.lng, log.user || 'Loraine');
+      });
 
       mapMarkers.push(marker);
       bounds.extend([lng, lat]);
     });
 
-    if (geoLogs.length > 0 && !bounds.isEmpty()) {
+    if (geoLogs.length > 0 && !bounds.isEmpty() && !userInteractedWithMap) {
       try {
         if (geoLogs.length === 1) {
-          mapInstance.flyTo({ center: [geoLogs[0].longitude, geoLogs[0].latitude], zoom: 14, essential: true });
+          mapInstance.flyTo({ center: [geoLogs[0].longitude, geoLogs[0].latitude], zoom: 16, essential: true });
         } else {
-          mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+          mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 16 });
         }
       } catch {}
     }
   } else if (mapType === 'leaflet' && leafletMarkersLayer) {
     try { mapInstance.invalidateSize(); } catch {}
-    // Leaflet marker rendering
     leafletMarkersLayer.clearLayers();
     mapMarkers = [];
 
     const latLngs: any[] = [];
 
-    geoLogs.forEach(log => {
+    geoLogs.forEach((log, index) => {
       const lat = log.latitude!;
       const lng = log.longitude!;
+      const isPrimary = index === 0;
 
-      const heartIcon = L.divIcon({
-        className: 'custom-map-icon',
-        html: `<div class="map-heart-marker">💖</div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-        popupAnchor: [0, -18]
+      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary);
+
+      const divIcon = L.divIcon({
+        className: 'leaflet-clean-marker',
+        html: el,
+        iconSize: [50, 50],
+        iconAnchor: [25, 25],
+        popupAnchor: [0, -25]
       });
 
       const popupHtml = `
@@ -565,37 +819,82 @@ function updateVisitorMap(logs: VisitorLog[]) {
         </div>
         <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
         <div class="map-popup-meta">
-          <span>🌐 ${lat.toFixed(4)}, ${lng.toFixed(4)}</span>
+          <span>🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
           <span>💻 IP: ${escapeHtml(log.ip)}</span>
           <span>⏱ ${escapeHtml(timeAgo(log.timestamp))}</span>
+          <span style="color:#2ecc71;font-weight:600;margin-top:4px;">🖐 Drag marker to reposition</span>
         </div>
       `;
 
-      const marker = L.marker([lat, lng], { icon: heartIcon })
+      const marker = L.marker([lat, lng], {
+        icon: divIcon,
+        draggable: true
+      })
         .bindPopup(popupHtml)
         .addTo(leafletMarkersLayer);
+
+      marker.on('dragstart', () => {
+        isDraggingPin = true;
+        userInteractedWithMap = true;
+        el.classList.add('is-dragging');
+        updateHudCoords(marker.getLatLng().lat, marker.getLatLng().lng);
+      });
+
+      marker.on('drag', () => {
+        const pos = marker.getLatLng();
+        updateHudCoords(pos.lat, pos.lng);
+      });
+
+      marker.on('dragend', async () => {
+        isDraggingPin = false;
+        el.classList.remove('is-dragging');
+        const pos = marker.getLatLng();
+        await handlePinRepositioned(pos.lat, pos.lng, log.user || 'Loraine');
+      });
 
       mapMarkers.push({ marker, lat, lng, log });
       latLngs.push([lat, lng]);
     });
 
-    if (latLngs.length > 0) {
+    if (latLngs.length > 0 && !userInteractedWithMap) {
       try {
         if (latLngs.length === 1) {
-          mapInstance.setView(latLngs[0], 14);
+          mapInstance.setView(latLngs[0], 16);
         } else {
-          mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 14 });
-        }
-        if (mapMarkers.length > 0 && mapMarkers[0]?.marker?.openPopup) {
-          mapMarkers[0].marker.openPopup();
+          mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 16 });
         }
       } catch {}
     }
   }
 }
 
+function setMapLayerStyle(style: 'dark' | 'satellite' | 'streets') {
+  currentMapStyle = style;
+
+  document.querySelectorAll('.layer-pill').forEach(pill => pill.classList.remove('active'));
+  document.getElementById(`btn-layer-${style}`)?.classList.add('active');
+
+  if (mapType === 'mapbox' && mapInstance) {
+    let styleUrl = 'mapbox://styles/mapbox/dark-v11';
+    if (style === 'satellite') styleUrl = 'mapbox://styles/mapbox/satellite-streets-v12';
+    else if (style === 'streets') styleUrl = 'mapbox://styles/mapbox/streets-v12';
+    mapInstance.setStyle(styleUrl);
+  } else if (mapType === 'leaflet' && mapInstance) {
+    Object.values(leafletTileLayers).forEach(layer => {
+      if (layer && mapInstance.hasLayer(layer)) {
+        mapInstance.removeLayer(layer);
+      }
+    });
+    const nextLayer = leafletTileLayers[style] || leafletTileLayers.dark;
+    if (nextLayer) nextLayer.addTo(mapInstance);
+  }
+  showMapToast(`🗺 Switched map to ${style.charAt(0).toUpperCase() + style.slice(1)} view`);
+}
+
 function flyToLocation(lat: number, lng: number) {
   if (!mapInstance) return;
+
+  userInteractedWithMap = false;
 
   // Switch to Map tab
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -605,10 +904,11 @@ function flyToLocation(lat: number, lng: number) {
 
   setTimeout(() => {
     if (mapType === 'mapbox') {
-      mapInstance.flyTo({ center: [lng, lat], zoom: 14, essential: true });
+      try { mapInstance.resize(); } catch {}
+      mapInstance.flyTo({ center: [lng, lat], zoom: 17, essential: true });
     } else if (mapType === 'leaflet') {
-      mapInstance.invalidateSize();
-      mapInstance.setView([lat, lng], 14, { animate: true });
+      try { mapInstance.invalidateSize(); } catch {}
+      mapInstance.setView([lat, lng], 17, { animate: true });
     }
   }, 100);
 }
@@ -972,50 +1272,92 @@ function setupSettings() {
     };
   }
 
-  // Mapbox Token
+  // Mapbox Token (Settings Tab)
   const mapboxInput = document.getElementById('mapbox-token-input') as HTMLInputElement | null;
   const mapboxSaveBtn = document.getElementById('btn-save-mapbox-token') as HTMLButtonElement | null;
   const mapboxStatus = document.getElementById('mapbox-token-status') as HTMLParagraphElement | null;
 
+  function applyMapboxToken(val: string) {
+    if (!val) {
+      localStorage.removeItem('ivraine-mapbox-token');
+      if (mapboxStatus) {
+        mapboxStatus.style.color = '#fbbf24';
+        mapboxStatus.textContent = 'Cleared. Using Leaflet Ultra-HD tiles.';
+      }
+      showMapToast('Switched to Leaflet Ultra-HD tiles');
+    } else {
+      localStorage.setItem('ivraine-mapbox-token', val);
+      if (mapboxStatus) {
+        mapboxStatus.style.color = '#2ecc71';
+        mapboxStatus.textContent = '✓ Mapbox Token saved! Loading Mapbox GL vector tiles…';
+      }
+      showMapToast('✓ Mapbox Token saved! Activating Mapbox GL…');
+    }
+
+    // Clean up current map
+    if (mapInstance) {
+      try {
+        if (mapType === 'mapbox') mapInstance.remove();
+        else if (mapType === 'leaflet') mapInstance.remove();
+      } catch {}
+      mapInstance = null;
+    }
+    mapInitialized = false;
+    userInteractedWithMap = false;
+    setTimeout(() => initVisitorMap(), 200);
+  }
+
   if (mapboxInput && mapboxSaveBtn) {
     mapboxInput.value = localStorage.getItem('ivraine-mapbox-token') || import.meta.env.VITE_MAPBOX_TOKEN || '';
     mapboxSaveBtn.onclick = () => {
-      const val = mapboxInput.value.trim();
-      if (!val) {
-        localStorage.removeItem('ivraine-mapbox-token');
-        if (mapboxStatus) {
-          mapboxStatus.style.color = '#fbbf24';
-          mapboxStatus.textContent = 'Cleared. Using CartoDB dark tiles via Leaflet.';
-        }
-      } else {
-        localStorage.setItem('ivraine-mapbox-token', val);
-        if (mapboxStatus) {
-          mapboxStatus.style.color = '#2ecc71';
-          mapboxStatus.textContent = '✓ Mapbox Token saved! Re-initializing map…';
-        }
-      }
-      mapInitialized = false;
-      setTimeout(() => initVisitorMap(), 200);
+      applyMapboxToken(mapboxInput.value.trim());
     };
   }
 
-  // Map Toolbar Buttons
-  document.getElementById('btn-center-latest-map')?.addEventListener('click', () => {
-    const geoLogs = allLogs.filter(l => l.latitude && l.longitude);
-    if (geoLogs.length > 0) {
-      flyToLocation(geoLogs[0].latitude!, geoLogs[0].longitude!);
-    } else {
-      alert('No visitor locations logged yet. Have Loraine open the app and allow location to see her on the map!');
+  // Quick Mapbox Drawer on Map Tab
+  const quickDrawer = document.getElementById('quick-mapbox-drawer') as HTMLDivElement | null;
+  const quickInput = document.getElementById('quick-mapbox-input') as HTMLInputElement | null;
+  const btnQuickOpen = document.getElementById('btn-quick-mapbox-token') as HTMLButtonElement | null;
+  const btnQuickClose = document.getElementById('btn-quick-close-mapbox') as HTMLButtonElement | null;
+  const btnQuickSave = document.getElementById('btn-quick-save-mapbox') as HTMLButtonElement | null;
+
+  if (quickInput) {
+    quickInput.value = localStorage.getItem('ivraine-mapbox-token') || import.meta.env.VITE_MAPBOX_TOKEN || '';
+  }
+
+  btnQuickOpen?.addEventListener('click', () => {
+    if (quickDrawer) {
+      const isHidden = quickDrawer.style.display === 'none';
+      quickDrawer.style.display = isHidden ? 'block' : 'none';
+      if (isHidden && quickInput) quickInput.focus();
     }
   });
 
-  document.getElementById('btn-toggle-map-style')?.addEventListener('click', () => {
-    if (mapType === 'mapbox' && mapInstance) {
-      currentMapStyle = currentMapStyle === 'dark' ? 'satellite' : 'dark';
-      const styleUrl = currentMapStyle === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/satellite-streets-v12';
-      mapInstance.setStyle(styleUrl);
-    } else if (mapType === 'leaflet' && mapInstance) {
-      alert('To use satellite imagery, enter a free Mapbox access token in the Settings & API tab.');
+  btnQuickClose?.addEventListener('click', () => {
+    if (quickDrawer) quickDrawer.style.display = 'none';
+  });
+
+  btnQuickSave?.addEventListener('click', () => {
+    const val = (quickInput?.value || '').trim();
+    if (mapboxInput) mapboxInput.value = val;
+    applyMapboxToken(val);
+    if (quickDrawer) quickDrawer.style.display = 'none';
+  });
+
+  // Layer Switching Pills
+  document.getElementById('btn-layer-dark')?.addEventListener('click', () => setMapLayerStyle('dark'));
+  document.getElementById('btn-layer-satellite')?.addEventListener('click', () => setMapLayerStyle('satellite'));
+  document.getElementById('btn-layer-streets')?.addEventListener('click', () => setMapLayerStyle('streets'));
+
+  // Center on latest pin button
+  document.getElementById('btn-center-latest-map')?.addEventListener('click', () => {
+    userInteractedWithMap = false;
+    const geoLogs = allLogs.filter(l => l.latitude && l.longitude);
+    if (geoLogs.length > 0) {
+      flyToLocation(geoLogs[0].latitude!, geoLogs[0].longitude!);
+      showMapToast(`🎯 Focused on ${geoLogs[0].user || 'latest visitor'} pin`);
+    } else {
+      alert('No visitor locations logged yet. Have Loraine open the app and allow location to see her on the map!');
     }
   });
 }

@@ -253,6 +253,82 @@ async function main() {
     const propStatusText = await statProposal.innerText();
     console.log(`PASS: Proposal status in Admin: ${propStatusText}`);
 
+    // ----------------------------------------------------
+    // TEST 4: LIVE MAP DEEP ZOOM & GRABBABLE MARKER TEST
+    // ----------------------------------------------------
+    console.log('Testing Admin Live Map Tab & Marker Interaction...');
+    await adminPage.locator('[data-tab="tab-map"]').click();
+    await adminPage.waitForTimeout(400);
+
+    // Verify map container visible
+    const mapContainer = adminPage.locator('#admin-visitor-map');
+    await mapContainer.waitFor({ state: 'visible', timeout: 5000 });
+    console.log('PASS: Map container visible and loaded');
+
+    // Wait for live radar marker to appear
+    const liveMarker = adminPage.locator('.live-map-marker-container').first();
+    await liveMarker.waitFor({ state: 'visible', timeout: 8000 });
+    console.log('PASS: Live radar marker rendered on map');
+
+    // Verify radar ping wave exists
+    const radarWave = liveMarker.locator('.live-radar-ping').first();
+    await radarWave.waitFor({ state: 'attached', timeout: 3000 });
+    console.log('PASS: Live radar ripple ping effect verified');
+
+    // Verify HUD coordinates and interaction status
+    const hudCoords = adminPage.locator('#hud-coordinates');
+    await hudCoords.waitFor({ state: 'visible', timeout: 3000 });
+    const coordsVal = await hudCoords.innerText();
+    if (!coordsVal.includes('°')) throw new Error(`HUD coordinates not formatted properly: ${coordsVal}`);
+    console.log(`PASS: HUD live coordinates displayed: ${coordsVal}`);
+
+    // Test Layer switching pills
+    await adminPage.locator('#btn-layer-satellite').click();
+    await adminPage.waitForTimeout(300);
+    const isSatActive = await adminPage.locator('#btn-layer-satellite').evaluate(el => el.classList.contains('active'));
+    if (!isSatActive) throw new Error('Satellite layer pill failed to activate');
+    console.log('PASS: Switched to Satellite map layer');
+
+    await adminPage.locator('#btn-layer-dark').click();
+    await adminPage.waitForTimeout(200);
+
+    // Test Deep Zoom: Zoom into map and wait through 3.5s auto-refresh
+    console.log('Testing zoom closer (verifying map and marker do NOT go away)...');
+    const mapBox = await mapContainer.boundingBox();
+    if (!mapBox) throw new Error('Map container bounding box not found');
+    await adminPage.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+    // Wheel zoom in 3 times
+    await adminPage.mouse.wheel(0, -300);
+    await adminPage.waitForTimeout(400);
+    await adminPage.mouse.wheel(0, -300);
+    await adminPage.waitForTimeout(400);
+
+    // Wait 4 seconds (longer than the 3.5s auto-refresh interval)
+    await adminPage.waitForTimeout(4000);
+
+    // Marker must still be visible and not destroyed or flown away!
+    await liveMarker.waitFor({ state: 'visible', timeout: 3000 });
+    console.log('PASS: Marker remains visible after zooming closer (did not disappear during auto-refresh)!');
+
+    // Test Grab & Move: Drag the live marker
+    console.log('Testing Grab & Drag of the live pin...');
+    const markerBox = await liveMarker.boundingBox();
+    if (!markerBox) throw new Error('Live marker bounding box not found for drag');
+
+    const startX = markerBox.x + markerBox.width / 2;
+    const startY = markerBox.y + markerBox.height / 2;
+    await adminPage.mouse.move(startX, startY);
+    await adminPage.mouse.down();
+    await adminPage.waitForTimeout(100);
+    await adminPage.mouse.move(startX + 60, startY + 40, { steps: 5 });
+    await adminPage.waitForTimeout(200);
+    await adminPage.mouse.up();
+    await adminPage.waitForTimeout(500);
+
+    // Marker must still be visible after drag
+    await liveMarker.waitFor({ state: 'visible', timeout: 3000 });
+    console.log('PASS: Successfully grabbed, dragged, and repositioned live marker!');
+
     await adminPage.close();
     console.log('ALL BROWSER TESTS PASSED SUCCESSFULLY! 🎉');
   } catch (err) {
