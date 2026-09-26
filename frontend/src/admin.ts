@@ -1030,46 +1030,56 @@ function flyToLocation(lat: number, lng: number) {
   }, 100);
 }
 
-function renderRecentLocationsDeck(geoLogs: VisitorLog[]) {
+function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | VisitorLog>) {
   const container = document.getElementById('recent-locations-deck');
   if (!container) return;
 
-  if (!geoLogs.length) {
+  const resolvedList: ResolvedLocation[] = resolvedOrLogs.map(item => {
+    if ('precise' in item) return item as ResolvedLocation;
+    return resolveLocation(item as VisitorLog);
+  }).filter((loc): loc is ResolvedLocation => loc !== null);
+
+  if (!resolvedList.length) {
     container.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1; padding: 30px;">
-        <h3>Waiting for location data…</h3>
-        <p>Locations will appear here as soon as Loraine or visitors open the Scrapbook or Private Space and grant location access.</p>
+        <h3>Waiting for live GPS fix…</h3>
+        <p>Pins appear when Loraine or visitors open the Scrapbook or Private Space and grant browser GPS permission.</p>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = geoLogs.slice(0, 12).map(log => {
-    const lat = log.latitude!;
-    const lng = log.longitude!;
-    const isScrapbook = log.section === 'Scrapbook';
+  container.innerHTML = resolvedList.slice(0, 12).map(loc => {
+    const lat = loc.lat;
+    const lng = loc.lng;
+    const isScrapbook = loc.log.section === 'Scrapbook';
     const badgeClass = isScrapbook ? 'scrapbook' : 'space';
+    const prov = provenanceBadge(loc);
+    const addr = loc.log.fullAddress || stripLocationTags(loc.log.details) || `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`;
 
     return `
-      <div class="location-card">
+      <div class="location-card${loc.precise ? ' is-gps' : ''}">
         <div class="location-card-top">
           <div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-              <strong>${escapeHtml(log.user || 'Visitor')}</strong>
-              <span class="badge-section ${badgeClass}">${escapeHtml(log.section)}</span>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+              <strong>${escapeHtml(loc.log.user || 'Visitor')}</strong>
+              <span class="badge-section ${badgeClass}">${escapeHtml(loc.log.section)}</span>
+              <span style="font-size:10px;font-weight:700;color:${prov.color};padding:1px 6px;border-radius:10px;background:rgba(255,255,255,0.06);">
+                ${escapeHtml(prov.text)}
+              </span>
             </div>
-            <div class="location-card-address">
-              ${escapeHtml(log.fullAddress || `${lat.toFixed(4)}, ${lng.toFixed(4)}`)}
-            </div>
+            <div class="location-card-address">${escapeHtml(addr)}</div>
           </div>
-          <span style="font-size:24px;">📍</span>
+          <span style="font-size:24px;">${loc.precise ? '💖' : '📍'}</span>
         </div>
         <div class="location-card-sub">
-          <span>🌐 Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
-          <span>💻 IP: ${escapeHtml(log.ip)}</span>
+          <span>🌐 ${formatCoordinates(lat, lng)}</span>
+          <span>💻 IP: ${escapeHtml(loc.log.ip)}</span>
+          ${loc.accuracyMeters != null ? `<span>🎯 Accuracy: ${accuracyLabel(loc.accuracyMeters)}</span>` : ''}
+          ${loc.deviceId ? `<span>🔑 Device: ${escapeHtml(loc.deviceId)}</span>` : ''}
         </div>
         <div class="location-card-footer">
-          <span style="font-size:12px;color:var(--muted);">${escapeHtml(timeAgo(log.timestamp))}</span>
+          <span style="font-size:12px;color:var(--muted);">${escapeHtml(timeAgo(loc.log.timestamp))}</span>
           <button class="nav-btn btn-fly-pin" data-lat="${lat}" data-lng="${lng}" style="padding:4px 10px;font-size:11px;">
             Fly to Pin ↗
           </button>
