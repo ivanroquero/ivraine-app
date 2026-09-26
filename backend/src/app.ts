@@ -200,8 +200,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
         // If this track log contains GPS coordinates, remove older location logs for this user/ip so only 1 pin exists
-        if (latitude != null && longitude != null) {           const filterCol = buildDevicePurgeFilter(deviceId, ip);
-          const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        if (latitude != null && longitude != null) {
+          const filterCol = buildDevicePurgeFilter(deviceId, ip);
           void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
             method: 'DELETE',
             headers: {
