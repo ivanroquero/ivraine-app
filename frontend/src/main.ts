@@ -3,7 +3,7 @@ import './connection.css';
 import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
-import { openProposalModal, trackActivity } from './proposal';
+import { openProposalModal, trackActivity, checkAndPromptPermissions } from './proposal';
 import { startConnection, stopConnection, paintConnection } from './connection';
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
@@ -149,7 +149,7 @@ async function boot(){const gen=++generation;
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);addProposalPill();}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);addProposalPill();void checkAndPromptPermissions('Private Space', info.member.display_name);}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 

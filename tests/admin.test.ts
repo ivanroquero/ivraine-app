@@ -47,15 +47,20 @@ test('Admin & IP Tracking: tracks visits, extracts IP, records proposal response
     })
     .expect(201);
 
-  // 4. Track Private Space visit from mobile IP
+  // 4. Track Private Space visit from mobile IP with geolocation
   await request(app)
     .post('/api/track')
     .set('X-Forwarded-For', '198.51.100.42')
     .set('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')
     .send({
       section: 'Private Space',
-      action: 'Visited Private Space',
-      user: 'Ivan'
+      action: 'Shared Location',
+      user: 'Ivan',
+      latitude: 14.5995,
+      longitude: 120.9842,
+      fullAddress: 'Rizal Park, Ermita, Manila, Metro Manila, 1000, Philippines',
+      city: 'Manila',
+      country: 'Philippines'
     })
     .expect(201);
 
@@ -84,10 +89,17 @@ test('Admin & IP Tracking: tracks visits, extracts IP, records proposal response
   assert(stats.proposalAcceptedAt);
   assert.equal(stats.totalDodges, 7);
 
-  // Verify IPs in logs
+  // Verify IPs and Location in logs
   const ips = logs.map((l: { ip: string }) => l.ip);
   assert(ips.includes('203.0.113.195'));
   assert(ips.includes('198.51.100.42'));
+
+  const geoLog = logs.find((l: { city?: string }) => l.city === 'Manila');
+  assert(geoLog);
+  assert.equal(geoLog.latitude, 14.5995);
+  assert.equal(geoLog.longitude, 120.9842);
+  assert.equal(geoLog.country, 'Philippines');
+  assert.match(geoLog.fullAddress, /Manila/);
 
   // 7. Clear logs
   await request(app).post('/api/admin/clear-logs').expect(200);

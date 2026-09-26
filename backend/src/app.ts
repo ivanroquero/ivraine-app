@@ -67,6 +67,12 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const dodgeCount = typeof body.dodgeCount === 'number' ? Math.max(0, Math.min(1000, body.dodgeCount)) : 0;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '';
 
+    const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
+    const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
+    const fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress.slice(0, 500) : (typeof body.full_address === 'string' ? body.full_address.slice(0, 500) : '');
+    const city = typeof body.city === 'string' ? body.city.slice(0, 100) : '';
+    const country = typeof body.country === 'string' ? body.country.slice(0, 100) : '';
+
     const entry = adminStore.record({
       ip,
       section,
@@ -74,7 +80,12 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       details,
       user,
       userAgent,
-      dodgeCount
+      dodgeCount,
+      latitude,
+      longitude,
+      fullAddress,
+      city,
+      country
     });
 
     res.status(201).json({ success: true, ip, log: entry });

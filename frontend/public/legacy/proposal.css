@@ -359,3 +359,121 @@
   pointer-events: none;
   z-index: 10000;
 }
+
+/* Permission Modal for Location & Notifications */
+.ivraine-perm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(15, 12, 20, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: ivraineFadeIn 0.3s ease-out;
+}
+
+.ivraine-perm-card {
+  background: #ffffff;
+  color: #1e1926;
+  width: min(92vw, 420px);
+  border-radius: 26px;
+  padding: 30px 24px 26px;
+  text-align: center;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(214, 51, 132, 0.2);
+  position: relative;
+  animation: ivraineCardPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.ivraine-perm-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(214, 51, 132, 0.15), rgba(255, 107, 129, 0.2));
+  border: 2px solid #ff6b81;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 16px;
+  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.2);
+}
+
+.ivraine-perm-title {
+  font: italic 23px Georgia, serif;
+  color: #1f1b24;
+  margin-bottom: 10px;
+}
+
+.ivraine-perm-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #555;
+  margin-bottom: 22px;
+}
+
+.ivraine-perm-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 22px;
+  text-align: left;
+}
+
+.ivraine-perm-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fbf7fb;
+  border: 1px solid #f0e1ea;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: #333;
+}
+
+.ivraine-perm-feature-item span.icon {
+  font-size: 18px;
+}
+
+.ivraine-perm-btn-allow {
+  width: 100%;
+  background: linear-gradient(135deg, #d63384, #ff6b81);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 25px rgba(214, 51, 132, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 10px;
+}
+
+.ivraine-perm-btn-allow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(214, 51, 132, 0.45);
+}
+
+.ivraine-perm-btn-dismiss {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: color 0.2s;
+}
+
+.ivraine-perm-btn-dismiss:hover {
+  color: #333;
+}
+

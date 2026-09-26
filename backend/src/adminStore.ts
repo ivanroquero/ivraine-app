@@ -9,6 +9,11 @@ export interface VisitorLog {
   user?: string;
   userAgent?: string;
   dodgeCount?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  fullAddress?: string;
+  city?: string;
+  country?: string;
   timestamp: string;
 }
 
@@ -38,6 +43,11 @@ export class AdminStore {
     user?: string;
     userAgent?: string;
     dodgeCount?: number;
+    latitude?: number | null;
+    longitude?: number | null;
+    fullAddress?: string;
+    city?: string;
+    country?: string;
   }): VisitorLog {
     const entry: VisitorLog = {
       id: randomUUID(),
@@ -48,6 +58,11 @@ export class AdminStore {
       user: log.user || 'Visitor',
       userAgent: log.userAgent || '',
       dodgeCount: Number(log.dodgeCount) || 0,
+      latitude: typeof log.latitude === 'number' ? log.latitude : null,
+      longitude: typeof log.longitude === 'number' ? log.longitude : null,
+      fullAddress: log.fullAddress || '',
+      city: log.city || '',
+      country: log.country || '',
       timestamp: new Date().toISOString()
     };
 
