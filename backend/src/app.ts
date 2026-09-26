@@ -16,6 +16,11 @@ const voiceBucket = 'ivraine-voice';
 function result<T>(r:{data:T;error:unknown}):T { if(r.error) throw new HttpError(502,'Our space service could not complete this request. Please retry.'); return r.data; }
 function missingColumn(error:unknown){return !!(error && typeof error==='object' && 'code' in error && (error as {code?:string}).code==='42703');}
 export function createApp(config:Config, clientFactory?:(token:string)=>SupabaseClient) {
+  function buildDevicePurgeFilter(deviceId: string, ip: string): string {
+  return deviceId
+    ? `device_id=eq.${encodeURIComponent(deviceId)}`
+    : `and=(device_id.eq.,ip.eq.${encodeURIComponent(ip)})`;
+  }
   const app=express();
   app.disable('x-powered-by'); app.set('trust proxy',config.trustProxy);
   app.use(helmet({
@@ -195,7 +200,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
         // If this track log contains GPS coordinates, remove older location logs for this user/ip so only 1 pin exists
-        if (latitude != null && longitude != null) {
+        if (latitude != null && longitude != null) {           const filterCol = buildDevicePurgeFilter(deviceId, ip);
           const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
           void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
             method: 'DELETE',
@@ -222,6 +227,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
             details: detailsWithDevice,
             user_name: user,
             user_agent: userAgent,
+            device_id: deviceId,
             dodge_count: dodgeCount,
             latitude,
             longitude,
@@ -252,7 +258,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       adminStore.removeDeviceLocation({ deviceId, ip, user });
       if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
         try {
-          const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+          const filterCol = buildDevicePurgeFilter(deviceId, ip);
           void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
             method: 'DELETE',
             headers: {
@@ -337,7 +343,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
         // Delete older location rows so Supabase retains only 1 active pin for this user
-        const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        const filterCol = buildDevicePurgeFilter(deviceId, ip);
         void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
           method: 'DELETE',
           headers: {
@@ -361,6 +367,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
             details: entry.details,
             user_name: user,
             user_agent: entry.userAgent,
+            device_id: deviceId,
             dodge_count: 0,
             latitude,
             longitude,
@@ -386,7 +393,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
-        const sbRes = await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?select=*&order=created_at.desc&limit=300`, {
+        const sbRes = await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?select=*&order=created_at.desc&limit=1000`, {
           headers: {
             'apikey': config.supabaseKey,
             'Authorization': `Bearer ${config.supabaseKey}`

@@ -47,10 +47,13 @@ export class AdminStore {
       if (l.latitude == null && l.longitude == null) {
         return true;
       }
-      const sameDevice =
-        (Boolean(filter.deviceId && l.deviceId && l.deviceId === filter.deviceId)) ||
-        (Boolean(filter.user && l.user && filter.user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine'))) ||
-        (!filter.deviceId && Boolean(filter.ip && l.ip === filter.ip));
+      // Strict per-device isolation: a device's pin is only ever replaced by
+      // that SAME device (matched by deviceId). A device with no deviceId
+      // falls back to IP, but only against other deviceId-less entries, so a
+      // real device's pin is never clobbered by an anonymous/legacy one.
+      const sameDevice = filter.deviceId
+        ? Boolean(l.deviceId && l.deviceId === filter.deviceId)
+        : Boolean(filter.ip && l.ip === filter.ip && !l.deviceId);
 
       return !sameDevice;
     });

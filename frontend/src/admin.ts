@@ -525,24 +525,6 @@ function resolveLocation(log: VisitorLog): ResolvedLocation | null {
 /** One pin per physical device — never merges two phones into a single pin, and collapses Loraine's phone into strictly 1 pin. */
 function devicePinKey(loc: ResolvedLocation): string {
   if (loc.deviceId && loc.deviceId.trim()) return `dev:${loc.deviceId.trim()}`;
-  
-  const user = (loc.log.user || '').trim().toLowerCase();
-  const ip = (loc.log.ip || '').trim().toLowerCase();
-  const act = (loc.log.action || '').toLowerCase();
-  const det = (loc.log.details || '').toLowerCase();
-
-  // Primary mobile phone target: collapse all variants of Loraine, phone, or synthetic broadcast IPs into 1 single device pin
-  if (
-    user.includes('loraine') ||
-    ip.includes('saved') ||
-    ip.includes('live') ||
-    ip.includes('client') ||
-    act.includes('date location') ||
-    act.includes('pinned location') ||
-    det.includes('loraine')
-  ) {
-    return 'dev:loraine_phone';
-  }
 
   const cleanIp = (loc.log.ip || 'unknown').trim();
   const isMobile = /android|iphone|ipad|ipod|mobile/i.test(loc.log.userAgent || '');
@@ -1098,12 +1080,12 @@ async function removePinForDevice(devId: string, user: string, ip: string) {
 
     const sb = getAdminSupabaseClient();
     if (sb) {
+      // Scope strictly to THIS device (never another device's pin), and
+      // actually await the request — an un-awaited query builder never
+      // fires, which was silently no-op-ing every "Remove Pin" click.
       let query = sb.from('ivraine_visitor_logs').delete().not('latitude', 'is', null);
-      if (user && user !== 'Visitor') {
-        void query.eq('user_name', user);
-      } else if (ip) {
-        void query.eq('ip', ip);
-      }
+      query = devId ? query.eq('device_id', devId) : ip ? query.eq('ip', ip).eq('device_id', '') : query;
+      await query;
     }
   } catch {}
 }

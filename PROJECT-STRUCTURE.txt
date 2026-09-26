@@ -1,0 +1,155 @@
+‎   [error opening dir]
+‎   [error opening dir]
+.
+├── .idx
+│   ├── dev.nix
+│   └── icon.png
+├── api
+│   ├── admin
+│   │   ├── clear-logs.ts
+│   │   └── logs.ts
+│   ├── date-location.ts
+│   ├── index.ts
+│   ├── ip.ts
+│   ├── track.ts
+│   ├── tsconfig.json
+│   └── types.ts
+├── backend
+│   ├── src
+│   │   ├── push
+│   │   │   ├── routes.ts
+│   │   │   ├── runtime.ts
+│   │   │   ├── store.ts
+│   │   │   ├── validation.ts
+│   │   │   └── worker.ts
+│   │   ├── adminStore.ts
+│   │   ├── app.ts
+│   │   ├── server.ts
+│   │   └── validation.ts
+│   ├── package.json
+│   └── tsconfig.json
+├── database
+│   ├── add-couple.sql
+│   └── setup.sql
+├── frontend
+│   ├── public
+│   │   ├── .well-known
+│   │   │   └── assetlinks.json
+│   │   ├── icons
+│   │   │   ├── couple-180.png
+│   │   │   ├── couple-192.png
+│   │   │   ├── couple-32.png
+│   │   │   ├── couple-512.png
+│   │   │   ├── couple-maskable-512.png
+│   │   │   ├── ivraine-notification-badge.png
+│   │   │   └── ivraine-notification.png
+│   │   ├── legacy
+│   │   │   ├── icons
+│   │   │   │   ├── couple-180.png
+│   │   │   │   ├── couple-192.png
+│   │   │   │   ├── couple-32.png
+│   │   │   │   ├── couple-512.png
+│   │   │   │   └── couple-maskable-512.png
+│   │   │   ├── index.html
+│   │   │   ├── lock.css
+│   │   │   ├── lock.js
+│   │   │   ├── manifest.webmanifest
+│   │   │   ├── proposal.css
+│   │   │   ├── proposal.js
+│   │   │   ├── pwa.js
+│   │   │   ├── robots.txt
+│   │   │   ├── scrapbook.sealed
+│   │   │   ├── sw.js
+│   │   │   └── vercel.json
+│   │   ├── manifest.webmanifest
+│   │   ├── offline.css
+│   │   ├── offline.html
+│   │   ├── robots.txt
+│   │   └── sw.js
+│   ├── src
+│   │   ├── admin.ts
+│   │   ├── api-config.ts
+│   │   ├── api.ts
+│   │   ├── calendar.ts
+│   │   ├── connection.css
+│   │   ├── connection.ts
+│   │   ├── dialogs.ts
+│   │   ├── geo.ts
+│   │   ├── glass.css
+│   │   ├── imageUtils.ts
+│   │   ├── legacy.ts
+│   │   ├── lock.ts
+│   │   ├── main.ts
+│   │   ├── map.ts
+│   │   ├── proposal.css
+│   │   ├── proposal.ts
+│   │   ├── pwa.ts
+│   │   ├── styles.css
+│   │   ├── types.ts
+│   │   ├── utils.ts
+│   │   ├── views.ts
+│   │   └── voiceUtils.ts
+│   ├── admin.html
+│   ├── index.html
+│   ├── lock.html
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── public
+│   └── vite.svg
+├── src
+│   ├── assets
+│   │   └── react.svg
+│   ├── App.css
+│   ├── App.jsx
+│   ├── index.css
+│   └── main.jsx
+├── supabase
+│   ├── .temp
+│   │   └── cli-latest
+│   └── migrations
+│       ├── 20260916205359_push_notifications.sql
+│       ├── 20260926000000_allow_photo_paths_update.sql
+│       ├── 20260926000001_heart_message.sql
+│       ├── 20260926000002_voice_storage.sql
+│       └── 20260926000003_visitor_logs.sql
+├── tests
+│   ├── admin.test.ts
+│   ├── api.test.ts
+│   ├── browser-check.ts
+│   ├── fixture.ts
+│   ├── proposal-admin.test.ts
+│   ├── proposal-browser-check.ts
+│   ├── push-browser-check.ts
+│   ├── push-fixture.ts
+│   ├── push.test.ts
+│   ├── security.test.ts
+│   ├── serve-fixture.ts
+│   ├── service-worker.test.ts
+│   ├── standalone-api.test.ts
+│   ├── twa-assetlinks.test.ts
+│   └── ui-theme.test.ts
+├── .dockerignore
+├── .gitignore
+├── .node-version
+├── .nvmrc
+├── Dockerfile
+├── PUSH-SETUP.md
+├── README.md
+├── TEST-REPORT.md
+├── _check_test.txt
+├── _check_type.txt
+├── _env.txt
+├── _env2.txt
+├── _env3.txt
+├── _gitstatus.txt
+├── _listing.txt
+├── _status.txt
+├── eslint.config.js
+├── index.html
+├── package.json
+├── railway.json
+├── vercel.json
+└── vite.config.js
+
+22 directories, 129 files

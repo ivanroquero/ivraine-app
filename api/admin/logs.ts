@@ -116,18 +116,9 @@ export default async function handler(
     }
 
     const devId = log.deviceId || ((log.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/)?.[1]) || '';
-    let devKey = devId ? `device_${devId}` : '';
-    if (!devKey) {
-      const user = (log.user || '').toLowerCase();
-      const ip = (log.ip || '').toLowerCase();
-      if (user.includes('loraine') || ip.includes('saved') || ip.includes('live') || ip.includes('client')) {
-        devKey = 'device_loraine_phone';
-      } else {
-        const ua = (log.userAgent || '').toLowerCase();
-        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
-        devKey = `device_${log.ip || 'ip'}_${isMobile ? 'mobile' : 'desktop'}`;
-      }
-    }
+    const ua = (log.userAgent || '').toLowerCase();
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
+    const devKey = devId ? `device_${devId}` : `ip_${log.ip || 'unknown'}_${isMobile ? 'mobile' : 'desktop'}`;
 
     if (!seenLocationDevices.has(devKey)) {
       seenLocationDevices.add(devKey);
