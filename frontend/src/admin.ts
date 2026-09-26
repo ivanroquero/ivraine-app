@@ -119,8 +119,8 @@ function timeAgo(dateString: string): string {
   return new Date(dateString).toLocaleDateString();
 }
 
-// API endpoint resolver: only returns URL if Railway is configured or running on localhost
-function getBackendEndpoint(path: string): string | null {
+// API endpoint resolver: returns custom Railway URL if configured, or same-origin /api path
+function getBackendEndpoint(path: string): string {
   const saved = localStorage.getItem('ivraine-api-url');
   if (saved && saved.trim()) {
     return `${saved.trim().replace(/\/+$/, '')}${path}`;
@@ -130,15 +130,12 @@ function getBackendEndpoint(path: string): string | null {
   if (envApi && typeof envApi === 'string' && !envApi.includes('YOUR_')) {
     const isLocalEnv = envApi.includes('localhost') || envApi.includes('127.0.0.1');
     const isLocalPage = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-    if (!isLocalPage && isLocalEnv) return null;
-    return `${envApi.trim().replace(/\/+$/, '')}${path}`;
+    if (isLocalPage || !isLocalEnv) {
+      return `${envApi.trim().replace(/\/+$/, '')}${path}`;
+    }
   }
   
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    return path;
-  }
-  
-  return null;
+  return path;
 }
 
 // Fetch public IP address with fast fallbacks and session caching
@@ -558,7 +555,14 @@ function updateVisitorMap(logs: VisitorLog[]) {
 
     if (latLngs.length > 0) {
       try {
-        mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 14 });
+        if (latLngs.length === 1) {
+          mapInstance.setView(latLngs[0], 14);
+        } else {
+          mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 14 });
+        }
+        if (mapMarkers.length > 0 && mapMarkers[0]?.marker?.openPopup) {
+          mapMarkers[0].marker.openPopup();
+        }
       } catch {}
     }
   }
@@ -713,6 +717,33 @@ async function loadAdminData() {
     }
   }
 
+  // 4. Ensure any saved location is permanently pinned on the map even if permission was turned off later
+  try {
+    const rawSavedLoc = localStorage.getItem('ivraine_last_location') || localStorage.getItem('ivraine_saved_pinned_location');
+    if (rawSavedLoc) {
+      const parsedLoc = JSON.parse(rawSavedLoc);
+      if (parsedLoc.latitude && parsedLoc.longitude) {
+        const hasSaved = fetchedLogs.some(l => l.latitude != null && l.longitude != null && Math.abs(l.latitude - parsedLoc.latitude) < 0.0001 && Math.abs(l.longitude - parsedLoc.longitude) < 0.0001);
+        if (!hasSaved) {
+          fetchedLogs.unshift({
+            id: 'saved_pinned_' + Date.now(),
+            ip: 'Saved GPS Pin',
+            section: 'Scrapbook',
+            action: '📍 Pinned Location Saved ♡',
+            details: parsedLoc.fullAddress || parsedLoc.city || 'Previously granted visitor coordinates',
+            user: 'Loraine',
+            latitude: parsedLoc.latitude,
+            longitude: parsedLoc.longitude,
+            fullAddress: parsedLoc.fullAddress || '',
+            city: parsedLoc.city || '',
+            country: parsedLoc.country || '',
+            timestamp: parsedLoc.timestamp || new Date().toISOString()
+          });
+        }
+      }
+    }
+  } catch {}
+
   fetchedLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   if (!fetchedFromBackend && !fetchedFromSupabase) {
@@ -758,8 +789,18 @@ try {
         filterLogs();
         updateVisitorMap(allLogs);
 
-        // If location was shared, auto fly to it
+        // If location was shared, auto fly to it and cache pinned location
         if (entry.latitude && entry.longitude) {
+          try {
+            localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify({
+              latitude: entry.latitude,
+              longitude: entry.longitude,
+              fullAddress: entry.fullAddress || '',
+              city: entry.city || '',
+              country: entry.country || '',
+              timestamp: entry.timestamp
+            }));
+          } catch {}
           flyToLocation(entry.latitude, entry.longitude);
         }
       }
@@ -770,7 +811,12 @@ try {
 } catch {}
 
 window.addEventListener('storage', (e) => {
-  if (e.key === 'ivraine_visitor_logs' || e.key === 'ivraine_proposal_status') {
+  if (
+    e.key === 'ivraine_visitor_logs' ||
+    e.key === 'ivraine_proposal_status' ||
+    e.key === 'ivraine_last_location' ||
+    e.key === 'ivraine_saved_pinned_location'
+  ) {
     void loadAdminData();
   }
 });

@@ -732,3 +732,203 @@
   gap: 2px;
 }
 
+/* ── Custom Location Permission Card & Bypass Mechanism ── */
+.ivraine-loc-card-custom {
+  text-align: center;
+  padding: 4px 0;
+  animation: ivraineFadeIn 0.3s ease-out;
+}
+
+.ivraine-loc-header-badge {
+  display: inline-block;
+  background: #fdf2f7;
+  color: #d63384;
+  border: 1px solid #f9d2e2;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 14px;
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.ivraine-loc-avatar-burst {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 12px;
+  background: linear-gradient(135deg, #ffd1e3, #ffe6f0);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(232, 62, 140, 0.22);
+}
+
+.ivraine-loc-icon-bubble {
+  font-size: 34px;
+  animation: ivrainePinBounce 1.8s infinite ease-in-out;
+}
+
+@keyframes ivrainePinBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.ivraine-loc-heart-bubble {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 18px;
+  background: #fff;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.ivraine-loc-custom-subtitle {
+  font: italic bold 20px/1.2 Georgia, serif;
+  color: #d63384;
+  margin: 0 0 8px;
+}
+
+.ivraine-loc-custom-desc {
+  font-size: 13.5px;
+  color: #5a5262;
+  line-height: 1.55;
+  margin: 0 0 16px;
+}
+
+.ivraine-loc-features-box {
+  background: #faf7fc;
+  border: 1px solid #efe8f4;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ivraine-loc-feat-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: #433b4c;
+  font-weight: 500;
+}
+
+.ivraine-loc-feat-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ivraine-loc-custom-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ivraine-btn-allow-loc-main {
+  width: 100%;
+  background: linear-gradient(135deg, #e83e8c, #ff6b81);
+  color: #fff;
+  border: none;
+  border-radius: 25px;
+  padding: 13px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(232, 62, 140, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.ivraine-btn-allow-loc-main:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(232, 62, 140, 0.48);
+}
+
+.ivraine-btn-bypass-loc {
+  width: 100%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.ivraine-btn-bypass-loc small {
+  font-size: 11px;
+  opacity: 0.9;
+  font-weight: 400;
+}
+.ivraine-btn-bypass-loc:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.45);
+}
+
+.ivraine-pulse-glow {
+  animation: ivrainePulseGlow 2s infinite ease-in-out;
+}
+@keyframes ivrainePulseGlow {
+  0%, 100% {
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 22px rgba(99, 102, 241, 0.65);
+    transform: translateY(-1px);
+  }
+}
+
+.ivraine-btn-bypass-inline {
+  background: #fbf8fe;
+  border: 1.5px dashed #a855f7;
+  color: #7e22ce;
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ivraine-btn-bypass-inline:hover {
+  background: #f3e8ff;
+  border-color: #9333ea;
+  color: #6b21a8;
+}
+
+.ivraine-btn-go-back-custom {
+  background: #f5f2f7;
+  color: #6d6675;
+  border: 1px solid #e0d8e6;
+  border-radius: 20px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ivraine-btn-go-back-custom:hover {
+  background: #ebe5ef;
+  color: #333;
+}
+
+

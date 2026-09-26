@@ -30,11 +30,24 @@ export default async function handler(req, res) {
   const userName = body.user || 'Visitor';
   const userAgent = req.headers['user-agent'] || '';
   const dodgeCount = Number(body.dodgeCount) || 0;
-  const latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
-  const longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
-  const fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress : (typeof body.full_address === 'string' ? body.full_address : '');
-  const city = typeof body.city === 'string' ? body.city : '';
-  const country = typeof body.country === 'string' ? body.country : '';
+  let latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
+  let longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
+  let fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress : (typeof body.full_address === 'string' ? body.full_address : '');
+  let city = typeof body.city === 'string' ? body.city : '';
+  let country = typeof body.country === 'string' ? body.country : '';
+
+  // If GPS coordinates were not provided, fallback to Vercel edge IP geolocation
+  if ((!latitude || !longitude) && req.headers['x-vercel-ip-latitude']) {
+    const edgeLat = parseFloat(String(req.headers['x-vercel-ip-latitude']));
+    const edgeLng = parseFloat(String(req.headers['x-vercel-ip-longitude']));
+    if (!isNaN(edgeLat) && !isNaN(edgeLng)) {
+      latitude = edgeLat;
+      longitude = edgeLng;
+      city = city || decodeURIComponent(String(req.headers['x-vercel-ip-city'] || ''));
+      country = country || String(req.headers['x-vercel-ip-country'] || '');
+      fullAddress = fullAddress || (city ? `${city}${country ? ', ' + country : ''}` : '');
+    }
+  }
 
   // If Supabase environment variables exist in Vercel, record to database
   const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

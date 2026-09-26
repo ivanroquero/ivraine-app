@@ -99,21 +99,35 @@ async function main() {
     if (!transform.includes('translate3d')) throw new Error('No button failed to evade on hover');
     console.log('PASS: Desktop cursor evasion verified (button moved via translate3d)');
 
-    // Click YES without location permission
+    // Click YES to show custom designed permission prompt
     await yesBtn.click();
     await desktopPage.waitForTimeout(500);
 
-    // Verify celebration message appears
+    // Verify celebration message & custom permission card appear
     const celebrationTitle = desktopPage.locator('.ivraine-celebration-title');
     await celebrationTitle.waitFor({ state: 'visible', timeout: 5000 });
     const celebrationText = await celebrationTitle.innerText();
     if (!celebrationText.toLowerCase().includes('she said yes')) throw new Error('Celebration mismatch');
     console.log('PASS: Proposal acceptance celebration rendered');
 
-    // Verify denied / location prompt appears when location is not granted
+    // Verify custom permission card rendered
+    const customPermCard = desktopPage.locator('.ivraine-loc-card-custom');
+    await customPermCard.waitFor({ state: 'visible', timeout: 5000 });
+    console.log('PASS: Custom designed permission card displayed');
+
+    // Tap prompt loc button (without permission) -> leads to denied / bypass screen
+    const promptLocBtn = desktopPage.locator('#ivraine-btn-prompt-loc');
+    await promptLocBtn.click();
+
+    // Verify denied / bypass prompt appears when location is not granted
     const deniedWrap = desktopPage.locator('.ivraine-loc-denied-wrap');
     await deniedWrap.waitFor({ state: 'visible', timeout: 5000 });
-    console.log('PASS: Location required prompt displayed when location not granted');
+    console.log('PASS: Location notice displayed with bypass option when GPS not granted');
+
+    // Verify bypass button is present
+    const bypassBtn = desktopPage.locator('#ivraine-btn-denied-bypass');
+    await bypassBtn.waitFor({ state: 'visible', timeout: 3000 });
+    console.log('PASS: Bypass GPS button is available');
 
     // Test "Go Back" button
     const goBackBtn = desktopPage.locator('#ivraine-btn-go-back');
@@ -159,9 +173,14 @@ async function main() {
     if (!mobileTransform.includes('translate3d')) throw new Error('No button failed to evade on mobile touch');
     console.log('PASS: Mobile touch evasion verified (button avoided tap)');
 
-    // Now tap YES with geolocation granted!
+    // Now tap YES to view custom permission card
     const mobileYesBtn = mobilePage.locator('#ivraine-btn-yes');
     await mobileYesBtn.tap();
+
+    // Tap "Allow Phone Location & Unlock ♡"
+    const mobilePromptLocBtn = mobilePage.locator('#ivraine-btn-prompt-loc');
+    await mobilePromptLocBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await mobilePromptLocBtn.tap();
 
     // Verify places scroll list appears!
     const placesList = mobilePage.locator('.ivraine-places-scroll-list');

