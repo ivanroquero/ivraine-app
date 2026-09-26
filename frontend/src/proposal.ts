@@ -796,6 +796,9 @@ export function renderD3Flower(container: HTMLElement, recipientName = 'Loraine'
   const svg = d3Lib.select(container)
     .append('svg')
     .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .attr('height', '100%')
+    .attr('preserveAspectRatio', 'xMidYMid meet')
     .attr('class', 'ivraine-d3-flower-svg')
     .attr('role', 'img')
     .attr('aria-label', `A blooming surprise flower for ${recipientName}`);
