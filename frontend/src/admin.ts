@@ -1,8 +1,21 @@
 import { openProposalModal } from './proposal';
 import { supabase } from './api';
+import { createClient } from '@supabase/supabase-js';
 
 declare const mapboxgl: any;
 declare const L: any;
+
+function getAdminSupabaseClient() {
+  if (supabase) return supabase;
+  const url = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('ivraine-supabase-url');
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('ivraine-supabase-key');
+  if (url && key && typeof url === 'string' && typeof key === 'string' && !url.includes('YOUR_') && !key.includes('YOUR_')) {
+    try {
+      return createClient(url, key);
+    } catch {}
+  }
+  return null;
+}
 
 export interface VisitorLog {
   id: string;
@@ -464,10 +477,18 @@ function initVisitorMap() {
 function updateVisitorMap(logs: VisitorLog[]) {
   if (!mapInstance || !mapInitialized) return;
 
-  const geoLogs = logs.filter(l => typeof l.latitude === 'number' && typeof l.longitude === 'number' && !isNaN(l.latitude) && !isNaN(l.longitude));
+  const geoLogs: VisitorLog[] = logs
+    .map(l => {
+      const lat = typeof l.latitude === 'number' ? l.latitude : (l.latitude ? parseFloat(String(l.latitude)) : null);
+      const lng = typeof l.longitude === 'number' ? l.longitude : (l.longitude ? parseFloat(String(l.longitude)) : null);
+      return { ...l, latitude: lat, longitude: lng };
+    })
+    .filter(l => l.latitude != null && l.longitude != null && !isNaN(l.latitude) && !isNaN(l.longitude));
+
   renderRecentLocationsDeck(geoLogs);
 
   if (mapType === 'mapbox') {
+    try { mapInstance.resize(); } catch {}
     // Clear Mapbox markers
     mapMarkers.forEach(m => m.remove());
     mapMarkers = [];
@@ -509,10 +530,15 @@ function updateVisitorMap(logs: VisitorLog[]) {
 
     if (geoLogs.length > 0 && !bounds.isEmpty()) {
       try {
-        mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+        if (geoLogs.length === 1) {
+          mapInstance.flyTo({ center: [geoLogs[0].longitude, geoLogs[0].latitude], zoom: 14, essential: true });
+        } else {
+          mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+        }
       } catch {}
     }
   } else if (mapType === 'leaflet' && leafletMarkersLayer) {
+    try { mapInstance.invalidateSize(); } catch {}
     // Leaflet marker rendering
     leafletMarkersLayer.clearLayers();
     mapMarkers = [];
@@ -656,7 +682,7 @@ async function loadAdminData() {
   let fetchedLogs: VisitorLog[] = [];
   let fetchedFromBackend = false;
 
-  // 1. Try Backend API only if configured or in local dev
+  // 1. Try Backend API
   const endpoint = getBackendEndpoint('/api/admin/logs');
   if (endpoint) {
     try {
@@ -672,18 +698,19 @@ async function loadAdminData() {
     } catch {}
   }
 
-  // 2. Try Supabase
+  // 2. ALWAYS query Supabase directly and merge all records
   let fetchedFromSupabase = false;
-  if (!fetchedFromBackend && supabase) {
+  const sbClient = getAdminSupabaseClient();
+  if (sbClient) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await sbClient
         .from('ivraine_visitor_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(300);
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        fetchedLogs = data.map((row: any) => ({
+        const sbLogs: VisitorLog[] = data.map((row: any) => ({
           id: row.id,
           ip: row.ip || '127.0.0.1',
           section: row.section || 'Scrapbook',
@@ -692,15 +719,24 @@ async function loadAdminData() {
           user: row.user_name || 'Visitor',
           userAgent: row.user_agent || '',
           dodgeCount: row.dodge_count || 0,
-          latitude: typeof row.latitude === 'number' ? row.latitude : null,
-          longitude: typeof row.longitude === 'number' ? row.longitude : null,
+          latitude: typeof row.latitude === 'number' ? row.latitude : (row.latitude ? parseFloat(row.latitude) : null),
+          longitude: typeof row.longitude === 'number' ? row.longitude : (row.longitude ? parseFloat(row.longitude) : null),
           fullAddress: row.full_address || '',
           city: row.city || '',
           country: row.country || '',
           timestamp: row.created_at || new Date().toISOString()
         }));
+
+        const existingKeys = new Set(fetchedLogs.map(l => l.id || `${l.ip}_${l.action}_${l.timestamp.slice(0, 19)}`));
+        for (const log of sbLogs) {
+          const k = log.id || `${log.ip}_${log.action}_${log.timestamp.slice(0, 19)}`;
+          if (!existingKeys.has(k)) {
+            fetchedLogs.push(log);
+            existingKeys.add(k);
+          }
+        }
         fetchedFromSupabase = true;
-        updateConnectionBadge('supabase');
+        if (!fetchedFromBackend) updateConnectionBadge('supabase');
       }
     } catch {}
   }
@@ -821,11 +857,24 @@ window.addEventListener('storage', (e) => {
   }
 });
 
+// Real-time Supabase database listener for visitor location pins
+try {
+  const sbClient = getAdminSupabaseClient();
+  if (sbClient) {
+    sbClient
+      .channel('admin_realtime_pins')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ivraine_visitor_logs' }, () => {
+        void loadAdminData();
+      })
+      .subscribe();
+  }
+} catch {}
+
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(() => {
     void loadAdminData();
-  }, 5000);
+  }, 3500);
 }
 
 // Export CSV

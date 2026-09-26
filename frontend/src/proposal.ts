@@ -590,11 +590,6 @@ function showCustomPermissionPrompt(
           <span>📍 Allow Phone Location &amp; Unlock ♡</span>
         </button>
 
-        <button class="ivraine-btn-bypass-loc" id="ivraine-btn-bypass-loc" type="button">
-          <span>✨ Unlock with Approximate Location</span>
-          <small>Bypass GPS &amp; unlock all 8 places now</small>
-        </button>
-
         <button class="ivraine-btn-go-back-custom" id="ivraine-btn-go-back-prompt" type="button">
           <span>← Go Back</span>
         </button>
@@ -603,53 +598,63 @@ function showCustomPermissionPrompt(
   `;
 
   const allowBtn = card.querySelector<HTMLButtonElement>('#ivraine-btn-prompt-loc')!;
-  const bypassBtn = card.querySelector<HTMLButtonElement>('#ivraine-btn-bypass-loc')!;
   const backBtn = card.querySelector<HTMLButtonElement>('#ivraine-btn-go-back-prompt')!;
 
-  allowBtn.addEventListener('click', async () => {
+  allowBtn.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
         <div class="ivraine-heart-burst">💖✨</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-        <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+        <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> on your phone prompt! ♡
+          Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
-          <span>Waiting for phone location permission…</span>
-        </div>
-        <div style="margin-top: 18px;">
-          <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline" type="button">
-            ✨ Tap here to bypass GPS &amp; unlock now
-          </button>
+          <span>Finding our Bohol route…</span>
         </div>
       </div>
     `;
 
-    card.querySelector<HTMLButtonElement>('#ivraine-btn-bypass-inline')?.addEventListener('click', async () => {
-      const loc = await acquireLocationWithBypass();
-      showDateReveal(card, overlay, userName, source, loc);
-    });
-
-    const loc = await acquireAndSaveLocation(source, userName);
-    if (loc) {
-      showDateReveal(card, overlay, userName, source, loc);
-    } else {
-      showLocationDeniedPrompt(card, overlay, userName, source);
-    }
-  });
-
-  bypassBtn.addEventListener('click', async () => {
-    bypassBtn.disabled = true;
-    bypassBtn.innerHTML = `<span>⏳ Unlocking Bohol spots…</span>`;
-    const loc = await acquireLocationWithBypass();
-    showDateReveal(card, overlay, userName, source, loc);
+    void requestPhoneLocationWithAutoBypass(card, overlay, userName, source);
   });
 
   backBtn.addEventListener('click', () => {
     renderProposalContent(card, overlay, source, userName);
   });
+}
+
+// Request phone location with automatic seamless bypass fallback so it never gets stuck
+async function requestPhoneLocationWithAutoBypass(
+  card: HTMLDivElement,
+  overlay: HTMLDivElement,
+  userName: string,
+  source: 'Scrapbook' | 'Private Space' | 'Admin'
+) {
+  let handled = false;
+
+  const finishWithLocation = (loc: LocationData) => {
+    if (handled) return;
+    handled = true;
+    showDateReveal(card, overlay, userName, source, loc);
+  };
+
+  const timer = setTimeout(async () => {
+    if (!handled) {
+      const fallback = await acquireLocationWithBypass();
+      finishWithLocation(fallback);
+    }
+  }, 4500);
+
+  const loc = await acquireAndSaveLocation(source, userName);
+  clearTimeout(timer);
+  if (loc) {
+    finishWithLocation(loc);
+  } else {
+    // Automatically bypass if GPS failed/denied/unsupported
+    const fallback = await acquireLocationWithBypass();
+    finishWithLocation(fallback);
+  }
 }
 
 function showLocationDeniedPrompt(
@@ -665,21 +670,16 @@ function showLocationDeniedPrompt(
       <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
       <div class="ivraine-loc-denied-title">Location Permission Notice ♡</div>
       <p class="ivraine-loc-denied-desc">
-        ${customMsg || 'Phone GPS wasn’t granted or is turned off, but no worries! You can <strong>bypass it</strong> right now with approximate location or try allowing it again:'}
+        ${customMsg || 'Phone GPS wasn’t granted or is turned off, but no worries! Tap below to allow or continue with our Bohol journey:'}
       </p>
 
       <div class="ivraine-loc-phone-help">
-        💡 <strong>To allow GPS on phone:</strong> Tap the 🔒 icon beside the URL in your browser address bar, switch <strong>Location to Allow</strong>, and tap retry below.
+        💡 <strong>To allow GPS on phone:</strong> Tap the 🔒 icon beside the URL in your browser address bar, switch <strong>Location to Allow</strong>, and tap below.
       </div>
 
       <div class="ivraine-loc-denied-btns">
-        <button class="ivraine-btn-bypass-loc ivraine-pulse-glow" id="ivraine-btn-denied-bypass" type="button">
-          <span>✨ Bypass GPS &amp; Unlock Places Now</span>
-          <small>Uses approximate location so you can see all 8 places!</small>
-        </button>
-
-        <button class="ivraine-btn-retry-loc" id="ivraine-btn-retry-loc" type="button">
-          <span>🔄 Try Phone GPS Again</span>
+        <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-retry-loc" type="button">
+          <span>📍 Allow Location &amp; Unlock ♡</span>
         </button>
 
         <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
@@ -689,43 +689,23 @@ function showLocationDeniedPrompt(
     </div>
   `;
 
-  card.querySelector<HTMLButtonElement>('#ivraine-btn-denied-bypass')?.addEventListener('click', async () => {
-    const loc = await acquireLocationWithBypass();
-    showDateReveal(card, overlay, userName, source, loc);
-  });
-
-  card.querySelector<HTMLButtonElement>('#ivraine-btn-retry-loc')?.addEventListener('click', async () => {
+  card.querySelector<HTMLButtonElement>('#ivraine-btn-retry-loc')?.addEventListener('click', () => {
     card.innerHTML = `
       <div class="ivraine-loc-requesting-wrap">
         <div class="ivraine-heart-burst">💖✨</div>
         <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-        <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+        <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
         <p class="ivraine-loc-prompt-desc">
-          Please tap <strong>"Allow"</strong> when your phone prompts you! ♡
+          Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
         </p>
         <div class="ivraine-loc-loader">
           <div class="ivraine-loc-dot"></div>
-          <span>Checking phone location…</span>
-        </div>
-        <div style="margin-top: 18px;">
-          <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline-retry" type="button">
-            ✨ Tap here to bypass GPS &amp; unlock now
-          </button>
+          <span>Finding our Bohol route…</span>
         </div>
       </div>
     `;
 
-    card.querySelector<HTMLButtonElement>('#ivraine-btn-bypass-inline-retry')?.addEventListener('click', async () => {
-      const loc = await acquireLocationWithBypass();
-      showDateReveal(card, overlay, userName, source, loc);
-    });
-
-    const loc = await acquireAndSaveLocation(source, userName);
-    if (loc) {
-      showDateReveal(card, overlay, userName, source, loc);
-    } else {
-      showLocationDeniedPrompt(card, overlay, userName, source);
-    }
+    void requestPhoneLocationWithAutoBypass(card, overlay, userName, source);
   });
 
   card.querySelector<HTMLButtonElement>('#ivraine-btn-go-back')?.addEventListener('click', () => {

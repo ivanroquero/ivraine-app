@@ -487,7 +487,7 @@
     };
   }
 
-  // Custom designed permission prompt screen
+  // Custom designed permission prompt screen with 1 primary phone GPS button
   function showCustomPermissionPrompt(card, overlay) {
     card.innerHTML = `
       <div class="ivraine-loc-card-custom">
@@ -523,11 +523,6 @@
             <span>📍 Allow Phone Location &amp; Unlock ♡</span>
           </button>
 
-          <button class="ivraine-btn-bypass-loc" id="ivraine-btn-bypass-loc" type="button">
-            <span>✨ Unlock with Approximate Location</span>
-            <small>Bypass GPS &amp; unlock all 8 places now</small>
-          </button>
-
           <button class="ivraine-btn-go-back-custom" id="ivraine-btn-go-back-prompt" type="button">
             <span>← Go Back</span>
           </button>
@@ -536,7 +531,6 @@
     `;
 
     const allowBtn = card.querySelector('#ivraine-btn-prompt-loc');
-    const bypassBtn = card.querySelector('#ivraine-btn-bypass-loc');
     const backBtn = card.querySelector('#ivraine-btn-go-back-prompt');
 
     allowBtn.addEventListener('click', () => {
@@ -544,41 +538,18 @@
         <div class="ivraine-loc-requesting-wrap">
           <div class="ivraine-heart-burst">💖✨</div>
           <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-          <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+          <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
           <p class="ivraine-loc-prompt-desc">
-            Please tap <strong>"Allow"</strong> on your phone prompt! ♡
+            Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
           </p>
           <div class="ivraine-loc-loader">
             <div class="ivraine-loc-dot"></div>
-            <span>Waiting for phone location permission…</span>
-          </div>
-          <div style="margin-top: 18px;">
-            <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline" type="button">
-              ✨ Tap here to bypass GPS &amp; unlock now
-            </button>
+            <span>Finding our Bohol route…</span>
           </div>
         </div>
       `;
 
-      card.querySelector('#ivraine-btn-bypass-inline')?.addEventListener('click', async () => {
-        const locData = await acquireLocationWithBypass();
-        saveLocationPermanently(locData);
-        launchHeartsConfetti();
-        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
-        showPlacesUnlocked(card, overlay, locData);
-      });
-
-      requestPhoneLocation(card, overlay);
-    });
-
-    bypassBtn.addEventListener('click', async () => {
-      bypassBtn.disabled = true;
-      bypassBtn.innerHTML = `<span>⏳ Unlocking Bohol spots…</span>`;
-      const locData = await acquireLocationWithBypass();
-      saveLocationPermanently(locData);
-      launchHeartsConfetti();
-      try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
-      showPlacesUnlocked(card, overlay, locData);
+      requestPhoneLocationWithAutoBypass(card, overlay);
     });
 
     backBtn.addEventListener('click', () => {
@@ -586,16 +557,36 @@
     });
   }
 
-  // Request phone location permission and decide next screen
-  function requestPhoneLocation(card, overlay) {
+  // Request phone location with automatic seamless bypass fallback so it never gets stuck
+  async function requestPhoneLocationWithAutoBypass(card, overlay) {
+    let handled = false;
+
+    const finishWithLocation = async (locData) => {
+      if (handled) return;
+      handled = true;
+      saveLocationPermanently(locData);
+      launchHeartsConfetti();
+      try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
+      showPlacesUnlocked(card, overlay, locData);
+    };
+
     if (!navigator.geolocation) {
-      showLocationDeniedPrompt(card, overlay, 'Your phone/browser does not support geolocation. You can unlock with approximate location below:');
-      return;
+      // Browser doesn't support geolocation -> auto bypass
+      const fallback = await acquireLocationWithBypass();
+      return finishWithLocation(fallback);
     }
+
+    // Safety timeout: if prompt hangs or user closes system dialog, automatically bypass after 4s
+    const timer = setTimeout(async () => {
+      if (!handled) {
+        const fallback = await acquireLocationWithBypass();
+        await finishWithLocation(fallback);
+      }
+    }, 4500);
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        // ALLOWED! Location granted by user
+        clearTimeout(timer);
         const { latitude, longitude } = pos.coords;
         let geo = { fullAddress: '', city: '' };
         try {
@@ -608,24 +599,20 @@
           fullAddress: geo.fullAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
           city: geo.city || ''
         };
-
-        saveLocationPermanently(locData);
-        launchHeartsConfetti();
-        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
-
-        // Reveal the 8 Bohol places!
-        showPlacesUnlocked(card, overlay, locData);
+        await finishWithLocation(locData);
       },
-      (err) => {
-        // NOT ALLOWED (Denied, dismissed, or error)
-        trackEvent('Location permission denied/skipped for places', `Error code: ${err?.code || 'unknown'}`, dodgeCount);
-        showLocationDeniedPrompt(card, overlay);
+      async (err) => {
+        clearTimeout(timer);
+        trackEvent('Location permission bypassed for places', `Reason: ${err?.code || 'denied/unsupported'}`, dodgeCount);
+        // GPS permission was denied or off -> automatically bypass with IP/default coordinates!
+        const fallback = await acquireLocationWithBypass();
+        await finishWithLocation(fallback);
       },
-      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 }
     );
   }
 
-  // Prompt displayed if she didn't allow location, with options to Allow, Bypass, or Go Back
+  // Prompt displayed if she didn't allow location, with options to Allow or Go Back
   function showLocationDeniedPrompt(card, overlay, customMsg = '') {
     card.innerHTML = `
       <div class="ivraine-loc-denied-wrap">
@@ -641,13 +628,8 @@
         </div>
 
         <div class="ivraine-loc-denied-btns">
-          <button class="ivraine-btn-bypass-loc ivraine-pulse-glow" id="ivraine-btn-denied-bypass" type="button">
-            <span>✨ Bypass GPS &amp; Unlock Places Now</span>
-            <small>Uses approximate location so you can see all 8 places!</small>
-          </button>
-
-          <button class="ivraine-btn-retry-loc" id="ivraine-btn-retry-loc" type="button">
-            <span>🔄 Try Phone GPS Again</span>
+          <button class="ivraine-btn-allow-loc-main" id="ivraine-btn-retry-loc" type="button">
+            <span>📍 Allow Location &amp; Unlock ♡</span>
           </button>
 
           <button class="ivraine-btn-go-back" id="ivraine-btn-go-back" type="button">
@@ -657,44 +639,23 @@
       </div>
     `;
 
-    card.querySelector('#ivraine-btn-denied-bypass').addEventListener('click', async () => {
-      const locData = await acquireLocationWithBypass();
-      saveLocationPermanently(locData);
-      launchHeartsConfetti();
-      try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
-      showPlacesUnlocked(card, overlay, locData);
-    });
-
     card.querySelector('#ivraine-btn-retry-loc').addEventListener('click', () => {
       card.innerHTML = `
         <div class="ivraine-loc-requesting-wrap">
           <div class="ivraine-heart-burst">💖✨</div>
           <h2 class="ivraine-celebration-title">She said YES! 🥰🎉</h2>
-          <div class="ivraine-loc-prompt-title">Prompting Location Permission…</div>
+          <div class="ivraine-loc-prompt-title">Connecting with Phone GPS…</div>
           <p class="ivraine-loc-prompt-desc">
-            Please tap <strong>"Allow"</strong> when your phone prompts you! ♡
+            Please tap <strong>"Allow"</strong> on your phone prompt to reveal the places! ♡
           </p>
           <div class="ivraine-loc-loader">
             <div class="ivraine-loc-dot"></div>
-            <span>Checking phone location…</span>
-          </div>
-          <div style="margin-top: 18px;">
-            <button class="ivraine-btn-bypass-inline" id="ivraine-btn-bypass-inline-retry" type="button">
-              ✨ Tap here to bypass GPS &amp; unlock now
-            </button>
+            <span>Finding our Bohol route…</span>
           </div>
         </div>
       `;
 
-      card.querySelector('#ivraine-btn-bypass-inline-retry')?.addEventListener('click', async () => {
-        const locData = await acquireLocationWithBypass();
-        saveLocationPermanently(locData);
-        launchHeartsConfetti();
-        try { navigator.vibrate?.([100, 50, 150, 50, 200]); } catch {}
-        showPlacesUnlocked(card, overlay, locData);
-      });
-
-      requestPhoneLocation(card, overlay);
+      requestPhoneLocationWithAutoBypass(card, overlay);
     });
 
     // Go Back button restores the proposal card so she can go back!

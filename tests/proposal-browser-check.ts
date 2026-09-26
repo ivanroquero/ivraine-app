@@ -115,27 +115,27 @@ async function main() {
     await customPermCard.waitFor({ state: 'visible', timeout: 5000 });
     console.log('PASS: Custom designed permission card displayed');
 
-    // Tap prompt loc button (without permission) -> leads to denied / bypass screen
+    // Verify there is only 1 primary action button: #ivraine-btn-prompt-loc
     const promptLocBtn = desktopPage.locator('#ivraine-btn-prompt-loc');
-    await promptLocBtn.click();
+    await promptLocBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const bypassBtnCount = await desktopPage.locator('#ivraine-btn-bypass-loc').count();
+    if (bypassBtnCount !== 0) throw new Error('Expected only 1 primary GPS button, but found extra bypass button');
+    console.log('PASS: Verified only 1 single Phone GPS button on custom permission prompt');
 
-    // Verify denied / bypass prompt appears when location is not granted
-    const deniedWrap = desktopPage.locator('.ivraine-loc-denied-wrap');
-    await deniedWrap.waitFor({ state: 'visible', timeout: 5000 });
-    console.log('PASS: Location notice displayed with bypass option when GPS not granted');
-
-    // Verify bypass button is present
-    const bypassBtn = desktopPage.locator('#ivraine-btn-denied-bypass');
-    await bypassBtn.waitFor({ state: 'visible', timeout: 3000 });
-    console.log('PASS: Bypass GPS button is available');
-
-    // Test "Go Back" button
-    const goBackBtn = desktopPage.locator('#ivraine-btn-go-back');
+    // Test "Go Back" button from prompt card
+    const goBackBtn = desktopPage.locator('#ivraine-btn-go-back-prompt');
     await goBackBtn.click();
     await desktopPage.waitForTimeout(300);
     const restoredYes = desktopPage.locator('#ivraine-btn-yes');
     await restoredYes.waitFor({ state: 'visible', timeout: 3000 });
     console.log('PASS: Go Back button restored proposal question card');
+
+    // Re-open custom prompt and tap the single button to verify automatic bypass unlock
+    await restoredYes.click();
+    await desktopPage.locator('#ivraine-btn-prompt-loc').click();
+    const desktopPlaces = desktopPage.locator('.ivraine-places-scroll-list');
+    await desktopPlaces.waitFor({ state: 'visible', timeout: 8000 });
+    console.log('PASS: Single button automatically bypassed GPS rejection and unlocked places list');
 
     await desktopPage.close();
 

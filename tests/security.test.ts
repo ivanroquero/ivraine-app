@@ -15,7 +15,7 @@ test('security headers are strict enough for a private scrapbook',async()=>{
  assert.equal(res.headers['referrer-policy'],'no-referrer');
  assert.equal(res.headers['cross-origin-opener-policy'],'same-origin');
  assert.match(String(res.headers['content-security-policy']||''),/default-src 'self'/);
- assert.match(String(res.headers['permissions-policy']||''),/geolocation=\(\)/);
+ assert.match(String(res.headers['permissions-policy']||''),/geolocation=\(self\)/);
 });
 test('database RLS protects both direct API access and shared writes',async()=>{
  const db=await fixtureDatabase();try{

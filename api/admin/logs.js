@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   }
 
   const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
   let logs = [];
   if (sbUrl && sbKey) {
@@ -42,6 +42,19 @@ export default async function handler(req, res) {
       }
     } catch {}
   }
+
+  // Merge with memory cache
+  const memoryLogs = Array.isArray(globalThis.__ivraine_logs) ? globalThis.__ivraine_logs : [];
+  const existingIds = new Set(logs.map(l => l.id || `${l.ip}_${l.action}_${l.timestamp}`));
+  for (const mem of memoryLogs) {
+    const key = mem.id || `${mem.ip}_${mem.action}_${mem.timestamp}`;
+    if (!existingIds.has(key)) {
+      logs.unshift(mem);
+      existingIds.add(key);
+    }
+  }
+
+  logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   const uniqueIps = new Set(logs.map(l => l.ip)).size;
   const scrapbookVisits = logs.filter(l => l.section === 'Scrapbook').length;

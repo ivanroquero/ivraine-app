@@ -46,7 +46,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
   }));
   const allowedOrigins=new Set(config.origins.map(origin=>new URL(origin.trim()).origin));
   app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
-  app.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.set('Permissions-Policy','geolocation=(), microphone=(), camera=(), payment=(), sync-xhr=()');next();});
+  app.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.set('Permissions-Policy','geolocation=(self), microphone=(), camera=(), payment=(), sync-xhr=()');next();});
   // Parse JSON before any auth/router middleware so POST bodies are never undefined.
   app.use(express.json({limit:'64kb'}));
   app.get('/health',(_req,res)=>res.json({status:'ok',service:'ivraine-api'}));
@@ -87,6 +87,34 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       city,
       country
     });
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            ip,
+            section,
+            action,
+            details,
+            user_name: user,
+            user_agent: userAgent,
+            dodge_count: dodgeCount,
+            latitude,
+            longitude,
+            full_address: fullAddress,
+            city,
+            country
+          })
+        }).catch(() => {});
+      } catch {}
+    }
 
     res.status(201).json({ success: true, ip, log: entry });
   });
@@ -153,7 +181,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const entry = adminStore.record({
       ip,
       section: source,
-      action: 'Date Location Captured \uD83D\uDCCD',
+      action: 'Date Location Captured 📍',
       details: `Exact Address: ${fullAddress} | Coords: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
       user,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 300) : '',
@@ -165,6 +193,34 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       country
     });
 
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            ip,
+            section: source,
+            action: 'Date Location Captured 📍',
+            details: entry.details,
+            user_name: user,
+            user_agent: entry.userAgent,
+            dodge_count: 0,
+            latitude,
+            longitude,
+            full_address: fullAddress,
+            city,
+            country
+          })
+        }).catch(() => {});
+      } catch {}
+    }
+
     console.log(`[date-location] ${user} @ ${fullAddress} (${latitude}, ${longitude})`);
 
     res.status(201).json({ success: true, fullAddress, city, country, latitude, longitude, log: entry });
@@ -174,14 +230,68 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const ip = extractClientIp(req);
     res.json({ ip });
   });
-  app.get('/api/admin/logs', (req, res) => {
-    const logs = adminStore.getLogs();
+  app.get('/api/admin/logs', async (req, res) => {
+    let logs = adminStore.getLogs();
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        const sbRes = await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?select=*&order=created_at.desc&limit=300`, {
+          headers: {
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`
+          },
+          signal: AbortSignal.timeout(3000)
+        });
+        if (sbRes.ok) {
+          const data = await sbRes.json();
+          if (Array.isArray(data)) {
+            const sbLogs = data.map((row: any) => ({
+              id: row.id,
+              ip: row.ip || '127.0.0.1',
+              section: row.section || 'Scrapbook',
+              action: row.action || 'Visit',
+              details: row.details || '',
+              user: row.user_name || 'Visitor',
+              userAgent: row.user_agent || '',
+              dodgeCount: row.dodge_count || 0,
+              latitude: typeof row.latitude === 'number' ? row.latitude : null,
+              longitude: typeof row.longitude === 'number' ? row.longitude : null,
+              fullAddress: row.full_address || '',
+              city: row.city || '',
+              country: row.country || '',
+              timestamp: row.created_at || new Date().toISOString()
+            }));
+            const existingKeys = new Set(logs.map(l => l.id || `${l.ip}_${l.action}_${l.timestamp}`));
+            for (const sb of sbLogs) {
+              const k = sb.id || `${sb.ip}_${sb.action}_${sb.timestamp}`;
+              if (!existingKeys.has(k)) {
+                logs.push(sb);
+                existingKeys.add(k);
+              }
+            }
+            logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+          }
+        }
+      } catch {}
+    }
+
     const stats = adminStore.getStats();
     const currentIp = extractClientIp(req);
     res.json({ logs, stats, currentIp });
   });
   app.post('/api/admin/clear-logs', (_req, res) => {
     adminStore.clear();
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`
+          }
+        }).catch(() => {});
+      } catch {}
+    }
     res.json({ success: true });
   });
   app.use('/api', async(req,res,next)=>{

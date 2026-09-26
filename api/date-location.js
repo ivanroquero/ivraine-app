@@ -7,6 +7,10 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const forwarded = req.headers['x-forwarded-for'];
   let ip = '127.0.0.1';
   if (typeof forwarded === 'string' && forwarded.trim()) {
@@ -24,59 +28,57 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body); } catch {}
   }
 
-  const section = body.section || 'Scrapbook';
-  const action = body.action || 'Visit';
-  const details = body.details || '';
-  const userName = body.user || 'Visitor';
-  const userAgent = req.headers['user-agent'] || '';
-  const dodgeCount = Number(body.dodgeCount) || 0;
   let latitude = typeof body.latitude === 'number' && !isNaN(body.latitude) ? body.latitude : null;
   let longitude = typeof body.longitude === 'number' && !isNaN(body.longitude) ? body.longitude : null;
-  let fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress : (typeof body.full_address === 'string' ? body.full_address : '');
+  const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Loraine';
+  const source = body.source || 'Scrapbook';
+
+  // Fallback to Vercel edge IP geolocation if coordinates not provided
+  if ((!latitude || !longitude) && req.headers['x-vercel-ip-latitude']) {
+    latitude = parseFloat(String(req.headers['x-vercel-ip-latitude']));
+    longitude = parseFloat(String(req.headers['x-vercel-ip-longitude']));
+  }
+  if (!latitude || !longitude) {
+    latitude = 9.6496;
+    longitude = 123.8647;
+  }
+
+  let fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress : '';
   let city = typeof body.city === 'string' ? body.city : '';
   let country = typeof body.country === 'string' ? body.country : '';
 
-  // If GPS coordinates were not provided, fallback to Vercel edge IP geolocation
-  if ((!latitude || !longitude) && req.headers['x-vercel-ip-latitude']) {
-    const edgeLat = parseFloat(String(req.headers['x-vercel-ip-latitude']));
-    const edgeLng = parseFloat(String(req.headers['x-vercel-ip-longitude']));
-    if (!isNaN(edgeLat) && !isNaN(edgeLng)) {
-      latitude = edgeLat;
-      longitude = edgeLng;
-      city = city || decodeURIComponent(String(req.headers['x-vercel-ip-city'] || ''));
-      country = country || String(req.headers['x-vercel-ip-country'] || '');
-      fullAddress = fullAddress || (city ? `${city}${country ? ', ' + country : ''}` : '');
-    }
+  if (!fullAddress) {
+    fullAddress = city ? `${city}, Bohol, Philippines` : 'Tagbilaran City, Bohol, Philippines';
   }
 
   const logEntry = {
-    id: 'track_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     ip,
-    section,
-    action,
-    details,
-    user_name: userName,
-    user: userName,
-    user_agent: userAgent,
-    userAgent,
-    dodge_count: dodgeCount,
-    dodgeCount,
+    section: source,
+    action: '📍 Date Location Captured ♡',
+    details: `Location: ${fullAddress} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+    user_name: user,
+    user,
+    user_agent: req.headers['user-agent'] || '',
+    userAgent: req.headers['user-agent'] || '',
+    dodge_count: 0,
+    dodgeCount: 0,
     latitude,
     longitude,
     full_address: fullAddress,
     fullAddress,
-    city,
-    country,
+    city: city || 'Tagbilaran City',
+    country: country || 'Philippines',
     created_at: new Date().toISOString(),
     timestamp: new Date().toISOString()
   };
 
-  // Shared in-memory cache for Vercel functions
+  // Shared in-memory cache for Vercel serverless functions
   globalThis.__ivraine_logs = globalThis.__ivraine_logs || [];
   globalThis.__ivraine_logs.unshift(logEntry);
   if (globalThis.__ivraine_logs.length > 500) globalThis.__ivraine_logs.length = 500;
 
-  // If Supabase environment variables exist in Vercel, record to database
+  // Record to Supabase
   const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
@@ -92,31 +94,30 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           ip,
-          section,
-          action,
-          details,
-          user_name: userName,
-          user_agent: userAgent,
-          dodge_count: dodgeCount,
+          section: source,
+          action: '📍 Date Location Captured ♡',
+          details: logEntry.details,
+          user_name: user,
+          user_agent: logEntry.userAgent,
+          dodge_count: 0,
           latitude,
           longitude,
           full_address: fullAddress,
-          city,
-          country
+          city: logEntry.city,
+          country: logEntry.country
         })
       });
     } catch {}
   }
 
-  return res.status(200).json({
+  return res.status(201).json({
     status: 'ok',
-    recorded: true,
-    ip,
-    section,
-    action,
+    success: true,
     latitude,
     longitude,
     fullAddress,
+    city: logEntry.city,
+    country: logEntry.country,
     log: logEntry
   });
 }
