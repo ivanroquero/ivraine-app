@@ -37,7 +37,7 @@ await context.addInitScript({content:`
 const page=await context.newPage();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
 const check=(message:string)=>console.log('PASS:',message);
 try{
- await page.goto('http://127.0.0.1:5173');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our private space'}).click();
+ await page.goto('http://127.0.0.1:5173/?space=true');await page.getByLabel('Your email').fill('ivan@test.local');await page.getByLabel('Password',{exact:true}).fill('test-password-123');await page.getByRole('button',{name:'Open our private space'}).click();
  const heart=page.getByRole('button',{name:'Send I miss you to my partner'});await expect(heart).toBeEnabled({timeout:20000});expect(errors).toEqual([]);check('Login works with normalized /api URL and trailing-slash origin');
  await expect(page.locator('#heart-partner')).toContainText('Loraine gets your hearts');check('The card names the partner whose phone will ring');
  await page.getByRole('button',{name:'Enable notifications',exact:true}).click();await expect(page.getByText('Notifications enabled on this device.',{exact:true})).toBeVisible({timeout:20000});expect(await page.evaluate(()=>(window as any).__pushGesture)).toBe(true);check('Permission requested from user gesture; subscription persisted to authenticated backend');

@@ -130,6 +130,7 @@ async function loadMore(){if(!info||loadingMore||nextOffset===null||!navigator.o
 function attachSentinel(){const existing=document.querySelector('#scroll-sentinel');if(existing)existing.remove();if(nextOffset===null)return;const sentinel=document.createElement('div');sentinel.id='scroll-sentinel';sentinel.style.cssText='height:1px;margin-top:40px;';const target=document.querySelector('#page-items');if(!target)return;target.after(sentinel);const io=new IntersectionObserver(entries=>{if(entries[0]?.isIntersecting){io.disconnect();sentinel.remove();void loadMore();}},{rootMargin:'200px'});io.observe(sentinel);}
 
 async function boot(){const gen=++generation;
+ if(!location.search.includes('space')&&!location.hash.includes('space')){location.replace('/legacy/index.html');return;}
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
