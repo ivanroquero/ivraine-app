@@ -1007,8 +1007,9 @@ function updateVisitorMap(logs: VisitorLog[]) {
 function setMapLayerStyle(style: 'dark' | 'satellite' | 'streets') {
   currentMapStyle = style;
 
-  document.querySelectorAll('.layer-pill').forEach(pill => pill.classList.remove('active'));
+  document.querySelectorAll('.layer-pill, .mobile-layer-pill').forEach(pill => pill.classList.remove('active'));
   document.getElementById(`btn-layer-${style}`)?.classList.add('active');
+  document.getElementById(`btn-mobile-layer-${style}`)?.classList.add('active');
 
   if (mapType === 'mapbox' && mapInstance) {
     let styleUrl = 'mapbox://styles/mapbox/dark-v11';
@@ -1028,8 +1029,6 @@ function setMapLayerStyle(style: 'dark' | 'satellite' | 'streets') {
 }
 
 function flyToLocation(lat: number, lng: number) {
-  if (!mapInstance) return;
-
   userInteractedWithMap = false;
 
   // Switch to Map tab
@@ -1038,7 +1037,12 @@ function flyToLocation(lat: number, lng: number) {
   document.querySelector('[data-tab="tab-map"]')?.classList.add('active');
   document.getElementById('tab-map')?.classList.add('active');
 
+  if (!mapInitialized) {
+    initVisitorMap();
+  }
+
   setTimeout(() => {
+    if (!mapInstance) return;
     if (mapType === 'mapbox') {
       try { mapInstance.resize(); } catch {}
       mapInstance.flyTo({ center: [lng, lat], zoom: 17, essential: true });
@@ -1046,7 +1050,7 @@ function flyToLocation(lat: number, lng: number) {
       try { mapInstance.invalidateSize(); } catch {}
       mapInstance.setView([lat, lng], 17, { animate: true });
     }
-  }, 100);
+  }, 120);
 }
 
 async function removePinForDevice(devId: string, user: string, ip: string) {
@@ -1096,7 +1100,9 @@ async function removePinForDevice(devId: string, user: string, ip: string) {
 
 function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | VisitorLog>) {
   const container = document.getElementById('recent-locations-deck');
-  if (!container) return;
+  const mobileContainer = document.getElementById('mobile-recent-locations-deck');
+  const mobileBadge = document.getElementById('mobile-locations-badge');
+  if (!container && !mobileContainer) return;
 
   const rawResolvedList: ResolvedLocation[] = resolvedOrLogs.map(item => {
     if ('precise' in item) return item as ResolvedLocation;
@@ -1106,17 +1112,23 @@ function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | Visi
   // Strictly 1 card per device (the latest fix)!
   const resolvedList = newestPerDevice(rawResolvedList);
 
+  if (mobileBadge) {
+    mobileBadge.textContent = String(resolvedList.length);
+  }
+
   if (!resolvedList.length) {
-    container.innerHTML = `
+    const emptyHtml = `
       <div class="empty-state" style="grid-column: 1 / -1; padding: 30px;">
         <h3>Waiting for live GPS fix…</h3>
         <p>Pins appear when Loraine or visitors open the Scrapbook or Private Space and grant browser GPS permission.</p>
       </div>
     `;
+    if (container) container.innerHTML = emptyHtml;
+    if (mobileContainer) mobileContainer.innerHTML = emptyHtml;
     return;
   }
 
-  container.innerHTML = resolvedList.slice(0, 12).map(loc => {
+  const cardsHtml = resolvedList.slice(0, 12).map(loc => {
     const lat = loc.lat;
     const lng = loc.lng;
     const isScrapbook = loc.log.section === 'Scrapbook';
@@ -1160,17 +1172,23 @@ function renderRecentLocationsDeck(resolvedOrLogs: Array<ResolvedLocation | Visi
     `;
   }).join('');
 
-  // Attach fly-to buttons
-  container.querySelectorAll<HTMLButtonElement>('.btn-fly-pin').forEach(btn => {
+  if (container) container.innerHTML = cardsHtml;
+  if (mobileContainer) mobileContainer.innerHTML = cardsHtml;
+
+  const mobileSheet = document.getElementById('mobile-locations-sheet');
+
+  // Attach fly-to buttons for both containers
+  document.querySelectorAll<HTMLButtonElement>('.btn-fly-pin').forEach(btn => {
     btn.onclick = () => {
+      if (mobileSheet) mobileSheet.style.display = 'none';
       const lat = parseFloat(btn.dataset.lat || '0');
       const lng = parseFloat(btn.dataset.lng || '0');
       flyToLocation(lat, lng);
     };
   });
 
-  // Attach remove-pin buttons
-  container.querySelectorAll<HTMLButtonElement>('.btn-remove-pin').forEach(btn => {
+  // Attach remove-pin buttons for both containers
+  document.querySelectorAll<HTMLButtonElement>('.btn-remove-pin').forEach(btn => {
     btn.onclick = async () => {
       const devId = btn.dataset.deviceId || '';
       const user = btn.dataset.user || '';
@@ -1672,13 +1690,17 @@ function setupSettings() {
     twaSaveStatus.textContent = 'Reset to default configuration.';
   });
 
-  // Layer Switching Pills
+  // Layer Switching Pills (Desktop & Mobile)
   document.getElementById('btn-layer-dark')?.addEventListener('click', () => setMapLayerStyle('dark'));
   document.getElementById('btn-layer-satellite')?.addEventListener('click', () => setMapLayerStyle('satellite'));
   document.getElementById('btn-layer-streets')?.addEventListener('click', () => setMapLayerStyle('streets'));
 
-  // Center on latest pin button
-  document.getElementById('btn-center-latest-map')?.addEventListener('click', () => {
+  document.getElementById('btn-mobile-layer-dark')?.addEventListener('click', () => setMapLayerStyle('dark'));
+  document.getElementById('btn-mobile-layer-satellite')?.addEventListener('click', () => setMapLayerStyle('satellite'));
+  document.getElementById('btn-mobile-layer-streets')?.addEventListener('click', () => setMapLayerStyle('streets'));
+
+  // Center on latest pin button (Desktop & Mobile)
+  const centerMapHandler = () => {
     userInteractedWithMap = false;
     const geoLogs = allLogs.filter(l => l.latitude && l.longitude);
     if (geoLogs.length > 0) {
@@ -1686,6 +1708,44 @@ function setupSettings() {
       showMapToast(`🎯 Focused on ${geoLogs[0].user || 'latest visitor'} pin`);
     } else {
       alert('No visitor locations logged yet. Have Loraine open the app and allow location to see her on the map!');
+    }
+  };
+  document.getElementById('btn-center-latest-map')?.addEventListener('click', centerMapHandler);
+  document.getElementById('btn-mobile-center-pin')?.addEventListener('click', centerMapHandler);
+
+  // Mobile Map Full-Screen: Back Button (Exits map, returns to dashboard)
+  document.getElementById('btn-map-mobile-back')?.addEventListener('click', () => {
+    const logsTabBtn = document.querySelector<HTMLButtonElement>('.tab-btn[data-tab="tab-logs"]');
+    if (logsTabBtn) {
+      logsTabBtn.click();
+    } else {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-logs')?.classList.add('active');
+      document.querySelector<HTMLButtonElement>('.tab-btn[data-tab="tab-logs"]')?.classList.add('active');
+    }
+  });
+
+  // Mobile Locations Bottom Sheet Toggle
+  const mobileSheet = document.getElementById('mobile-locations-sheet');
+  document.getElementById('btn-mobile-locations-toggle')?.addEventListener('click', () => {
+    if (mobileSheet) mobileSheet.style.display = 'block';
+  });
+  document.getElementById('btn-close-locations-sheet')?.addEventListener('click', () => {
+    if (mobileSheet) mobileSheet.style.display = 'none';
+  });
+  document.getElementById('sheet-backdrop')?.addEventListener('click', () => {
+    if (mobileSheet) mobileSheet.style.display = 'none';
+  });
+
+  // Floating HUD Collapse Toggle
+  const btnHudCollapse = document.getElementById('btn-hud-collapse');
+  const hudSubContent = document.getElementById('hud-sub-content');
+  btnHudCollapse?.addEventListener('click', () => {
+    if (hudSubContent) {
+      const isHidden = hudSubContent.style.display === 'none';
+      hudSubContent.style.display = isHidden ? 'flex' : 'none';
+      btnHudCollapse.textContent = isHidden ? '▾' : '▴';
     }
   });
 }
@@ -1711,8 +1771,39 @@ document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach(btn => {
           mapInstance.resize();
         }
       }, 100);
+      setTimeout(() => {
+        if (mapType === 'leaflet' && mapInstance) {
+          try { mapInstance.invalidateSize(); } catch {}
+        } else if (mapType === 'mapbox' && mapInstance) {
+          try { mapInstance.resize(); } catch {}
+        }
+      }, 350);
     }
   });
+});
+
+// Responsive resize & orientation change support for full-screen map
+window.addEventListener('resize', () => {
+  const mapTab = document.getElementById('tab-map');
+  if (mapTab?.classList.contains('active')) {
+    if (mapType === 'leaflet' && mapInstance) {
+      try { mapInstance.invalidateSize(); } catch {}
+    } else if (mapType === 'mapbox' && mapInstance) {
+      try { mapInstance.resize(); } catch {}
+    }
+  }
+});
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    const mapTab = document.getElementById('tab-map');
+    if (mapTab?.classList.contains('active')) {
+      if (mapType === 'leaflet' && mapInstance) {
+        try { mapInstance.invalidateSize(); } catch {}
+      } else if (mapType === 'mapbox' && mapInstance) {
+        try { mapInstance.resize(); } catch {}
+      }
+    }
+  }, 200);
 });
 
 // Event listeners
