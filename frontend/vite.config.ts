@@ -1,41 +1,63 @@
 import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'node:path';
 
-export default defineConfig(({mode})=>{
- const env=loadEnv(mode,process.cwd(),'VITE_');
- const key=process.env.VITE_SUPABASE_PUBLISHABLE_KEY||env.VITE_SUPABASE_PUBLISHABLE_KEY;
- if(key && (key.startsWith('sb_secret_') || (key.startsWith('eyJ') && (()=>{try{return JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString()).role==='service_role';}catch{return false;}})())))throw new Error('Secret/service-role keys must never be included in a frontend build. Use a Supabase publishable key.');
- 
- return {
-  plugins: [
-    {
-      name: 'admin-route-middleware',
-      configureServer(server) {
-        server.middlewares.use((req, _res, next) => {
-          if (req.url === '/admin' || req.url === '/admin/') {
-            req.url = '/admin.html';
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  if (
+    key &&
+    (key.startsWith('sb_secret_') ||
+      (key.startsWith('eyJ') &&
+        (() => {
+          try {
+            return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role === 'service_role';
+          } catch {
+            return false;
           }
-          next();
-        });
-      }
-    }
-  ],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true
-      }
-    }
-  },
-  build: {
-    target: 'es2022',
-    rollupOptions: {
-      input: {
-        main: resolve(import.meta.dirname || process.cwd(), 'index.html'),
-        admin: resolve(import.meta.dirname || process.cwd(), 'admin.html')
-      }
-    }
+        })()))
+  ) {
+    throw new Error('Secret/service-role keys must never be included in a frontend build. Use a Supabase publishable key.');
   }
- };
+
+  const rootDir = import.meta.dirname || process.cwd();
+
+  return {
+    plugins: [
+      {
+        name: 'admin-route-middleware',
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            if (req.url === '/admin' || req.url === '/admin/') {
+              req.url = '/admin.html';
+            }
+            next();
+          });
+        }
+      }
+    ],
+    resolve: {
+      alias: {
+        '@api': resolve(rootDir, '../api')
+      }
+    },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true
+        }
+      }
+    },
+    build: {
+      target: 'es2022',
+      rollupOptions: {
+        input: {
+          main: resolve(rootDir, 'index.html'),
+          admin: resolve(rootDir, 'admin.html'),
+          lock: resolve(rootDir, 'lock.html')
+        }
+      }
+    }
+  };
 });

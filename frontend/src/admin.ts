@@ -1,6 +1,10 @@
 import { openProposalModal } from './proposal';
 import { supabase } from './api';
 import { createClient } from '@supabase/supabase-js';
+import type { AdminLogsResponse, AdminLogItem, AdminStatsData } from '@api/admin/logs';
+import type { AdminClearLogsResponse } from '@api/admin/clear-logs';
+import type { IpResponse } from '@api/ip';
+import type { DateLocationRequestBody } from '@api/date-location';
 import {
   GOOD_ACCURACY_METERS,
   LIVE_PIN_STALE_MS,
@@ -210,7 +214,7 @@ async function detectPublicIp(): Promise<string> {
     try {
       const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as IpResponse;
         if (data.ip) {
           try { sessionStorage.setItem('ivraine_detected_ip', data.ip); } catch {}
           return data.ip;
@@ -1079,10 +1083,16 @@ async function removePinForDevice(devId: string, user: string, ip: string) {
   try {
     const endpoint = getBackendEndpoint('/api/date-location');
     if (endpoint) {
+      const removePayload: DateLocationRequestBody = {
+        action: 'turn_off',
+        removePin: true,
+        deviceId: devId,
+        user
+      };
       void fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'turn_off', removePin: true, deviceId: devId, user })
+        body: JSON.stringify(removePayload)
       });
     }
 
@@ -1215,7 +1225,7 @@ async function loadAdminData() {
     try {
       const res = await fetch(endpoint, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as AdminLogsResponse;
         if (Array.isArray(data.logs)) {
           fetchedLogs = data.logs;
           fetchedFromBackend = true;

@@ -1,4 +1,27 @@
-export default async function handler(req, res) {
+import type {
+  ApiRequest,
+  ApiResponse,
+  AppSection,
+  DateLocationRequestBody,
+  DateLocationResponse,
+  DateLocationSuccessResponse,
+  DateLocationRemoveResponse,
+  DateLocationErrorResponse,
+  TrackLogEntry
+} from './types';
+
+export type {
+  DateLocationRequestBody,
+  DateLocationResponse,
+  DateLocationSuccessResponse,
+  DateLocationRemoveResponse,
+  DateLocationErrorResponse
+};
+
+export default async function handler(
+  req: ApiRequest<DateLocationRequestBody>,
+  res: ApiResponse<DateLocationResponse>
+) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -25,20 +48,32 @@ export default async function handler(req, res) {
 
   let body = req.body || {};
   if (typeof body === 'string') {
-    try { body = JSON.parse(body); } catch {}
+    try {
+      body = JSON.parse(body);
+    } catch {}
   }
 
   const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() ? body.deviceId.trim().slice(0, 100) : '';
   const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim().slice(0, 80) : 'Loraine';
-  const source = body.source || 'Scrapbook';
+  const source = (['Scrapbook', 'Private Space', 'Admin'].includes(body.source as string) ? body.source : 'Scrapbook') as AppSection;
 
   const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
 
   // Handle location turn off or remove pin
-  const isRemove = body.removePin === true || body.action === 'turn_off' || (typeof body.action === 'string' && body.action.toLowerCase().includes('turned off'));
+  const isRemove = body.removePin === true ||
+    body.action === 'turn_off' ||
+    (typeof body.action === 'string' && body.action.toLowerCase().includes('turned off'));
+
+  const memoryLogs: TrackLogEntry[] = Array.isArray((globalThis as any).__ivraine_logs) ? (globalThis as any).__ivraine_logs : [];
+
   if (isRemove) {
-    globalThis.__ivraine_logs = (globalThis.__ivraine_logs || []).filter(l => {
+    (globalThis as any).__ivraine_logs = memoryLogs.filter((l) => {
       const isTarget = (deviceId && l.deviceId === deviceId) ||
         (user && l.user && user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
         (!deviceId && l.ip === ip);
@@ -47,7 +82,9 @@ export default async function handler(req, res) {
 
     if (sbUrl && sbKey) {
       try {
-        const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+        const filterCol = user && user !== 'Visitor'
+          ? `user_name=eq.${encodeURIComponent(user)}`
+          : `ip=eq.${encodeURIComponent(ip)}`;
         await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
           method: 'DELETE',
           headers: {
@@ -75,8 +112,8 @@ export default async function handler(req, res) {
   }
 
   let fullAddress = typeof body.fullAddress === 'string' ? body.fullAddress : '';
-  let city = typeof body.city === 'string' ? body.city : '';
-  let country = typeof body.country === 'string' ? body.country : '';
+  const city = typeof body.city === 'string' ? body.city : '';
+  const country = typeof body.country === 'string' ? body.country : '';
 
   if (!fullAddress) {
     fullAddress = city ? `${city}, Bohol, Philippines` : 'Tagbilaran City, Bohol, Philippines';
@@ -84,7 +121,7 @@ export default async function handler(req, res) {
 
   const detailsStr = `Location: ${fullAddress} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})${deviceId ? ' [Device: ' + deviceId + ']' : ''}`;
 
-  const logEntry = {
+  const logEntry: TrackLogEntry = {
     id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     ip,
     section: source,
@@ -92,8 +129,8 @@ export default async function handler(req, res) {
     details: detailsStr,
     user_name: user,
     user,
-    user_agent: req.headers['user-agent'] || '',
-    userAgent: req.headers['user-agent'] || '',
+    user_agent: (req.headers['user-agent'] as string) || '',
+    userAgent: (req.headers['user-agent'] as string) || '',
     deviceId,
     dodge_count: 0,
     dodgeCount: 0,
@@ -108,21 +145,25 @@ export default async function handler(req, res) {
   };
 
   // Shared in-memory cache for Vercel serverless functions:
-  // Automatically purge prior location entries for this device so only 1 pin exists!
-  globalThis.__ivraine_logs = (globalThis.__ivraine_logs || []).filter(l => {
+  // Automatically purge prior location entries for this device so only 1 pin exists
+  (globalThis as any).__ivraine_logs = memoryLogs.filter((l) => {
     const isTarget = (deviceId && l.deviceId === deviceId) ||
       (user && l.user && user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
       (!deviceId && l.ip === ip);
     return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
   });
 
-  globalThis.__ivraine_logs.unshift(logEntry);
-  if (globalThis.__ivraine_logs.length > 500) globalThis.__ivraine_logs.length = 500;
+  (globalThis as any).__ivraine_logs.unshift(logEntry);
+  if ((globalThis as any).__ivraine_logs.length > 500) {
+    (globalThis as any).__ivraine_logs.length = 500;
+  }
 
   // Record to Supabase, first purging prior location pins for this user/device
   if (sbUrl && sbKey) {
     try {
-      const filterCol = user && user !== 'Visitor' ? `user_name=eq.${encodeURIComponent(user)}` : `ip=eq.${encodeURIComponent(ip)}`;
+      const filterCol = user && user !== 'Visitor'
+        ? `user_name=eq.${encodeURIComponent(user)}`
+        : `ip=eq.${encodeURIComponent(ip)}`;
       await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
         method: 'DELETE',
         headers: {

@@ -1,4 +1,15 @@
-export default async function handler(req, res) {
+import type {
+  ApiRequest,
+  ApiResponse,
+  IpResponse
+} from './types';
+
+export type { IpResponse };
+
+export default async function handler(
+  req: ApiRequest<undefined>,
+  res: ApiResponse<IpResponse>
+) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -20,17 +31,27 @@ export default async function handler(req, res) {
   if (ip === '::1') ip = '127.0.0.1';
 
   // Extract Vercel Edge geolocation headers if available
-  let latitude = req.headers['x-vercel-ip-latitude'] ? parseFloat(String(req.headers['x-vercel-ip-latitude'])) : null;
-  let longitude = req.headers['x-vercel-ip-longitude'] ? parseFloat(String(req.headers['x-vercel-ip-longitude'])) : null;
-  let city = req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : '';
-  let country = req.headers['x-vercel-ip-country'] ? String(req.headers['x-vercel-ip-country']) : '';
+  let latitude = req.headers['x-vercel-ip-latitude']
+    ? parseFloat(String(req.headers['x-vercel-ip-latitude']))
+    : null;
+  let longitude = req.headers['x-vercel-ip-longitude']
+    ? parseFloat(String(req.headers['x-vercel-ip-longitude']))
+    : null;
+  let city = req.headers['x-vercel-ip-city']
+    ? decodeURIComponent(String(req.headers['x-vercel-ip-city']))
+    : '';
+  let country = req.headers['x-vercel-ip-country']
+    ? String(req.headers['x-vercel-ip-country'])
+    : '';
 
   // If Vercel headers not present and IP is not local, try public geolocation fallback
   if ((!latitude || !longitude) && ip !== '127.0.0.1') {
     try {
-      const geoRes = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
+      const geoRes = await fetch(`https://ipapi.co/${ip}/json/`, {
+        signal: AbortSignal.timeout(3000)
+      });
       if (geoRes.ok) {
-        const data = await geoRes.json();
+        const data = await geoRes.json() as { latitude?: number; longitude?: number; city?: string; country_name?: string };
         if (data.latitude && data.longitude) {
           latitude = data.latitude;
           longitude = data.longitude;
@@ -42,7 +63,9 @@ export default async function handler(req, res) {
   }
 
   // Default coordinates to Tagbilaran City, Bohol if completely unknown
-  const fullAddress = city ? `${city}${country ? ', ' + country : ''}` : 'Tagbilaran City, Bohol';
+  const fullAddress = city
+    ? `${city}${country ? ', ' + country : ''}`
+    : 'Tagbilaran City, Bohol';
 
   return res.status(200).json({
     status: 'ok',

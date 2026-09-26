@@ -1,4 +1,7 @@
 import * as d3 from 'd3';
+import type { TrackRequestBody, TrackResponse } from '@api/track';
+import type { DateLocationRequestBody, DateLocationResponse } from '@api/date-location';
+import type { IpResponse } from '@api/ip';
 import {
   MAX_USABLE_ACCURACY_METERS,
   formatCoordinates,
@@ -98,7 +101,7 @@ export function trackActivity(
       ? `${details ? `${details} ` : ''}${gpsMetaTag(location?.accuracyMeters, location?.source || 'gps')}`
       : details;
 
-    const payload = {
+    const payload: TrackRequestBody = {
       section,
       action,
       details: taggedDetails,
@@ -204,21 +207,22 @@ async function publishGpsLocation(
 
   // Endpoint that stores the single authoritative phone pin (address + coordinates).
   try {
+    const locPayload: DateLocationRequestBody = {
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      accuracy: loc.accuracyMeters,
+      gpsSource: 'gps',
+      user: userName,
+      source,
+      deviceId,
+      fullAddress: loc.fullAddress,
+      city: loc.city,
+      country: loc.country
+    };
     await fetch('/api/date-location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        accuracy: loc.accuracyMeters,
-        gpsSource: 'gps',
-        user: userName,
-        source,
-        deviceId,
-        fullAddress: loc.fullAddress,
-        city: loc.city,
-        country: loc.country
-      }),
+      body: JSON.stringify(locPayload),
       keepalive: true
     });
   } catch {}
@@ -372,7 +376,7 @@ export async function acquireLocationWithBypass(): Promise<LocationData> {
   try {
     const res = await fetch('/api/ip', { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as IpResponse;
       if (isValidCoordinate(data?.latitude, data?.longitude)) {
         const loc: LocationData = {
           latitude: data.latitude,
@@ -1250,10 +1254,16 @@ async function requestPhoneLocationStrict(
       } catch {}
 
       try {
+        const removePayload: DateLocationRequestBody = {
+          action: 'turn_off',
+          removePin: true,
+          user: userName,
+          deviceId
+        };
         fetch('/api/date-location', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'turn_off', removePin: true, user: userName, deviceId }),
+          body: JSON.stringify(removePayload),
           keepalive: true
         }).catch(() => {});
       } catch {}

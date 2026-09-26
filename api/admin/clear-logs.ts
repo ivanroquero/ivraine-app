@@ -1,4 +1,15 @@
-export default async function handler(req, res) {
+import type {
+  ApiRequest,
+  ApiResponse,
+  AdminClearLogsResponse
+} from '../types';
+
+export type { AdminClearLogsResponse };
+
+export default async function handler(
+  req: ApiRequest<undefined>,
+  res: ApiResponse<AdminClearLogsResponse>
+) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -7,10 +18,15 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  globalThis.__ivraine_logs = [];
+  (globalThis as any).__ivraine_logs = [];
 
   const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
 
   if (sbUrl && sbKey) {
     try {
