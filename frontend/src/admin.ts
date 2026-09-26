@@ -1,6 +1,21 @@
 import { openProposalModal } from './proposal';
 import { supabase } from './api';
 import { createClient } from '@supabase/supabase-js';
+import {
+  GOOD_ACCURACY_METERS,
+  LIVE_PIN_STALE_MS,
+  accuracyCirclePolygon,
+  accuracyLabel,
+  accuracyQuality,
+  formatCoordinates,
+  haversineMeters,
+  isPreciseGps,
+  isValidCoordinate,
+  parseDeviceId,
+  parseGpsMeta,
+  stripLocationTags,
+  type LocationSource
+} from './geo';
 
 declare const mapboxgl: any;
 declare const L: any;
@@ -25,13 +40,35 @@ export interface VisitorLog {
   details?: string;
   user?: string;
   userAgent?: string;
+  deviceId?: string;
   dodgeCount?: number;
   latitude?: number | null;
   longitude?: number | null;
+  /** GPS accuracy radius in metres (when the row carries it). */
+  accuracyMeters?: number | null;
+  /** 'gps' = real device fix · 'ip' = network estimate · 'unknown' = legacy row. */
+  source?: LocationSource;
   fullAddress?: string;
   city?: string;
   country?: string;
   timestamp: string;
+}
+
+/** A log that was resolved down to a mappable location with GPS provenance. */
+export interface ResolvedLocation {
+  log: VisitorLog;
+  lat: number;
+  lng: number;
+  accuracyMeters: number | null;
+  source: LocationSource;
+  deviceId: string;
+  /** Street-level accuracy from a real GPS chip → the only kind that becomes a live pin. */
+  precise: boolean;
+  /** Precision reported years ago / without any GPS tag — plotted as unverified. */
+  unverified: boolean;
+  /** IP / network derived — never plotted as a position. */
+  approximate: boolean;
+  updatedAtMs: number;
 }
 
 export interface AdminStats {
@@ -60,8 +97,14 @@ let leafletTileLayers: Record<'dark' | 'satellite' | 'streets', any> = { dark: n
 let currentMapStyle: 'dark' | 'satellite' | 'streets' = 'dark';
 let mapInitialized = false;
 let userInteractedWithMap = false;
-let isDraggingPin = false;
-let latestPinnedCoords: { lat: number; lng: number; address?: string; user?: string } | null = null;
+/**
+ * The live pin always reflects the phone's own GPS fix. The admin dashboard can
+ * never place or drag it, so it is impossible to show her at a wrong spot.
+ */
+let followLivePin = true;
+/** Accuracy rings + GeoJSON sources that must be cleared on every refresh. */
+let accuracyOverlays: any[] = [];
+let lastFocusedPinKey = '';
 
 // Passcode handling
 const lockScreen = document.getElementById('admin-lock') as HTMLDivElement;
@@ -428,42 +471,132 @@ function updateKpiUi(stats: AdminStats) {
 }
 
 // -----------------------------------------------------------------------------------------
-// MAPBOX / LEAFLET LIVE VISITOR MAP ENGINE (ULTRA-HD, DEEP-ZOOM, GRABBABLE LIVE PIN)
+// LIVE PHONE GPS MAP ENGINE
+// Only the phone's own GPS fix is ever drawn as a live pin — the dashboard can never
+// place, drag or fake that position, and IP/network estimates are never plotted.
 // -----------------------------------------------------------------------------------------
 
-function updateMapHud(lat: number, lng: number, address?: string, isDraggable: boolean = true, deviceTag?: string) {
-  const coordsEl = document.getElementById('hud-coordinates');
-  if (coordsEl) {
-    coordsEl.textContent = `📍 ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+/** Turns a raw log into a mappable location with its GPS provenance. */
+function resolveLocation(log: VisitorLog): ResolvedLocation | null {
+  const lat = typeof log.latitude === 'number' ? log.latitude : (log.latitude != null ? parseFloat(String(log.latitude)) : NaN);
+  const lng = typeof log.longitude === 'number' ? log.longitude : (log.longitude != null ? parseFloat(String(log.longitude)) : NaN);
+  if (!isValidCoordinate(lat, lng)) return null;
+
+  const meta = parseGpsMeta(log.details);
+  const tagless = meta.source === 'unknown';
+  const declared = log.source && log.source !== 'unknown' ? log.source : null;
+  // A manually placed pin from an older dashboard version must never count as her position.
+  const isManual = /moved live pin|manual pin/i.test(log.action || '');
+  const looksIpDerived = isManual
+    || /ip[-\s]?(approx|based|estimate)/i.test(log.details || '')
+    || /approximate/i.test(log.action || '');
+
+  const source: LocationSource = looksIpDerived ? 'ip' : (declared || meta.source);
+  const accuracyMeters = typeof log.accuracyMeters === 'number' && Number.isFinite(log.accuracyMeters) && log.accuracyMeters > 0
+    ? log.accuracyMeters
+    : meta.accuracyMeters;
+
+  const deviceId = log.deviceId || parseDeviceId(log.details) || '';
+  const approximate = source === 'ip' || looksIpDerived;
+  const precise = !approximate && !tagless && isPreciseGps(accuracyMeters);
+  const unverified = !approximate && !precise;
+
+  return {
+    log,
+    lat,
+    lng,
+    accuracyMeters,
+    source,
+    deviceId,
+    precise,
+    unverified,
+    approximate,
+    updatedAtMs: new Date(log.timestamp).getTime() || 0
+  };
+}
+
+/** One pin per physical device — never merges two phones into a single pin. */
+function devicePinKey(loc: ResolvedLocation): string {
+  if (loc.deviceId) return `dev:${loc.deviceId}`;
+  const ip = (loc.log.ip || 'unknown').trim();
+  const isMobile = /android|iphone|ipad|ipod|mobile/i.test(loc.log.userAgent || '');
+  return `ip:${ip}:${isMobile ? 'mobile' : 'desktop'}`;
+}
+
+function newestPerDevice(locations: ResolvedLocation[]): ResolvedLocation[] {
+  const map = new Map<string, ResolvedLocation>();
+  for (const loc of locations) {
+    const key = devicePinKey(loc);
+    const current = map.get(key);
+    // Newest wins, but a real GPS fix always beats an approximate one.
+    if (!current) map.set(key, loc);
+    else if (loc.precise && !current.precise) map.set(key, loc);
+    else if (loc.precise === current.precise && loc.updatedAtMs > current.updatedAtMs) map.set(key, loc);
   }
+  return Array.from(map.values()).sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+}
+
+function isLivePinFresh(loc: ResolvedLocation): boolean {
+  return Date.now() - loc.updatedAtMs <= LIVE_PIN_STALE_MS;
+}
+
+function updateMapHud(pin: ResolvedLocation | null, approximateHint = '') {
+  const coordsEl = document.getElementById('hud-coordinates');
   const addrEl = document.getElementById('hud-address');
-  if (addrEl && address) {
-    addrEl.textContent = address.length > 40 ? address.slice(0, 38) + '…' : address;
+  const statusEl = document.getElementById('hud-interaction-status');
+  const accuracyEl = document.getElementById('hud-accuracy');
+  const freshnessEl = document.getElementById('hud-freshness');
+
+  if (!pin) {
+    if (coordsEl) coordsEl.textContent = '📍 No GPS fix received yet';
+    if (addrEl) addrEl.textContent = approximateHint || 'Waiting for the phone to share its GPS location';
+    if (accuracyEl) {
+      accuracyEl.textContent = 'Accuracy: —';
+      accuracyEl.style.color = 'var(--muted)';
+    }
+    if (freshnessEl) freshnessEl.textContent = 'No live update yet';
+    if (statusEl) {
+      statusEl.textContent = '🔒 Locked to the phone — the dashboard cannot move this pin';
+      statusEl.style.color = '#2ecc71';
+    }
+    return;
+  }
+
+  if (coordsEl) coordsEl.textContent = `📍 ${formatCoordinates(pin.lat, pin.lng)}`;
+  if (addrEl) {
+    const address = pin.log.fullAddress || stripLocationTags(pin.log.details) || `${pin.log.city || ''} ${pin.log.country || ''}`.trim() || 'Address unavailable';
+    addrEl.textContent = address.length > 52 ? `${address.slice(0, 50)}…` : address;
     addrEl.title = address;
   }
-  const statusEl = document.getElementById('hud-interaction-status');
-  if (statusEl) {
-    statusEl.textContent = isDraggable ? '🖐 Draggable (Grab pin to reposition)' : '📍 Fixed Location';
-    statusEl.style.color = '#2ecc71';
+  if (accuracyEl) {
+    const quality = accuracyQuality(pin.accuracyMeters);
+    accuracyEl.textContent = `${pin.precise ? 'GPS accuracy' : 'Reported accuracy'}: ${accuracyLabel(pin.accuracyMeters)}`;
+    accuracyEl.style.color = quality === 'good' ? '#2ecc71' : quality === 'fair' ? '#fbbf24' : 'var(--muted)';
   }
-  const engineEl = document.getElementById('hud-engine-tag');
-  if (engineEl) {
-    const baseEngine = mapType === 'mapbox' ? 'Mapbox GL' : 'Leaflet Ultra-HD';
-    engineEl.textContent = deviceTag ? `${baseEngine} · ${deviceTag}` : baseEngine;
+  if (freshnessEl) {
+    const fresh = isLivePinFresh(pin);
+    freshnessEl.textContent = fresh
+      ? `Live · updated ${timeAgo(pin.log.timestamp)}`
+      : `⚠ Last update ${timeAgo(pin.log.timestamp)} — phone offline?`;
+    freshnessEl.style.color = fresh ? '#2ecc71' : '#fbbf24';
+  }
+  if (statusEl) {
+    if (pin.precise) {
+      statusEl.textContent = freshText(pin)
+        ? '🔒 Locked to the phone\'s GPS — the dashboard cannot move this pin'
+        : '⚠ Pin is stale — still locked to the last GPS fix the phone sent';
+      statusEl.style.color = freshText(pin) ? '#2ecc71' : '#fbbf24';
+    } else {
+      statusEl.textContent = '⚠ This pin is not a verified GPS fix — read the badge before trusting it';
+      statusEl.style.color = '#fbbf24';
+    }
   }
 }
 
-function updateHudCoords(lat: number, lng: number) {
-  const coordsEl = document.getElementById('hud-coordinates');
-  if (coordsEl) {
-    coordsEl.textContent = `📍 ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E (Moving...)`;
-  }
-  const statusEl = document.getElementById('hud-interaction-status');
-  if (statusEl) {
-    statusEl.textContent = '🖐 Repositioning Live Pin…';
-    statusEl.style.color = '#ff6b81';
-  }
+function freshText(pin: ResolvedLocation): boolean {
+  return isLivePinFresh(pin);
 }
+
 
 function showMapToast(message: string, durationMs: number = 3500) {
   const toast = document.getElementById('map-toast');
@@ -475,11 +608,25 @@ function showMapToast(message: string, durationMs: number = 3500) {
   }, durationMs);
 }
 
-function createLiveMarkerElement(user: string, _isPrimary: boolean = true, isPhone: boolean = true): HTMLElement {
+/**
+ * Marker for a resolved location.
+ * Precise pins are hard-locked to the phone's GPS fix — they are not draggable in any
+ * engine, so the dashboard physically cannot show someone at a place they are not.
+ */
+function createLiveMarkerElement(loc: ResolvedLocation): HTMLElement {
+  const user = loc.log.user || 'Visitor';
+  const precise = loc.precise;
+
   const container = document.createElement('div');
-  container.className = 'live-map-marker-container';
-  container.setAttribute('role', 'button');
-  container.setAttribute('aria-label', `Live location pin for ${user}. Drag to move.`);
+  container.className = `live-map-marker-container${precise ? '' : ' is-unverified'}`;
+  container.setAttribute('data-gps-locked', 'true');
+  container.setAttribute('data-precise', precise ? 'true' : 'false');
+  container.setAttribute('data-device-id', loc.deviceId || '');
+  container.setAttribute('data-accuracy', loc.accuracyMeters != null ? String(Math.round(loc.accuracyMeters)) : '');
+  container.setAttribute('role', 'img');
+  container.setAttribute('aria-label', precise
+    ? `Live GPS pin for ${user}. Locked to the phone, ${accuracyLabel(loc.accuracyMeters)}.`
+    : `Unverified location for ${user}. Not a GPS fix.`);
 
   const wave1 = document.createElement('div');
   wave1.className = 'live-radar-ping';
@@ -492,12 +639,16 @@ function createLiveMarkerElement(user: string, _isPrimary: boolean = true, isPho
 
   const emoji = document.createElement('span');
   emoji.className = 'live-marker-emoji';
-  emoji.textContent = isPhone ? '💖' : '📍';
+  emoji.textContent = precise ? '💖' : '⚠';
   center.appendChild(emoji);
 
   const pill = document.createElement('div');
   pill.className = 'live-marker-pill';
-  pill.innerHTML = `<span class="pill-dot"></span><span>${escapeHtml(user || 'Loraine')} ${isPhone ? '📱 Live' : '♡'}</span>`;
+  const accuracySuffix = loc.accuracyMeters != null ? ` ±${Math.round(loc.accuracyMeters)}m` : '';
+  const label = precise
+    ? `${escapeHtml(user)} · 🔒 Live GPS${accuracySuffix}`
+    : `${escapeHtml(user)} · ⚠ Not GPS`;
+  pill.innerHTML = `<span class="pill-dot"></span><span>${label}</span>`;
 
   container.appendChild(wave1);
   container.appendChild(wave2);
@@ -507,99 +658,121 @@ function createLiveMarkerElement(user: string, _isPrimary: boolean = true, isPho
   return container;
 }
 
-async function handlePinRepositioned(newLat: number, newLng: number, user: string = 'Loraine') {
-  updateHudCoords(newLat, newLng);
-  showMapToast(`📍 Pin placed at ${newLat.toFixed(4)}, ${newLng.toFixed(4)}! Resolving address…`);
-
-  let resolvedAddress = `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
-  let resolvedCity = '';
-  let resolvedCountry = 'Philippines';
-
-  // Reverse geocode via Nominatim
-  try {
-    const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${newLat}&lon=${newLng}&zoom=18&addressdetails=1`;
-    const res = await fetch(geoUrl, {
-      headers: { 'Accept-Language': 'en' },
-      signal: AbortSignal.timeout(3500)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.display_name) {
-        resolvedAddress = data.display_name;
-        resolvedCity = data.address?.city || data.address?.town || data.address?.municipality || data.address?.county || '';
-        resolvedCountry = data.address?.country || 'Philippines';
-      }
-    }
-  } catch {}
-
-  latestPinnedCoords = { lat: newLat, lng: newLng, address: resolvedAddress, user };
-  updateMapHud(newLat, newLng, resolvedAddress);
-  showMapToast(`📍 Pin saved: ${resolvedCity ? resolvedCity + ' · ' : ''}${resolvedAddress.slice(0, 30)} ♡`);
-
-  // Persist locally
-  const locPayload = {
-    latitude: newLat,
-    longitude: newLng,
-    fullAddress: resolvedAddress,
-    city: resolvedCity,
-    country: resolvedCountry,
-    user,
-    timestamp: new Date().toISOString()
-  };
-  try {
-    localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(locPayload));
-    localStorage.setItem('ivraine_last_location', JSON.stringify(locPayload));
-  } catch {}
-
-  // Sync to Backend & Supabase
-  try {
-    const trackPayload = {
-      section: 'Admin',
-      action: '📍 Moved Live Pin on Map ♡',
-      details: resolvedAddress,
-      user,
-      latitude: newLat,
-      longitude: newLng,
-      fullAddress: resolvedAddress,
-      city: resolvedCity,
-      country: resolvedCountry
-    };
-
-    const endpoint = getBackendEndpoint('/api/date-location');
-    if (endpoint) {
-      void fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(trackPayload)
-      });
-    }
-
-    const sb = getAdminSupabaseClient();
-    if (sb) {
-      void sb.from('ivraine_visitor_logs').insert([{
-        ip: currentClientIp,
-        section: 'Admin',
-        action: '📍 Moved Live Pin on Map ♡',
-        details: resolvedAddress,
-        user_name: user,
-        latitude: newLat,
-        longitude: newLng,
-        full_address: resolvedAddress,
-        city: resolvedCity,
-        country: resolvedCountry
-      }]);
-    }
-  } catch {}
-
-  // Update in-memory logs
-  const existingLog = allLogs.find(l => l.latitude != null && l.longitude != null);
-  if (existingLog) {
-    existingLog.latitude = newLat;
-    existingLog.longitude = newLng;
-    existingLog.fullAddress = resolvedAddress;
-    existingLog.city = resolvedCity;
+/** Human readable provenance line used by map popups and the location cards. */
+function provenanceBadge(loc: ResolvedLocation): { text: string; color: string } {
+  if (loc.precise) {
+    return { text: `📱 Real phone GPS fix · ${accuracyLabel(loc.accuracyMeters)}`, color: '#2ecc71' };
   }
-  renderRecentLocationsDeck(allLogs.filter(l => l.latitude && l.longitude));
+  if (loc.unverified) {
+    return { text: '⚠ Legacy location without a GPS reading — treat as approximate', color: '#fbbf24' };
+  }
+  return { text: '🌐 Network/IP estimate — never plotted as her exact position', color: '#fbbf24' };
+}
+
+function locationPopupHtml(loc: ResolvedLocation): string {
+  const badge = provenanceBadge(loc);
+  const device = loc.deviceId ? `<span>🔑 Device: ${escapeHtml(loc.deviceId)}</span>` : '';
+  return `
+    <div class="map-popup-header">
+      <span>💖</span>
+      <span>${escapeHtml(loc.log.user || 'Visitor')}</span>
+      <span class="badge-section ${loc.log.section === 'Scrapbook' ? 'scrapbook' : 'space'}">${escapeHtml(loc.log.section)}</span>
+    </div>
+    <div style="font-size:11px;color:${badge.color};font-weight:700;margin-bottom:4px;">${badge.text}</div>
+    <div class="map-popup-address">📍 ${escapeHtml(loc.log.fullAddress || stripLocationTags(loc.log.details) || 'Address unavailable')}</div>
+    <div class="map-popup-meta">
+      <span>🌐 ${formatCoordinates(loc.lat, loc.lng)}</span>
+      <span>💻 IP: ${escapeHtml(loc.log.ip)}</span>
+      <span>⏱ ${escapeHtml(timeAgo(loc.log.timestamp))}</span>
+      ${device}
+      <span style="color:#8b95a5;font-weight:600;margin-top:4px;">🔒 Pin follows the phone — it cannot be moved from here</span>
+    </div>
+  `;
+}
+
+/** Draws the GPS accuracy circle so "accurate" is visible, not just claimed. */
+function drawAccuracyCircle(loc: ResolvedLocation) {
+  if (!mapInstance || !loc.precise || loc.accuracyMeters == null) return;
+  const radius = Math.max(5, Math.min(loc.accuracyMeters, 1000));
+  const color = accuracyQuality(loc.accuracyMeters) === 'good' ? '#2ecc71' : '#fbbf24';
+
+  try {
+    if (mapType === 'leaflet' && typeof L !== 'undefined') {
+      const circle = L.circle([loc.lat, loc.lng], {
+        radius,
+        color,
+        weight: 1,
+        fillColor: color,
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(mapInstance);
+      accuracyOverlays.push(circle);
+      return;
+    }
+
+    if (mapType === 'mapbox') {
+      const sourceId = `gps-accuracy-${accuracyOverlays.length}`;
+      mapInstance.addSource(sourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'Polygon', coordinates: [accuracyCirclePolygon(loc.lat, loc.lng, radius)] }
+        }
+      });
+      mapInstance.addLayer({
+        id: `${sourceId}-fill`,
+        type: 'fill',
+        source: sourceId,
+        paint: { 'fill-color': color, 'fill-opacity': 0.08 }
+      });
+      mapInstance.addLayer({
+        id: `${sourceId}-line`,
+        type: 'line',
+        source: sourceId,
+        paint: { 'line-color': color, 'line-width': 1, 'line-opacity': 0.6 }
+      });
+      accuracyOverlays.push({ sourceId, fillId: `${sourceId}-fill`, lineId: `${sourceId}-line` });
+    }
+  } catch {}
+}
+
+function clearAccuracyOverlays() {
+  if (!mapInstance) return;
+  for (const overlay of accuracyOverlays) {
+    try {
+      if (mapType === 'leaflet') {
+        mapInstance.removeLayer(overlay);
+      } else {
+        if (mapInstance.getLayer(overlay.lineId)) mapInstance.removeLayer(overlay.lineId);
+        if (mapInstance.getLayer(overlay.fillId)) mapInstance.removeLayer(overlay.fillId);
+        if (mapInstance.getSource(overlay.sourceId)) mapInstance.removeSource(overlay.sourceId);
+      }
+    } catch {}
+  }
+  accuracyOverlays = [];
+}
+
+/** Keeps the camera glued to the newest GPS fix while "Follow live" is on. */
+function followPinIfEnabled(pin: ResolvedLocation | null) {
+  if (!pin || !pin.precise || !followLivePin || userInteractedWithMap || !mapInstance) return;
+
+  const key = `${devicePinKey(pin)}:${pin.lat.toFixed(5)},${pin.lng.toFixed(5)}`;
+  const isNewPosition = lastFocusedPinKey !== key;
+  const firstFocus = lastFocusedPinKey === '';
+  lastFocusedPinKey = key;
+  if (!isNewPosition && !firstFocus) return;
+
+  try {
+    const center = mapInstance.getCenter();
+    const drift = haversineMeters(center.lat, center.lng, pin.lat, pin.lng);
+    if (!firstFocus && drift <= 15) return;
+    if (mapType === 'mapbox') {
+      mapInstance.easeTo({ center: [pin.lng, pin.lat], duration: 850 });
+    } else {
+      mapInstance.panTo([pin.lat, pin.lng], { animate: true, duration: 0.85 });
+    }
+  } catch {}
 }
 
 function initVisitorMap() {
@@ -699,76 +872,32 @@ function initVisitorMap() {
 }
 
 function updateVisitorMap(logs: VisitorLog[]) {
-  if (!mapInstance || !mapInitialized || isDraggingPin) return;
+  if (!mapInstance || !mapInitialized) return;
 
-  const rawGeoLogs: VisitorLog[] = logs
-    .map(l => {
-      const lat = typeof l.latitude === 'number' ? l.latitude : (l.latitude ? parseFloat(String(l.latitude)) : null);
-      const lng = typeof l.longitude === 'number' ? l.longitude : (l.longitude ? parseFloat(String(l.longitude)) : null);
-      return { ...l, latitude: lat, longitude: lng };
-    })
-    .filter(l => l.latitude != null && l.longitude != null && !isNaN(l.latitude) && !isNaN(l.longitude));
+  const resolved = logs
+    .map(resolveLocation)
+    .filter((loc): loc is ResolvedLocation => loc !== null);
 
-  // Sort descending by timestamp (newest first)
-  rawGeoLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const devicePins = newestPerDevice(resolved);
+  const precisePins = devicePins.filter(p => p.precise);
+  const plottedPins = precisePins.length > 0 ? precisePins : devicePins.filter(p => !p.approximate);
+  const newestPrecise = precisePins[0] || null;
 
-  // Deduplicate strictly by device: ONLY ONE PIN PER DEVICE!
-  // All phone location logs from Loraine/phone collapse into that 1 single live pin.
-  const devicePinMap = new Map<string, VisitorLog>();
+  renderRecentLocationsDeck(resolved);
+  clearAccuracyOverlays();
 
-  function getDeviceKey(log: VisitorLog): string {
-    const user = (log.user || '').trim().toLowerCase();
-    const act = (log.action || '').toLowerCase();
-    const det = (log.details || '').toLowerCase();
+  const approximateHint = devicePins.find(p => p.approximate)
+    ? `Approximate network region: ${devicePins.find(p => p.approximate)?.log.city || 'Philippines'} (not shown on map)`
+    : '';
+  updateMapHud(newestPrecise || plottedPins[0] || null, approximateHint);
 
-    // Primary mobile / phone device
-    if (user.includes('loraine') || act.includes('phone') || det.includes('phone') || act.includes('pinned') || act.includes('date-location')) {
-      return 'device_loraine_phone';
-    }
-
-    // Other devices grouped by IP and platform
-    const ip = (log.ip || 'unknown_ip').trim();
-    const ua = (log.userAgent || '').toLowerCase();
-    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
-    return `device_${ip}_${isMobile ? 'mobile' : 'desktop'}`;
-  }
-
-  for (const log of rawGeoLogs) {
-    const key = getDeviceKey(log);
-    if (!devicePinMap.has(key)) {
-      devicePinMap.set(key, log);
-    } else {
-      // If current stored log has no street address or is low precision, but another log has street address/GPS, use the better one
-      const current = devicePinMap.get(key)!;
-      const currentHasAddress = current.fullAddress && current.fullAddress.length > 20;
-      const newHasAddress = log.fullAddress && log.fullAddress.length > 20;
-      if (!currentHasAddress && newHasAddress) {
-        devicePinMap.set(key, log);
-      }
-    }
-  }
-
-  // Deduplicated list: exactly 1 pin per device!
-  const geoLogs: VisitorLog[] = Array.from(devicePinMap.values());
-  // Sort so phone location is always first
-  geoLogs.sort((a, b) => {
-    const aIsPhone = getDeviceKey(a) === 'device_loraine_phone';
-    const bIsPhone = getDeviceKey(b) === 'device_loraine_phone';
-    return aIsPhone === bIsPhone ? 0 : aIsPhone ? -1 : 1;
-  });
-
-  renderRecentLocationsDeck(geoLogs);
-
-  if (geoLogs.length > 0) {
-    const primary = geoLogs[0];
-    const isPhone = getDeviceKey(primary) === 'device_loraine_phone';
-    updateMapHud(
-      primary.latitude!,
-      primary.longitude!,
-      primary.fullAddress || `${primary.city || ''} ${primary.country || ''}`.trim() || 'Bohol, Philippines',
-      true,
-      isPhone ? '📱 1 Live Phone Pin' : `📍 ${geoLogs.length} Device Pin`
-    );
+  const engineTag = document.getElementById('hud-engine-tag');
+  if (engineTag) {
+    const base = mapType === 'mapbox' ? 'Mapbox GL' : 'Leaflet Ultra-HD';
+    const tag = precisePins.length > 0
+      ? `📱 ${precisePins.length} Live GPS Pin${precisePins.length > 1 ? 's' : ''}`
+      : (plottedPins.length > 0 ? `📍 ${plottedPins.length} Pin` : 'No GPS Fix');
+    engineTag.textContent = `${base} · ${tag}`;
   }
 
   if (mapType === 'mapbox') {
@@ -781,73 +910,35 @@ function updateVisitorMap(logs: VisitorLog[]) {
 
     const bounds = new mapboxgl.LngLatBounds();
 
-    geoLogs.forEach((log, index) => {
-      const lat = log.latitude!;
-      const lng = log.longitude!;
-      const isPrimary = index === 0;
-      const isPhoneDevice = getDeviceKey(log) === 'device_loraine_phone';
-
-      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary, isPhoneDevice);
-
-      const popupHtml = `
-        <div class="map-popup-header">
-          <span>💖</span>
-          <span>${escapeHtml(log.user || 'Visitor')}</span>
-          <span class="badge-section ${log.section === 'Scrapbook' ? 'scrapbook' : 'space'}">${escapeHtml(log.section)}</span>
-        </div>
-        <div style="font-size:11px;color:#2ecc71;font-weight:700;margin-bottom:4px;">
-          ${isPhoneDevice ? '📱 Verified Single Phone GPS Pin' : '💻 Device Location Pin'}
-        </div>
-        <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
-        <div class="map-popup-meta">
-          <span>🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
-          <span>💻 IP: ${escapeHtml(log.ip)}</span>
-          <span>⏱ ${escapeHtml(timeAgo(log.timestamp))}</span>
-          <span style="color:#2ecc71;font-weight:600;margin-top:4px;">🖐 Drag marker to reposition</span>
-        </div>
-      `;
-
-      const popup = new mapboxgl.Popup({ offset: 30 }).setHTML(popupHtml);
+    plottedPins.forEach(loc => {
+      const el = createLiveMarkerElement(loc);
+      const popup = new mapboxgl.Popup({ offset: 30 }).setHTML(locationPopupHtml(loc));
 
       const marker = new mapboxgl.Marker({
         element: el,
-        draggable: true
+        draggable: false
       })
-        .setLngLat([lng, lat])
+        .setLngLat([loc.lng, loc.lat])
         .setPopup(popup)
         .addTo(mapInstance);
 
-      marker.on('dragstart', () => {
-        isDraggingPin = true;
-        userInteractedWithMap = true;
-        el.classList.add('is-dragging');
-        updateHudCoords(marker.getLngLat().lat, marker.getLngLat().lng);
-      });
-
-      marker.on('drag', () => {
-        const pos = marker.getLngLat();
-        updateHudCoords(pos.lat, pos.lng);
-      });
-
-      marker.on('dragend', async () => {
-        isDraggingPin = false;
-        el.classList.remove('is-dragging');
-        const pos = marker.getLngLat();
-        await handlePinRepositioned(pos.lat, pos.lng, log.user || 'Loraine');
-      });
-
       mapMarkers.push(marker);
-      bounds.extend([lng, lat]);
+      drawAccuracyCircle(loc);
+      bounds.extend([loc.lng, loc.lat]);
     });
 
-    if (geoLogs.length > 0 && !bounds.isEmpty() && !userInteractedWithMap) {
-      try {
-        if (geoLogs.length === 1) {
-          mapInstance.flyTo({ center: [geoLogs[0].longitude, geoLogs[0].latitude], zoom: 16, essential: true });
-        } else {
-          mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 16 });
-        }
-      } catch {}
+    if (plottedPins.length > 0 && !bounds.isEmpty()) {
+      if (followLivePin && newestPrecise) {
+        followPinIfEnabled(newestPrecise);
+      } else if (!userInteractedWithMap) {
+        try {
+          if (plottedPins.length === 1) {
+            mapInstance.flyTo({ center: [plottedPins[0].lng, plottedPins[0].lat], zoom: 16, essential: true });
+          } else {
+            mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 16 });
+          }
+        } catch {}
+      }
     }
   } else if (mapType === 'leaflet' && leafletMarkersLayer) {
     try { mapInstance.invalidateSize(); } catch {}
@@ -856,14 +947,8 @@ function updateVisitorMap(logs: VisitorLog[]) {
 
     const latLngs: any[] = [];
 
-    geoLogs.forEach((log, index) => {
-      const lat = log.latitude!;
-      const lng = log.longitude!;
-      const isPrimary = index === 0;
-      const isPhoneDevice = getDeviceKey(log) === 'device_loraine_phone';
-
-      const el = createLiveMarkerElement(log.user || 'Loraine', isPrimary, isPhoneDevice);
-
+    plottedPins.forEach(loc => {
+      const el = createLiveMarkerElement(loc);
       const divIcon = L.divIcon({
         className: 'leaflet-clean-marker',
         html: el,
@@ -872,62 +957,30 @@ function updateVisitorMap(logs: VisitorLog[]) {
         popupAnchor: [0, -25]
       });
 
-      const popupHtml = `
-        <div class="map-popup-header">
-          <span>💖</span>
-          <span>${escapeHtml(log.user || 'Visitor')}</span>
-          <span class="badge-section ${log.section === 'Scrapbook' ? 'scrapbook' : 'space'}">${escapeHtml(log.section)}</span>
-        </div>
-        <div style="font-size:11px;color:#2ecc71;font-weight:700;margin-bottom:4px;">
-          ${isPhoneDevice ? '📱 Verified Single Phone GPS Pin' : '💻 Device Location Pin'}
-        </div>
-        <div class="map-popup-address">📍 ${escapeHtml(log.fullAddress || 'Address details in log')}</div>
-        <div class="map-popup-meta">
-          <span>🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
-          <span>💻 IP: ${escapeHtml(log.ip)}</span>
-          <span>⏱ ${escapeHtml(timeAgo(log.timestamp))}</span>
-          <span style="color:#2ecc71;font-weight:600;margin-top:4px;">🖐 Drag marker to reposition</span>
-        </div>
-      `;
-
-      const marker = L.marker([lat, lng], {
+      const marker = L.marker([loc.lat, loc.lng], {
         icon: divIcon,
-        draggable: true
+        draggable: false
       })
-        .bindPopup(popupHtml)
+        .bindPopup(locationPopupHtml(loc))
         .addTo(leafletMarkersLayer);
 
-      marker.on('dragstart', () => {
-        isDraggingPin = true;
-        userInteractedWithMap = true;
-        el.classList.add('is-dragging');
-        updateHudCoords(marker.getLatLng().lat, marker.getLatLng().lng);
-      });
-
-      marker.on('drag', () => {
-        const pos = marker.getLatLng();
-        updateHudCoords(pos.lat, pos.lng);
-      });
-
-      marker.on('dragend', async () => {
-        isDraggingPin = false;
-        el.classList.remove('is-dragging');
-        const pos = marker.getLatLng();
-        await handlePinRepositioned(pos.lat, pos.lng, log.user || 'Loraine');
-      });
-
-      mapMarkers.push({ marker, lat, lng, log });
-      latLngs.push([lat, lng]);
+      mapMarkers.push({ marker, lat: loc.lat, lng: loc.lng, log: loc.log });
+      drawAccuracyCircle(loc);
+      latLngs.push([loc.lat, loc.lng]);
     });
 
-    if (latLngs.length > 0 && !userInteractedWithMap) {
-      try {
-        if (latLngs.length === 1) {
-          mapInstance.setView(latLngs[0], 16);
-        } else {
-          mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 16 });
-        }
-      } catch {}
+    if (latLngs.length > 0) {
+      if (followLivePin && newestPrecise) {
+        followPinIfEnabled(newestPrecise);
+      } else if (!userInteractedWithMap) {
+        try {
+          if (latLngs.length === 1) {
+            mapInstance.setView(latLngs[0], 16);
+          } else {
+            mapInstance.fitBounds(latLngs, { padding: [50, 50], maxZoom: 16 });
+          }
+        } catch {}
+      }
     }
   }
 }

