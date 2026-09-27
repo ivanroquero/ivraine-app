@@ -1,5 +1,8 @@
 import type { TrackRequestBody, TrackResponse } from '@api/track';
 import { initVpnGuard } from './vpnDetector';
+import { initAntiInspect } from './antiInspect';
+
+initAntiInspect();
 
 export interface LegacyImage {
   path: string;

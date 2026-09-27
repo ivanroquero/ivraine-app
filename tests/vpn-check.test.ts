@@ -188,3 +188,76 @@ test('Strict VPN: UI files contain the improved required warning message', () =>
   assert.ok(existsSync(resolve('frontend/src/vpn-shield.css')), 'frontend/src/vpn-shield.css exists');
   assert.ok(existsSync(resolve('frontend/public/legacy/vpn-shield.css')), 'legacy vpn-shield.css exists');
 });
+
+test('Strict VPN: Admin override passcode is strictly set to 02252006$$', () => {
+  const vpnDetectorSrc = readFileSync(resolve('frontend/src/vpnDetector.ts'), 'utf8');
+  const legacyShieldJs = readFileSync(resolve('frontend/public/legacy/vpn-shield.js'), 'utf8');
+  const adminSrc = readFileSync(resolve('frontend/src/admin.ts'), 'utf8');
+  const adminHtml = readFileSync(resolve('frontend/admin.html'), 'utf8');
+
+  // Verify 02252006$$ is explicitly checked
+  assert.ok(vpnDetectorSrc.includes("'02252006$$'"), 'vpnDetector.ts verifies 02252006$$');
+  assert.ok(legacyShieldJs.includes("'02252006$$'"), 'legacy vpn-shield.js verifies 02252006$$');
+  assert.ok(adminSrc.includes("'02252006$$'"), 'admin.ts verifies 02252006$$');
+
+  // Verify bypasses with arbitrary "admin" or length === 8 were removed from vpnDetector
+  assert.ok(!vpnDetectorSrc.includes("input.toLowerCase() === 'admin'"), 'generic "admin" string removed from vpnDetector');
+  assert.ok(!legacyShieldJs.includes("input.toLowerCase() === 'admin'"), 'generic "admin" string removed from legacy shield');
+
+  // Verify admin.html allows up to 20 chars for 02252006$$
+  assert.match(adminHtml, /id="admin-passcode-input"[^>]*maxlength="20"/, 'admin.html passcode input allows 20 chars');
+});
+
+test('Strict VPN: Proton VPN ASNs, partner relays, and keywords are covered', () => {
+  const apiHandlerSrc = readFileSync(resolve('api/vpn-check.ts'), 'utf8');
+  const backendHandlerSrc = readFileSync(resolve('backend/src/vpnCheck.ts'), 'utf8');
+  const vpnDetectorSrc = readFileSync(resolve('frontend/src/vpnDetector.ts'), 'utf8');
+
+  // Key Proton ASNs: 55081 (24-7 Internet / Proton), 62371, 44133, 205120, 208476, 209854, 206216
+  const protonAsns = ['55081', '62371', '44133', '205120', '208476', '209854', '206216'];
+  for (const asn of protonAsns) {
+    assert.ok(apiHandlerSrc.includes(asn), `api/vpn-check.ts includes Proton ASN ${asn}`);
+    assert.ok(backendHandlerSrc.includes(asn), `backend/src/vpnCheck.ts includes Proton ASN ${asn}`);
+    assert.ok(vpnDetectorSrc.includes(asn), `frontend/src/vpnDetector.ts includes Proton ASN ${asn}`);
+  }
+
+  // Proton keywords
+  const protonKeywords = ['proton', 'protonvpn', 'proton ag', '24-7 internet'];
+  for (const kw of protonKeywords) {
+    assert.ok(apiHandlerSrc.toLowerCase().includes(kw), `api/vpn-check.ts checks for keyword "${kw}"`);
+  }
+});
+
+test('Anti-Inspect: Sources tab hiding, sourcemaps disabled, anonymous chunk hashing, and anti-inspect guards active', () => {
+  const viteConfigSrc = readFileSync(resolve('frontend/vite.config.ts'), 'utf8');
+  const antiInspectSrc = readFileSync(resolve('frontend/src/antiInspect.ts'), 'utf8');
+  const mainSrc = readFileSync(resolve('frontend/src/main.ts'), 'utf8');
+  const lockSrc = readFileSync(resolve('frontend/src/lock.ts'), 'utf8');
+  const legacyShieldJs = readFileSync(resolve('frontend/public/legacy/vpn-shield.js'), 'utf8');
+
+  // Verify sourcemap is explicitly false in build and esbuild
+  assert.match(viteConfigSrc, /sourcemap:\s*false/, 'sourcemap is disabled in vite.config.ts');
+  assert.match(viteConfigSrc, /legalComments:\s*'none'/, 'legalComments set to none to strip header comments');
+
+  // Verify anonymous chunk hashing configuration
+  assert.match(viteConfigSrc, /entryFileNames:\s*'assets\/\[hash\]\.js'/, 'entry files hashed anonymously');
+  assert.match(viteConfigSrc, /chunkFileNames:\s*'assets\/\[hash\]\.js'/, 'chunks hashed anonymously');
+
+  // Verify antiInspect module defenses
+  assert.ok(antiInspectSrc.includes('contextmenu'), 'antiInspect disables context menu');
+  assert.ok(antiInspectSrc.includes('F12'), 'antiInspect intercepts F12');
+  assert.ok(antiInspectSrc.includes('debugger'), 'antiInspect includes debugger trap');
+  assert.ok(antiInspectSrc.includes('console.clear'), 'antiInspect clears console');
+
+  // Verify integration in main.ts, lock.ts, and legacy shield
+  assert.ok(mainSrc.includes('initAntiInspect'), 'main.ts integrates initAntiInspect');
+  assert.ok(lockSrc.includes('initAntiInspect'), 'lock.ts integrates initAntiInspect');
+  assert.ok(legacyShieldJs.includes('initAntiInspect'), 'legacy vpn-shield.js integrates initAntiInspect');
+});
+
+test('PWA Support: legacy service worker caches VPN shield files for offline PWA protection', () => {
+  const swSrc = readFileSync(resolve('frontend/public/legacy/sw.js'), 'utf8');
+  assert.ok(swSrc.includes('"vpn-shield.css"'), 'legacy sw.js caches vpn-shield.css');
+  assert.ok(swSrc.includes('"vpn-shield.js"'), 'legacy sw.js caches vpn-shield.js');
+});
+

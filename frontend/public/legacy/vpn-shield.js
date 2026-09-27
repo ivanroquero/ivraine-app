@@ -92,13 +92,29 @@
 
           const isp = data.connection?.isp || '';
           const org = data.connection?.org || '';
-          const asn = data.connection?.asn ? 'AS' + data.connection.asn : '';
+          const rawAsn = data.connection?.asn ? Number(data.connection.asn) : 0;
+          const asn = rawAsn ? 'AS' + rawAsn : '';
           const combined = (isp + ' ' + org).toLowerCase();
+
+          // Check against known Proton and datacenter ASNs
+          const PROTON_AND_VPN_ASNS = new Set([
+            55081, 62371, 44133, 205120, 208476, 209854, 206216, 51852, 60068,
+            212238, 9009, 39351, 202425, 42831, 60781, 30890, 16276, 24940,
+            204957, 36352, 14061, 62240, 13335, 8075, 16509, 14618, 15169,
+            63949, 51167, 174, 12876, 20001, 45102, 31898, 6079, 46562, 54600,
+            200651, 49981, 62567
+          ]);
+          if (rawAsn && PROTON_AND_VPN_ASNS.has(rawAsn)) {
+            flags.push('DATACENTER_OR_VPN_PROVIDER');
+            if (!reason) reason = 'Proton or Datacenter VPN network identified (' + (asn ? asn + ' ' : '') + (isp || org) + ')';
+          }
 
           const vpnKeywords = [
             'vpn', 'proxy', 'tor', 'relay', 'datacenter', 'hosting', 'cloud',
             'digitalocean', 'ovh', 'hetzner', 'm247', 'datacamp', 'linode',
-            'vultr', 'choopa', 'mullvad', 'proton', 'expressvpn', 'nordvpn',
+            'vultr', 'choopa', 'mullvad', 'proton', 'protonvpn', 'proton-vpn',
+            'proton ag', 'protonmail', 'proton technologies', '24-7 internet',
+            'privatelayer', 'private layer', 'dclnet', 'expressvpn', 'nordvpn',
             'surfshark', 'cyberghost', 'wireguard', 'openvpn', 'private relay'
           ];
 
@@ -113,7 +129,7 @@
           if (data.timezone && typeof data.timezone.offset === 'number') {
             const devHours = -timeCtx.offsetMinutes / 60;
             const ipHours = data.timezone.offset / 3600;
-            if (Math.abs(devHours - ipHours) >= 1.5) {
+            if (Math.abs(devHours - ipHours) >= 0.5) {
               flags.push('TIMEZONE_GEO_MISMATCH');
               if (!reason) reason = 'Timezone conflict: system is UTC' + (devHours >= 0 ? '+' : '') + devHours + ' but network is UTC' + (ipHours >= 0 ? '+' : '') + ipHours;
             }
@@ -337,13 +353,14 @@
 
     overrideBtn.addEventListener('click', () => {
       const input = prompt('Enter Administrator Passcode to bypass VPN lock:');
-      if (input && (input === '20260902' || input === '09022026' || input.toLowerCase() === 'admin' || input.length === 8)) {
+      const passcode = input ? input.trim() : '';
+      if (passcode === '02252006$$') {
         sessionStorage.setItem(ADMIN_OVERRIDE_KEY, 'true');
         overlay.remove();
         activeOverlay = null;
         document.body.classList.remove('ivraine-vpn-locked');
       } else if (input) {
-        alert('Invalid passcode.');
+        alert('Invalid administrator passcode.');
       }
     });
   }
@@ -437,6 +454,84 @@
       }
     }
   }, true);
+
+  // Anti-Inspect & DevTools Shield for Legacy Web & PWA modes
+  function initAntiInspect() {
+    function isAdmin() {
+      try {
+        return sessionStorage.getItem(ADMIN_OVERRIDE_KEY) === 'true' ||
+          sessionStorage.getItem('ivraine-admin-unlocked') === 'true' ||
+          sessionStorage.getItem('ivraine_admin_unlocked') === 'true';
+      } catch (err) {
+        return false;
+      }
+    }
+
+    // Disable Right-Click Context Menu
+    document.addEventListener('contextmenu', function(e) {
+      if (!isAdmin()) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }, true);
+
+    // Disable Developer Shortcuts
+    window.addEventListener('keydown', function(e) {
+      if (isAdmin()) return;
+      if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      var isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (isCtrlOrCmd && (e.shiftKey || (e.altKey && e.metaKey)) && ['I', 'i', 'J', 'j', 'C', 'c', 'K', 'k'].indexOf(e.key) !== -1) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      if (isCtrlOrCmd && (e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }, true);
+
+    // Evasive Anti-Debugger Trap
+    setInterval(function() {
+      if (isAdmin()) return;
+      try {
+        var start = performance.now();
+        (new Function('debugger'))();
+        if (performance.now() - start > 100) {
+          console.clear();
+        }
+      } catch (err) {}
+    }, 1000);
+
+    // Watch DevTools Open & Clear
+    window.addEventListener('resize', function() {
+      if (isAdmin()) return;
+      if (window.outerWidth - window.innerWidth > 160 || window.outerHeight - window.innerHeight > 160) {
+        try { console.clear(); } catch (err) {}
+      }
+    }, { passive: true });
+
+    // Silence production console
+    try {
+      var noop = function() {};
+      console.log = noop;
+      console.info = noop;
+      console.debug = noop;
+      console.dir = noop;
+      console.dirxml = noop;
+      console.table = noop;
+      console.trace = noop;
+      console.clear();
+    } catch (err) {}
+  }
+
+  initAntiInspect();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

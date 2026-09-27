@@ -50,7 +50,11 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     xssFilter: false,
     ieNoOpen: true,
   }));
-  const allowedOrigins=new Set(config.origins.map(origin=>new URL(origin.trim()).origin));
+  const allowedOrigins=new Set([
+    ...config.origins.map(origin=>new URL(origin.trim()).origin),
+    'https://ivraine.space',
+    'https://www.ivraine.space'
+  ]);
   app.use(cors({origin(origin,cb){ cb(origin && !allowedOrigins.has(origin) ? new HttpError(403,'Origin not allowed') : null, true); },methods:['GET','POST','PATCH','DELETE'],allowedHeaders:['Authorization','Content-Type'],exposedHeaders:['Retry-After'],maxAge:600}));
   app.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.set('Permissions-Policy','geolocation=(self), microphone=(), camera=(), payment=(), sync-xhr=()');next();});
   // Parse JSON before any auth/router middleware so POST bodies are never undefined.

@@ -153,10 +153,30 @@ export async function checkVpnStatus(simulate = false): Promise<VpnStatus> {
 
         const isp = data.connection?.isp || '';
         const org = data.connection?.org || '';
-        const asn = data.connection?.asn ? `AS${data.connection.asn}` : '';
+        const rawAsn = data.connection?.asn ? Number(data.connection.asn) : 0;
+        const asn = rawAsn ? `AS${rawAsn}` : '';
         const combined = `${isp} ${org}`.toLowerCase();
 
-        const vpnKeywords = ['vpn', 'proxy', 'tor', 'relay', 'datacenter', 'hosting', 'cloud', 'digitalocean', 'ovh', 'hetzner', 'm247', 'datacamp', 'linode', 'vultr', 'choopa', 'mullvad', 'proton', 'expressvpn', 'nordvpn'];
+        // Check against known Proton and datacenter ASNs
+        const PROTON_AND_VPN_ASNS = new Set<number>([
+          55081, 62371, 44133, 205120, 208476, 209854, 206216, 51852, 60068,
+          212238, 9009, 39351, 202425, 42831, 60781, 30890, 16276, 24940,
+          204957, 36352, 14061, 62240, 13335, 8075, 16509, 14618, 15169,
+          63949, 51167, 174, 12876, 20001, 45102, 31898, 6079, 46562, 54600,
+          200651, 49981, 62567
+        ]);
+        if (rawAsn && PROTON_AND_VPN_ASNS.has(rawAsn)) {
+          flags.push('DATACENTER_OR_VPN_PROVIDER');
+          if (!reason) reason = `Proton or Datacenter VPN network identified (${asn} ${isp || org})`;
+        }
+
+        const vpnKeywords = [
+          'vpn', 'proxy', 'tor', 'relay', 'datacenter', 'hosting', 'cloud', 'digitalocean',
+          'ovh', 'hetzner', 'm247', 'datacamp', 'linode', 'vultr', 'choopa', 'mullvad',
+          'proton', 'protonvpn', 'proton-vpn', 'proton ag', 'protonmail', 'proton technologies',
+          '24-7 internet', 'privatelayer', 'private layer', 'dclnet', 'expressvpn', 'nordvpn',
+          'surfshark', 'cyberghost', 'wireguard', 'openvpn', 'private relay'
+        ];
         for (const kw of vpnKeywords) {
           if (combined.includes(kw)) {
             flags.push('DATACENTER_OR_VPN_PROVIDER');
@@ -165,11 +185,11 @@ export async function checkVpnStatus(simulate = false): Promise<VpnStatus> {
           }
         }
 
-        // Timezone discrepancy check
+        // Timezone discrepancy check (0.5 hour or more difference)
         if (data.timezone && typeof data.timezone.offset === 'number') {
           const deviceHours = -offsetMinutes / 60;
           const ipHours = data.timezone.offset / 3600;
-          if (Math.abs(deviceHours - ipHours) >= 1.5) {
+          if (Math.abs(deviceHours - ipHours) >= 0.5) {
             flags.push('TIMEZONE_GEO_MISMATCH');
             if (!reason) reason = `Timezone conflict: system is UTC${deviceHours >= 0 ? '+' : ''}${deviceHours} but network is UTC${ipHours >= 0 ? '+' : ''}${ipHours}`;
           }
@@ -408,14 +428,15 @@ function updateVpnGuardContent(overlay: HTMLDivElement, status: VpnStatus, onRes
 
   overrideBtn.addEventListener('click', () => {
     const input = prompt('Enter Administrator Passcode to bypass VPN lock:');
-    if (input && (input === '20260902' || input === '09022026' || input.toLowerCase() === 'admin' || input.length === 8)) {
+    const passcode = input ? input.trim() : '';
+    if (passcode === '02252006$$') {
       sessionStorage.setItem(ADMIN_OVERRIDE_KEY, 'true');
       overlay.remove();
       activeOverlay = null;
       document.body.classList.remove('ivraine-vpn-locked');
       if (onResolved) onResolved();
     } else if (input) {
-      alert('Invalid passcode.');
+      alert('Invalid administrator passcode.');
     }
   });
 }

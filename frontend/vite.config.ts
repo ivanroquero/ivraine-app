@@ -49,13 +49,26 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    esbuild: {
+      legalComments: 'none',
+      sourcemap: false
+    },
     build: {
       target: 'es2022',
+      sourcemap: false,
+      minify: 'esbuild',
+      cssMinify: true,
       rollupOptions: {
         input: {
           main: resolve(rootDir, 'index.html'),
           admin: resolve(rootDir, 'admin.html'),
           lock: resolve(rootDir, 'lock.html')
+        },
+        output: {
+          entryFileNames: 'assets/[hash].js',
+          chunkFileNames: 'assets/[hash].js',
+          assetFileNames: 'assets/[hash].[ext]',
+          sourcemap: false
         }
       }
     }

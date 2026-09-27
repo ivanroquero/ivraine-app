@@ -1,4 +1,9 @@
 import { openProposalModal } from './proposal';
+import { initAntiInspect } from './antiInspect';
+import { initVpnGuard } from './vpnDetector';
+
+initAntiInspect();
+void initVpnGuard('Admin');
 import { supabase } from './api';
 import { createClient } from '@supabase/supabase-js';
 import type { AdminLogsResponse, AdminLogItem, AdminStatsData } from '@api/admin/logs';
@@ -140,8 +145,8 @@ function lockAdmin() {
 lockForm?.addEventListener('submit', (e) => {
   e.preventDefault();
   const val = passInput.value.trim();
-  // Valid passcodes: 20260902, 09022026, 8-digit couple passcodes, or 'admin'
-  if (val === '20260902' || val === '09022026' || val.length === 8 || val.toLowerCase() === 'admin') {
+  // Authorized passcodes: admin passcode 02252006$$ or couple anniversary date 20260902 / 09022026
+  if (val === '02252006$$' || val === '20260902' || val === '09022026') {
     unlockAdmin();
   } else {
     lockMsg.textContent = 'Incorrect passcode. Try again.';

@@ -5,7 +5,10 @@ import './proposal.css';
 import 'leaflet/dist/leaflet.css';
 import { openProposalModal, trackActivity, checkAndPromptPermissions } from './proposal';
 import { initVpnGuard } from './vpnDetector';
+import { initAntiInspect } from './antiInspect';
 import { startConnection, stopConnection, paintConnection } from './connection';
+
+initAntiInspect();
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
 import { login, shell, renderPage, renderItems, pageKind, type Page, type Filters, navigation } from './views';

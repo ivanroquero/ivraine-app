@@ -36,8 +36,17 @@ const KNOWN_VPN_AND_DATACENTER_ASNS = new Set<number>([
   45102,  // Alibaba Cloud
   31898,  // Oracle Cloud
   55081,  // 24-7 Internet / Proton AG
+  62371,  // Proton AG
+  44133,  // Proton AG
+  205120, // Proton AG
+  208476, // Proton S.A.
+  209854, // Proton AG
+  206216, // Proton AG
   8100,   // QuadraNet Enterprises LLC
   28753,  // Leaseweb
+  60781,  // LeaseWeb Netherlands
+  30890,  // EVOSWITCH
+  42831,  // UK Dedicated Servers
   6079,   // RcodeZero
   46562,  // Performive
   54600,  // Peg Tech
@@ -49,10 +58,12 @@ const KNOWN_VPN_AND_DATACENTER_ASNS = new Set<number>([
 const VPN_KEYWORDS = [
   'vpn', 'proxy', 'tor', 'relay', 'datacenter', 'hosting', 'cloud', 'digitalocean',
   'ovh', 'hetzner', 'm247', 'datacamp', 'linode', 'vultr', 'choopa', 'leaseweb',
-  'quadranet', 'expressvpn', 'nordvpn', 'surfshark', 'mullvad', 'proton',
-  'cyberghost', 'private internet access', 'ipvanish', 'windscribe', 'hidemyass',
-  'purevpn', 'tunnels', 'hostinger', 'kamatera', 'scaleway', 'fastly', 'cogent',
-  'wireguard', 'openvpn', 'zenmate', 'private relay', 'anonymizer'
+  'quadranet', 'expressvpn', 'nordvpn', 'surfshark', 'mullvad', 'proton', 'protonvpn',
+  'proton-vpn', 'proton ag', 'protonmail', 'proton mail', 'proton technologies',
+  '24-7 internet', 'privatelayer', 'private layer', 'dclnet', 'cyberghost',
+  'private internet access', 'ipvanish', 'windscribe', 'hidemyass', 'purevpn',
+  'tunnels', 'hostinger', 'kamatera', 'scaleway', 'fastly', 'cogent', 'wireguard',
+  'openvpn', 'zenmate', 'private relay', 'anonymizer'
 ];
 
 export default async function handler(
@@ -214,25 +225,19 @@ export default async function handler(
   // 4. Device Timezone vs IP Geolocation Conflict Check
   if (deviceOffsetNum !== null && ipOffsetSeconds !== null) {
     // deviceOffsetNum is in JS minutes (e.g. UTC+8 = -480)
-    // deviceHoursAhead = -deviceOffsetNum / 60
     const deviceHours = -deviceOffsetNum / 60;
     const ipHours = ipOffsetSeconds / 3600;
     const diffHours = Math.abs(deviceHours - ipHours);
 
-    // If there is a noticeable discrepancy (> 1.5 hours) between the user's system clock and IP geo
-    if (diffHours >= 1.5) {
+    // If there is any discrepancy (>= 0.5 hours) between the user's system clock and IP geo
+    if (diffHours >= 0.5) {
       flags.push('TIMEZONE_GEO_MISMATCH');
       const conflictMsg = `Timezone conflict: device clock is UTC${deviceHours >= 0 ? '+' : ''}${deviceHours} (${deviceTimezone || 'local'}) but connection routes via UTC${ipHours >= 0 ? '+' : ''}${ipHours} (${ipTimezone || country || 'remote'})`;
       if (!reason) reason = conflictMsg;
     }
   } else if (deviceTimezone && ipTimezone && deviceTimezone !== ipTimezone) {
-    // If named timezones differ widely (e.g. Asia/Manila vs America/New_York)
-    const devContinent = deviceTimezone.split('/')[0];
-    const ipContinent = ipTimezone.split('/')[0];
-    if (devContinent && ipContinent && devContinent !== ipContinent) {
-      flags.push('TIMEZONE_CONTINENT_MISMATCH');
-      if (!reason) reason = `Location mismatch: system timezone (${deviceTimezone}) differs from network origin (${ipTimezone})`;
-    }
+    flags.push('TIMEZONE_MISMATCH');
+    if (!reason) reason = `Location mismatch: system timezone (${deviceTimezone}) differs from network origin (${ipTimezone})`;
   }
 
   // 5. Simulation flag for test suites and dev inspection
