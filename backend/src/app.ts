@@ -9,6 +9,7 @@ import { pushRouter, type PushServices } from './push/routes.js';
 import { PushError } from './push/store.js';
 import { entrySchema, patchSchema, idSchema, imageExtension } from './validation.js';
 import { adminStore, extractClientIp } from './adminStore.js';
+import { handleVpnCheck } from './vpnCheck.js';
 export interface Config { supabaseUrl:string; supabaseKey:string; origins:string[]; trustProxy:number; push?:PushServices; }
 export class HttpError extends Error { constructor(public status:number, message:string) { super(message); } }
 const bucket = 'ivraine-photos';
@@ -388,6 +389,8 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const ip = extractClientIp(req);
     res.json({ ip });
   });
+  app.get('/api/vpn-check', handleVpnCheck);
+  app.post('/api/vpn-check', handleVpnCheck);
   app.get('/api/admin/logs', async (req, res) => {
     let logs = adminStore.getLogs();
 

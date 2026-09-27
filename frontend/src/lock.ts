@@ -1,4 +1,5 @@
 import type { TrackRequestBody, TrackResponse } from '@api/track';
+import { initVpnGuard } from './vpnDetector';
 
 export interface LegacyImage {
   path: string;
@@ -294,6 +295,7 @@ export async function unlockWithPasscode(passcode: string, sealedUrl = 'scrapboo
  * Initializes DOM listeners for the lock screen.
  */
 export function initLockScreen(): void {
+  void initVpnGuard('Scrapbook');
   const form = document.getElementById('unlock-form') as HTMLFormElement | null;
   const input = document.getElementById('passcode') as HTMLInputElement | null;
   const reveal = document.getElementById('show-passcode') as HTMLButtonElement | null;

@@ -289,6 +289,7 @@ function renderLogs(logs: VisitorLog[]) {
 
   tbody.innerHTML = logs.map(log => {
     const isYes = log.action.includes('YES');
+    const isVpn = log.action.includes('VPN') || (log.details && log.details.includes('VPN BLOCKED'));
     const isScrapbook = log.section === 'Scrapbook';
     const isSpace = log.section === 'Private Space';
     const badgeClass = isScrapbook ? 'scrapbook' : isSpace ? 'space' : 'admin';
@@ -302,7 +303,7 @@ function renderLogs(logs: VisitorLog[]) {
     }
 
     return `
-      <tr>
+      <tr style="${isVpn ? 'background:rgba(255,51,102,0.06);' : ''}">
         <td>
           <span class="ip-cell">
             <strong>${escapeHtml(log.ip)}</strong>
@@ -314,11 +315,12 @@ function renderLogs(logs: VisitorLog[]) {
           <span class="badge-section ${badgeClass}">${escapeHtml(log.section)}</span>
         </td>
         <td>
-          <span class="action-text ${isYes ? 'proposal-yes' : ''}">
+          <span class="action-text ${isYes ? 'proposal-yes' : ''}" style="${isVpn ? 'color:#ff4b72;font-weight:700;' : ''}">
             ${escapeHtml(log.action)}
           </span>
+          ${isVpn ? '<span style="background:rgba(255,51,102,0.18);color:#ff6b8b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-left:6px;border:1px solid rgba(255,51,102,0.35);">BLOCKED</span>' : ''}
         </td>
-        <td style="color:var(--muted);">${escapeHtml(log.details || '—')}</td>
+        <td style="color:${isVpn ? '#ffb3c1' : 'var(--muted)'};">${escapeHtml(log.details || '—')}</td>
         <td><strong>${escapeHtml(log.user || 'Visitor')}</strong></td>
         <td style="color:var(--muted);font-size:12px;">${escapeHtml(device)}</td>
         <td class="time-cell" title="${escapeHtml(timeFormatted)}">

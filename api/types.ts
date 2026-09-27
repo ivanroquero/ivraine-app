@@ -205,3 +205,27 @@ export interface AdminClearLogsResponse {
   status: 'ok';
   success: true;
 }
+
+// -----------------------------------------------------------------------------
+// Endpoint 6: /api/vpn-check
+// -----------------------------------------------------------------------------
+export interface VpnCheckDetails {
+  ip: string;
+  isp?: string;
+  org?: string;
+  asn?: string | number;
+  country?: string;
+  city?: string;
+  timezone?: string;
+  deviceTimezone?: string;
+  flags: string[];
+}
+
+export interface VpnCheckResponse {
+  status: 'ok';
+  isVpn: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  reason?: string;
+  clientIp: string;
+  details: VpnCheckDetails;
+}

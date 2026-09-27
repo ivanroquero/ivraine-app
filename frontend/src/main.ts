@@ -4,6 +4,7 @@ import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
 import { openProposalModal, trackActivity, checkAndPromptPermissions } from './proposal';
+import { initVpnGuard } from './vpnDetector';
 import { startConnection, stopConnection, paintConnection } from './connection';
 import { api, configured, supabase } from './api';
 import type { Entry, BookResponse, Kind } from './types';
@@ -145,6 +146,7 @@ function addProposalPill(){
 async function boot(){const gen=++generation;
  if(location.pathname==='/admin'||location.pathname==='/admin/'||location.pathname.startsWith('/admin')||location.search.includes('admin')||location.hash.includes('admin')){location.replace('/admin.html'+location.search+location.hash);return;}
  if(!location.search.includes('space')&&!location.hash.includes('space')){location.replace('/legacy/index.html');return;}
+ void initVpnGuard('Private Space');
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
