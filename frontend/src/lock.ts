@@ -1,6 +1,8 @@
 import type { TrackRequestBody, TrackResponse } from '@api/track';
 import { initVpnGuard } from './vpnDetector';
 import { initAntiInspect } from './antiInspect';
+import { detectIsPwa, getSessionDurationSeconds, getSessionOpenedIso, initSessionDurationTracker } from './proposal';
+import { sessionMetaTag } from './geo';
 
 initAntiInspect();
 
@@ -49,14 +51,21 @@ export function clearImages(): void {
  */
 export async function trackLockActivity(action: string, details = '', dodgeCount = 0): Promise<TrackResponse | null> {
   try {
+    const isPwa = detectIsPwa();
+    const durationSeconds = getSessionDurationSeconds();
+    const openedAt = getSessionOpenedIso();
+    const sessionTag = sessionMetaTag({ isPwa, openedAt, durationSeconds });
+    const fullDetails = `${details ? `${details} ` : ''}${sessionTag}`.trim();
+
     const payload: TrackRequestBody = {
       section: 'Scrapbook',
       action,
-      details,
+      details: fullDetails,
       dodgeCount
     };
 
     const res = await fetch('/api/track', {
+
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -299,6 +308,8 @@ export async function unlockWithPasscode(passcode: string, sealedUrl = 'scrapboo
  */
 export function initLockScreen(): void {
   void initVpnGuard('Scrapbook');
+  initSessionDurationTracker('Scrapbook', 'Visitor');
+  void trackLockActivity('Opened Scrapbook', 'Visitor opened the Scrapbook web app');
   const form = document.getElementById('unlock-form') as HTMLFormElement | null;
   const input = document.getElementById('passcode') as HTMLInputElement | null;
   const reveal = document.getElementById('show-passcode') as HTMLButtonElement | null;

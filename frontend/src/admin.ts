@@ -22,9 +22,11 @@ import {
   isValidCoordinate,
   parseDeviceId,
   parseGpsMeta,
+  parseSessionMeta,
   stripLocationTags,
   type LocationSource
 } from './geo';
+
 
 declare const mapboxgl: any;
 declare const L: any;
@@ -85,6 +87,8 @@ export interface AdminStats {
   uniqueIps: number;
   scrapbookVisits: number;
   spaceVisits: number;
+  pwaVisits?: number;
+  browserVisits?: number;
   proposalAccepted: boolean;
   proposalAcceptedAt: string | null;
   totalDodges: number;
@@ -92,6 +96,7 @@ export interface AdminStats {
   locationsCount: number;
   latestCity: string;
 }
+
 
 let allLogs: VisitorLog[] = [];
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -283,7 +288,7 @@ function renderLogs(logs: VisitorLog[]) {
   if (!logs.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="empty-state">
+        <td colspan="9" class="empty-state">
           <h3>No visitor activity logged yet</h3>
           <p>Visits to the Scrapbook or Private Space will appear here in real-time with their IP and location.</p>
         </td>
@@ -302,10 +307,20 @@ function renderLogs(logs: VisitorLog[]) {
     const relativeTime = timeAgo(log.timestamp);
     const device = formatDevice(log.userAgent);
 
+    const sessionMeta = parseSessionMeta(log.details, log.userAgent);
+    const isPwa = sessionMeta.isPwa;
+    const stayLabel = sessionMeta.durationLabel || '< 1m';
+    const openedAt = sessionMeta.openedAt;
+    const cleanDetails = stripLocationTags(log.details) || '—';
+
     let locationTag = '';
     if (log.fullAddress) {
       locationTag = `<div style="font-size:11px;color:#7dd3fc;margin-top:3px;display:flex;align-items:center;gap:4px;">📍 ${escapeHtml(log.fullAddress)}</div>`;
     }
+
+    const openedTag = openedAt
+      ? `<div style="font-size:10px;color:#a78bfa;margin-top:2px;">Opened: ${escapeHtml(new Date(openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>`
+      : '';
 
     return `
       <tr style="${isVpn ? 'background:rgba(255,51,102,0.06);' : ''}">
@@ -320,20 +335,31 @@ function renderLogs(logs: VisitorLog[]) {
           <span class="badge-section ${badgeClass}">${escapeHtml(log.section)}</span>
         </td>
         <td>
+          <span class="badge-app-mode ${isPwa ? 'mode-pwa' : 'mode-browser'}" title="${isPwa ? 'Launched via installed Progressive Web App' : 'Opened in regular browser tab'}">
+            ${isPwa ? '📱 PWA App' : '🌐 Browser'}
+          </span>
+        </td>
+        <td>
           <span class="action-text ${isYes ? 'proposal-yes' : ''}" style="${isVpn ? 'color:#ff4b72;font-weight:700;' : ''}">
             ${escapeHtml(log.action)}
           </span>
           ${isVpn ? '<span style="background:rgba(255,51,102,0.18);color:#ff6b8b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-left:6px;border:1px solid rgba(255,51,102,0.35);">BLOCKED</span>' : ''}
         </td>
-        <td style="color:${isVpn ? '#ffb3c1' : 'var(--muted)'};">${escapeHtml(log.details || '—')}</td>
+        <td>
+          <span class="badge-stay" title="Active stay duration on the web app">⏱️ ${escapeHtml(stayLabel)}</span>
+        </td>
+        <td style="color:${isVpn ? '#ffb3c1' : 'var(--muted)'};">${escapeHtml(cleanDetails)}</td>
         <td><strong>${escapeHtml(log.user || 'Visitor')}</strong></td>
         <td style="color:var(--muted);font-size:12px;">${escapeHtml(device)}</td>
         <td class="time-cell" title="${escapeHtml(timeFormatted)}">
-          ${escapeHtml(relativeTime)}
+          <div style="font-weight:600;color:#fff;">${escapeHtml(relativeTime)}</div>
+          <div style="font-size:11px;color:var(--muted);">${escapeHtml(timeFormatted)}</div>
+          ${openedTag}
         </td>
       </tr>
     `;
   }).join('');
+
 
   // Attach copy listeners
   tbody.querySelectorAll<HTMLButtonElement>('.copy-ip-btn').forEach(btn => {
@@ -384,7 +410,10 @@ function computeStats(logs: VisitorLog[]): AdminStats {
   let locationsCount = 0;
   let latestCity = '';
 
+  let pwaVisits = 0;
   for (const l of logs) {
+    const meta = parseSessionMeta(l.details, l.userAgent);
+    if (meta.isPwa) pwaVisits++;
     if (l.action.toLowerCase().includes('yes') || l.action.toLowerCase().includes('said yes')) {
       proposalAccepted = true;
       if (!proposalAcceptedAt) proposalAcceptedAt = l.timestamp;
@@ -411,11 +440,15 @@ function computeStats(logs: VisitorLog[]): AdminStats {
     }
   } catch {}
 
+  const browserVisits = Math.max(0, logs.length - pwaVisits);
+
   return {
     totalVisits: logs.length,
     uniqueIps,
     scrapbookVisits,
     spaceVisits,
+    pwaVisits,
+    browserVisits,
     proposalAccepted,
     proposalAcceptedAt,
     totalDodges,
@@ -450,6 +483,12 @@ function updateConnectionBadge(status: 'railway' | 'supabase' | 'local') {
 function updateKpiUi(stats: AdminStats) {
   const totalVisitsEl = document.getElementById('stat-total-visits');
   if (totalVisitsEl) totalVisitsEl.textContent = String(stats.totalVisits);
+
+  const visitsSubEl = document.getElementById('stat-visits-sub');
+  if (visitsSubEl) {
+    visitsSubEl.textContent = `${stats.pwaVisits ?? 0} PWA · ${stats.browserVisits ?? 0} Browser`;
+  }
+
 
   const uniqueIpsEl = document.getElementById('stat-unique-ips');
   if (uniqueIpsEl) uniqueIpsEl.textContent = String(stats.uniqueIps);

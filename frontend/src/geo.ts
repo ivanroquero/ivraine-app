@@ -124,12 +124,80 @@ export function accuracyCirclePolygon(lat: number, lng: number, radiusMeters: nu
   return ring;
 }
 
-/** Removes the machine readable tags so humans see only the address text. */
+// ─────────────────────────────────────────────────────────────────────────────
+// PWA, OPEN TIME & SESSION DURATION HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SessionMeta {
+  isPwa: boolean;
+  appMode: 'PWA' | 'Browser';
+  openedAt?: string;
+  durationLabel?: string;
+}
+
+const APP_MODE_TAG_PATTERN = /\[AppMode:\s*([^\]]+)\]/i;
+const STAY_TAG_PATTERN = /\[Stay:\s*([^\]]+)\]/i;
+const OPENED_AT_TAG_PATTERN = /\[OpenedAt:\s*([^\]]+)\]/i;
+
+export function formatDurationLabel(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '< 1m';
+  if (seconds < 60) return '< 1m';
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+/** Builds machine-readable tags for PWA status, open timestamp, and stay duration. */
+export function sessionMetaTag(opts: { isPwa: boolean; openedAt?: string; durationSeconds?: number }): string {
+  const parts: string[] = [];
+  parts.push(`[AppMode:${opts.isPwa ? 'PWA' : 'Browser'}]`);
+  if (opts.openedAt) {
+    parts.push(`[OpenedAt:${opts.openedAt}]`);
+  }
+  if (typeof opts.durationSeconds === 'number' && Number.isFinite(opts.durationSeconds) && opts.durationSeconds >= 0) {
+    const label = formatDurationLabel(opts.durationSeconds);
+    parts.push(`[Stay:${label}]`);
+  }
+  return parts.join(' ');
+}
+
+/** Extracts session metadata from details tag and User-Agent fallback. */
+export function parseSessionMeta(details?: string | null, userAgent?: string | null): SessionMeta {
+  const text = typeof details === 'string' ? details : '';
+  const appMatch = text.match(APP_MODE_TAG_PATTERN);
+  const stayMatch = text.match(STAY_TAG_PATTERN);
+  const openedMatch = text.match(OPENED_AT_TAG_PATTERN);
+
+  let isPwa = false;
+  if (appMatch) {
+    isPwa = /pwa|standalone|installed/i.test(appMatch[1]);
+  } else if (typeof userAgent === 'string') {
+    isPwa = /standalone|twa|pwa/i.test(userAgent);
+  }
+
+  const durationLabel = stayMatch ? stayMatch[1].trim() : undefined;
+  const openedAt = openedMatch ? openedMatch[1].trim() : undefined;
+
+  return {
+    isPwa,
+    appMode: isPwa ? 'PWA' : 'Browser',
+    openedAt,
+    durationLabel
+  };
+}
+
+/** Removes machine readable tags so humans see only clean details text. */
 export function stripLocationTags(details?: string | null): string {
   if (typeof details !== 'string') return '';
   return details
     .replace(/\[GPS:[^\]]*\]/gi, '')
     .replace(/\[Device:[^\]]*\]/gi, '')
+    .replace(/\[AppMode:[^\]]*\]/gi, '')
+    .replace(/\[Stay:[^\]]*\]/gi, '')
+    .replace(/\[OpenedAt:[^\]]*\]/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+

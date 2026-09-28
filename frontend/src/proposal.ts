@@ -1,14 +1,16 @@
-import * as d3 from 'd3';
+declare const d3: any;
 import type { TrackRequestBody, TrackResponse } from '@api/track';
 import type { DateLocationRequestBody, DateLocationResponse } from '@api/date-location';
 import type { IpResponse } from '@api/ip';
 import {
   MAX_USABLE_ACCURACY_METERS,
   formatCoordinates,
+  formatDurationLabel,
   gpsMetaTag,
   haversineMeters,
   isPreciseGps,
   isValidCoordinate,
+  sessionMetaTag,
   type LocationSource
 } from './geo';
 
@@ -84,6 +86,88 @@ export function getDeviceId(): string {
   }
 }
 
+/** Detects if the web app was opened via installed PWA (Standalone/TWA) or standard browser tab. */
+export function detectIsPwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const isStandaloneMedia = window.matchMedia?.('(display-mode: standalone)')?.matches;
+    const isFullscreenMedia = window.matchMedia?.('(display-mode: fullscreen)')?.matches;
+    const isMinimalUiMedia = window.matchMedia?.('(display-mode: minimal-ui)')?.matches;
+    const isIosStandalone = (window.navigator as any)?.standalone === true;
+    const isTwa = document.referrer?.includes('android-app://') || false;
+    return Boolean(isStandaloneMedia || isFullscreenMedia || isMinimalUiMedia || isIosStandalone || isTwa);
+  } catch {
+    return false;
+  }
+}
+
+const SESSION_START_KEY = 'ivraine_session_start_time';
+
+/** Gets the timestamp (ms) when the current app session was opened. */
+export function getSessionStartTime(): number {
+  try {
+    const existing = sessionStorage.getItem(SESSION_START_KEY);
+    if (existing) {
+      const ts = Number(existing);
+      if (Number.isFinite(ts) && ts > 0) return ts;
+    }
+    const now = Date.now();
+    sessionStorage.setItem(SESSION_START_KEY, String(now));
+    return now;
+  } catch {
+    return Date.now();
+  }
+}
+
+/** Gets the number of seconds the visitor has stayed on the app in this session. */
+export function getSessionDurationSeconds(): number {
+  const start = getSessionStartTime();
+  return Math.max(0, Math.floor((Date.now() - start) / 1000));
+}
+
+/** Returns the exact ISO string when the app session was opened. */
+export function getSessionOpenedIso(): string {
+  const start = getSessionStartTime();
+  return new Date(start).toISOString();
+}
+
+let sessionHeartbeatStarted = false;
+
+/** Automatically tracks active dwell time on the app and logs duration updates. */
+export function initSessionDurationTracker(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor') {
+  if (sessionHeartbeatStarted || typeof window === 'undefined') return;
+  sessionHeartbeatStarted = true;
+  getSessionStartTime(); // Ensure session start is initialized
+
+  let lastReportedMinute = 0;
+  const reportDuration = (isLeaving = false) => {
+    const totalSec = getSessionDurationSeconds();
+    const minutes = Math.floor(totalSec / 60);
+    if ((minutes > 0 && minutes !== lastReportedMinute) || (isLeaving && totalSec >= 45)) {
+      lastReportedMinute = minutes;
+      const label = formatDurationLabel(totalSec);
+      trackActivity(
+        source,
+        isLeaving ? 'Left Web App' : 'App Active Dwell Time',
+        `Active session duration: ${label}`,
+        userName
+      );
+    }
+  };
+
+  // Heartbeat every 2 minutes while active
+  setInterval(() => {
+    if (!document.hidden) reportDuration(false);
+  }, 120000);
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') reportDuration(true);
+  });
+  window.addEventListener('pagehide', () => {
+    reportDuration(true);
+  });
+}
+
 export function trackActivity(
   section: 'Scrapbook' | 'Private Space' | 'Admin',
   action: string,
@@ -95,11 +179,17 @@ export function trackActivity(
   try {
     const deviceId = getDeviceId();
     const hasCoords = isValidCoordinate(location?.latitude, location?.longitude);
-    // The GPS provenance tag travels inside `details` so the admin map can tell a
-    // real device fix apart from a network/IP estimate without any schema change.
-    const taggedDetails = hasCoords
-      ? `${details ? `${details} ` : ''}${gpsMetaTag(location?.accuracyMeters, location?.source || 'gps')}`
-      : details;
+    const isPwa = detectIsPwa();
+    const durationSeconds = getSessionDurationSeconds();
+    const openedAt = getSessionOpenedIso();
+    const sessionTag = sessionMetaTag({ isPwa, openedAt, durationSeconds });
+
+    // The provenance and session tags travel inside `details` so the admin dashboard
+    // can reliably display PWA state, open time, duration, and GPS provenance.
+    const parts = [details];
+    if (hasCoords) parts.push(gpsMetaTag(location?.accuracyMeters, location?.source || 'gps'));
+    parts.push(sessionTag);
+    const taggedDetails = parts.filter(Boolean).join(' ');
 
     const payload: TrackRequestBody = {
       section,
@@ -116,6 +206,7 @@ export function trackActivity(
       city: location?.city,
       country: location?.country
     };
+
 
     fetch('/api/track', {
       method: 'POST',
