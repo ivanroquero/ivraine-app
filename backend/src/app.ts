@@ -410,22 +410,26 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
         if (sbRes.ok) {
           const data = await sbRes.json();
           if (Array.isArray(data)) {
-            const sbLogs = data.map((row: any) => ({
-              id: row.id,
-              ip: row.ip || '127.0.0.1',
-              section: row.section || 'Scrapbook',
-              action: row.action || 'Visit',
-              details: row.details || '',
-              user: row.user_name || 'Visitor',
-              userAgent: row.user_agent || '',
-              dodgeCount: row.dodge_count || 0,
-              latitude: typeof row.latitude === 'number' ? row.latitude : null,
-              longitude: typeof row.longitude === 'number' ? row.longitude : null,
-              fullAddress: row.full_address || '',
-              city: row.city || '',
-              country: row.country || '',
-              timestamp: row.created_at || new Date().toISOString()
-            }));
+            const sbLogs = data.map((row: any) => {
+              const devMatch = (row.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/);
+              return {
+                id: row.id,
+                ip: row.ip || '127.0.0.1',
+                section: row.section || 'Scrapbook',
+                action: row.action || 'Visit',
+                details: row.details || '',
+                user: row.user_name || 'Visitor',
+                userAgent: row.user_agent || '',
+                deviceId: row.device_id || (devMatch ? devMatch[1] : ''),
+                dodgeCount: row.dodge_count || 0,
+                latitude: typeof row.latitude === 'number' ? row.latitude : null,
+                longitude: typeof row.longitude === 'number' ? row.longitude : null,
+                fullAddress: row.full_address || '',
+                city: row.city || '',
+                country: row.country || '',
+                timestamp: row.created_at || new Date().toISOString()
+              };
+            });
             const existingKeys = new Set(logs.map(l => l.id || `${l.ip}_${l.action}_${l.timestamp}`));
             for (const sb of sbLogs) {
               const k = sb.id || `${sb.ip}_${sb.action}_${sb.timestamp}`;

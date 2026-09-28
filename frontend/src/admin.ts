@@ -16,10 +16,15 @@ import {
   accuracyCirclePolygon,
   accuracyLabel,
   accuracyQuality,
+  collapseLocationsPerDevice,
   formatCoordinates,
   haversineMeters,
+  isLoraineUser,
   isPreciseGps,
+  isSyntheticIp,
   isValidCoordinate,
+  normalizeDeviceId,
+  normalizeIp,
   parseDeviceId,
   parseGpsMeta,
   parseSessionMeta,
@@ -578,26 +583,20 @@ function resolveLocation(log: VisitorLog): ResolvedLocation | null {
   };
 }
 
-/** One pin per physical device — never merges two phones into a single pin, and collapses Loraine's phone into strictly 1 pin. */
+/** Stable key for a location marker or follow tracking. */
 function devicePinKey(loc: ResolvedLocation): string {
-  if (loc.deviceId && loc.deviceId.trim()) return `dev:${loc.deviceId.trim()}`;
-
-  const cleanIp = (loc.log.ip || 'unknown').trim();
+  if (isLoraineUser(loc.log.user)) return 'user:loraine';
+  const devId = normalizeDeviceId(loc.deviceId || parseDeviceId(loc.log.details));
+  if (devId) return `dev:${devId}`;
+  const cleanIp = normalizeIp(loc.log.ip);
+  if (cleanIp && !isSyntheticIp(cleanIp)) return `ip:${cleanIp}`;
   const isMobile = /android|iphone|ipad|ipod|mobile/i.test(loc.log.userAgent || '');
-  return `ip:${cleanIp}:${isMobile ? 'mobile' : 'desktop'}`;
+  return `synthetic:${cleanIp || 'visitor'}:${isMobile ? 'mobile' : 'desktop'}`;
 }
 
+/** Strictly 1 pin/marker per device and IP address on the live map. */
 function newestPerDevice(locations: ResolvedLocation[]): ResolvedLocation[] {
-  const map = new Map<string, ResolvedLocation>();
-  for (const loc of locations) {
-    const key = devicePinKey(loc);
-    const current = map.get(key);
-    // Newest wins, but a real GPS fix always beats an approximate one.
-    if (!current) map.set(key, loc);
-    else if (loc.precise && !current.precise) map.set(key, loc);
-    else if (loc.precise === current.precise && loc.updatedAtMs > current.updatedAtMs) map.set(key, loc);
-  }
-  return Array.from(map.values()).sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+  return collapseLocationsPerDevice(locations);
 }
 
 function isLivePinFresh(loc: ResolvedLocation): boolean {
@@ -1096,13 +1095,22 @@ function flyToLocation(lat: number, lng: number) {
 }
 
 async function removePinForDevice(devId: string, user: string, ip: string) {
+  const normDevId = normalizeDeviceId(devId);
+  const normIp = normalizeIp(ip);
+  const isLor = isLoraineUser(user);
+
   // 1. Remove location logs for this device from in-memory allLogs
   allLogs = allLogs.filter(l => {
     if (l.latitude == null && l.longitude == null) return true;
-    const same = (devId && l.deviceId && l.deviceId === devId) ||
-      (user && ((user.toLowerCase().includes('loraine') && (l.user || '').toLowerCase().includes('loraine')))) ||
-      (!devId && ip && l.ip === ip);
-    return !same;
+    const lDevId = normalizeDeviceId(l.deviceId || parseDeviceId(l.details));
+    const lIp = normalizeIp(l.ip);
+    const lLor = isLoraineUser(l.user);
+
+    const matchDev = Boolean(normDevId && lDevId && normDevId === lDevId);
+    const matchUser = Boolean(isLor && lLor);
+    const matchIp = Boolean(normIp && !isSyntheticIp(normIp) && lIp === normIp);
+
+    return !(matchDev || matchUser || matchIp);
   });
 
   // 2. Clear saved pinned location from localStorage
@@ -1286,22 +1294,26 @@ async function loadAdminData() {
 
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        const sbLogs: VisitorLog[] = data.map((row: any) => ({
-          id: row.id,
-          ip: row.ip || '127.0.0.1',
-          section: row.section || 'Scrapbook',
-          action: row.action || 'Visit',
-          details: row.details || '',
-          user: row.user_name || 'Visitor',
-          userAgent: row.user_agent || '',
-          dodgeCount: row.dodge_count || 0,
-          latitude: typeof row.latitude === 'number' ? row.latitude : (row.latitude ? parseFloat(row.latitude) : null),
-          longitude: typeof row.longitude === 'number' ? row.longitude : (row.longitude ? parseFloat(row.longitude) : null),
-          fullAddress: row.full_address || '',
-          city: row.city || '',
-          country: row.country || '',
-          timestamp: row.created_at || new Date().toISOString()
-        }));
+        const sbLogs: VisitorLog[] = data.map((row: any) => {
+          const devMatch = (row.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/);
+          return {
+            id: row.id,
+            ip: row.ip || '127.0.0.1',
+            section: row.section || 'Scrapbook',
+            action: row.action || 'Visit',
+            details: row.details || '',
+            user: row.user_name || 'Visitor',
+            userAgent: row.user_agent || '',
+            deviceId: row.device_id || (devMatch ? devMatch[1] : ''),
+            dodgeCount: row.dodge_count || 0,
+            latitude: typeof row.latitude === 'number' ? row.latitude : (row.latitude ? parseFloat(row.latitude) : null),
+            longitude: typeof row.longitude === 'number' ? row.longitude : (row.longitude ? parseFloat(row.longitude) : null),
+            fullAddress: row.full_address || '',
+            city: row.city || '',
+            country: row.country || '',
+            timestamp: row.created_at || new Date().toISOString()
+          };
+        });
 
         const existingKeys = new Set(fetchedLogs.map(l => l.id || `${l.ip}_${l.action}_${l.timestamp.slice(0, 19)}`));
         for (const log of sbLogs) {
@@ -1371,23 +1383,6 @@ async function loadAdminData() {
 
   fetchedLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-  // Strictly deduplicate location logs so each device only has AT MOST 1 active location entry across the entire dashboard!
-  const seenLocationKeys = new Set<string>();
-  const dedupedLogs: VisitorLog[] = [];
-  for (const log of fetchedLogs) {
-    if (log.latitude == null || log.longitude == null) {
-      dedupedLogs.push(log);
-      continue;
-    }
-    const fakeLoc = resolveLocation(log);
-    const key = fakeLoc ? devicePinKey(fakeLoc) : (log.deviceId ? `dev:${log.deviceId}` : `ip:${log.ip}`);
-    if (!seenLocationKeys.has(key)) {
-      seenLocationKeys.add(key);
-      dedupedLogs.push(log);
-    }
-  }
-  fetchedLogs = dedupedLogs;
-
   if (!fetchedFromBackend && !fetchedFromSupabase) {
     updateConnectionBadge('local');
   }
@@ -1423,23 +1418,10 @@ try {
     if (event.data?.type === 'LOG_ADDED' && event.data?.entry) {
       const entry = event.data.entry as VisitorLog;
 
-      // If incoming log is a location log, purge previous location logs for this device!
-      if (entry.latitude != null && entry.longitude != null) {
-        const targetDevId = entry.deviceId || '';
-        const targetUser = (entry.user || '').toLowerCase();
-        allLogs = allLogs.filter(l => {
-          if (l.latitude == null && l.longitude == null) return true;
-          const sameDevice = (targetDevId && l.deviceId && l.deviceId === targetDevId) ||
-            (targetUser.includes('loraine') && (l.user || '').toLowerCase().includes('loraine')) ||
-            (!targetDevId && entry.ip && l.ip === entry.ip);
-          return !sameDevice;
-        });
-      }
-
       const key = `${entry.ip}_${entry.action}_${entry.timestamp.slice(0, 19)}`;
       if (!allLogs.some(l => `${l.ip}_${l.action}_${l.timestamp.slice(0, 19)}` === key)) {
         allLogs.unshift(entry);
-        if (allLogs.length > 500) allLogs.length = 500;
+        if (allLogs.length > 50000) allLogs.length = 50000;
         const stats = computeStats(allLogs);
         updateKpiUi(stats);
         filterLogs();

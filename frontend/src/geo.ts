@@ -201,3 +201,175 @@ export function stripLocationTags(details?: string | null): string {
     .trim();
 }
 
+export interface DeduplicatableLocation {
+  log: {
+    ip?: string | null;
+    user?: string | null;
+    userAgent?: string | null;
+    details?: string | null;
+  };
+  deviceId?: string | null;
+  precise?: boolean;
+  updatedAtMs: number;
+  accuracyMeters?: number | null;
+}
+
+export function normalizeIp(rawIp?: string | null): string {
+  if (!rawIp) return '';
+  let ip = rawIp.trim().toLowerCase();
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  if (ip === '::1') ip = '127.0.0.1';
+  return ip;
+}
+
+export function isSyntheticIp(rawIp?: string | null): boolean {
+  if (!rawIp) return true;
+  const s = rawIp.trim().toLowerCase();
+  return (
+    s === '' ||
+    s === 'client' ||
+    s === 'phone gps pin' ||
+    s === 'saved gps pin' ||
+    s === 'unknown' ||
+    s.includes('gps pin')
+  );
+}
+
+export function normalizeDeviceId(rawDevId?: string | null): string {
+  if (!rawDevId) return '';
+  const d = rawDevId.trim().toLowerCase();
+  if (d === 'dev_client_default') return '';
+  return d;
+}
+
+export function isLoraineUser(user?: string | null): boolean {
+  if (!user) return false;
+  return user.toLowerCase().includes('loraine');
+}
+
+/**
+ * Deduplicates location records so that the SAME device AND IP address strictly have 1 pin on the map.
+ * Merges by:
+ * - Device ID
+ * - IP address (public IP, normalized IPv4/IPv6, or localhost)
+ * - User name (Loraine phone is always unified into 1 pin)
+ * - Transitive connections (e.g. Device A on IP X merges with other logs on IP X).
+ *
+ * For each cluster, exactly 1 winning pin is chosen (precise GPS fix beats approximate, newest timestamp wins).
+ */
+export function collapseLocationsPerDevice<T extends DeduplicatableLocation>(locations: T[]): T[] {
+  if (locations.length <= 1) return locations;
+
+  const n = locations.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const rank = new Array(n).fill(0);
+
+  function find(i: number): number {
+    if (parent[i] === i) return i;
+    parent[i] = find(parent[i]);
+    return parent[i];
+  }
+
+  function union(i: number, j: number): void {
+    const rootI = find(i);
+    const rootJ = find(j);
+    if (rootI !== rootJ) {
+      if (rank[rootI] < rank[rootJ]) {
+        parent[rootI] = rootJ;
+      } else if (rank[rootI] > rank[rootJ]) {
+        parent[rootJ] = rootI;
+      } else {
+        parent[rootJ] = rootI;
+        rank[rootI]++;
+      }
+    }
+  }
+
+  const deviceToIdx = new Map<string, number>();
+  const ipToIdx = new Map<string, number>();
+  let loraineRoot: number | null = null;
+  const fallbackGroupToIdx = new Map<string, number>();
+
+  for (let i = 0; i < n; i++) {
+    const loc = locations[i];
+    const devId = normalizeDeviceId(loc.deviceId || parseDeviceId(loc.log.details));
+    const ip = normalizeIp(loc.log.ip);
+    const userIsLoraine = isLoraineUser(loc.log.user);
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(loc.log.userAgent || '');
+
+    // 1. Loraine user is always the same person/phone
+    if (userIsLoraine) {
+      if (loraineRoot === null) {
+        loraineRoot = i;
+      } else {
+        union(i, loraineRoot);
+      }
+    }
+
+    // 2. Same device ID -> same cluster
+    if (devId) {
+      const existing = deviceToIdx.get(devId);
+      if (existing !== undefined) {
+        union(i, existing);
+      } else {
+        deviceToIdx.set(devId, i);
+      }
+    }
+
+    // 3. Same IP address (valid public IP or localhost) -> same cluster
+    if (ip && !isSyntheticIp(ip)) {
+      const existing = ipToIdx.get(ip);
+      if (existing !== undefined) {
+        union(i, existing);
+      } else {
+        ipToIdx.set(ip, i);
+      }
+    }
+
+    // 4. Fallback for synthetic IPs without deviceId
+    if (!devId && (!ip || isSyntheticIp(ip)) && !userIsLoraine) {
+      const fallbackKey = `${(loc.log.user || 'visitor').trim().toLowerCase()}:${isMobile ? 'mobile' : 'desktop'}`;
+      const existing = fallbackGroupToIdx.get(fallbackKey);
+      if (existing !== undefined) {
+        union(i, existing);
+      } else {
+        fallbackGroupToIdx.set(fallbackKey, i);
+      }
+    }
+  }
+
+  // Group by cluster root
+  const clusters = new Map<number, T[]>();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root)!.push(locations[i]);
+  }
+
+  // For each cluster, pick the single newest & most precise location
+  const result: T[] = [];
+  for (const cluster of clusters.values()) {
+    let best = cluster[0];
+    for (let j = 1; j < cluster.length; j++) {
+      const candidate = cluster[j];
+      if (candidate.precise && !best.precise) {
+        best = candidate;
+      } else if (candidate.precise === best.precise) {
+        if (candidate.updatedAtMs > best.updatedAtMs) {
+          best = candidate;
+        } else if (candidate.updatedAtMs === best.updatedAtMs) {
+          const candAcc = candidate.accuracyMeters ?? Infinity;
+          const bestAcc = best.accuracyMeters ?? Infinity;
+          if (candAcc < bestAcc) {
+            best = candidate;
+          }
+        }
+      }
+    }
+    result.push(best);
+  }
+
+  return result.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+}
+
+
