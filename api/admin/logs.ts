@@ -81,7 +81,7 @@ export default async function handler(
   for (const mem of memoryLogs) {
     const key = mem.id || `${mem.ip}_${mem.action}_${mem.timestamp}`;
     if (!existingIds.has(key)) {
-      logs.unshift({
+      logs.push({
         id: mem.id,
         ip: mem.ip,
         section: mem.section,
@@ -104,29 +104,13 @@ export default async function handler(
 
   logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-  // Deduplicate location logs so each device has at most 1 location pin
-  const seenLocationDevices = new Set<string>();
-  const dedupedLogs: AdminLogItem[] = [];
+  // 30-day retention policy: auto-remove/filter out logs older than 30 days
+  const thirtyDaysCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  logs = logs.filter(l => {
+    const ts = new Date(l.timestamp).getTime();
+    return Number.isFinite(ts) ? ts >= thirtyDaysCutoff : true;
+  });
 
-  for (const log of logs) {
-    const hasLocation = log.latitude != null && log.longitude != null;
-    if (!hasLocation) {
-      dedupedLogs.push(log);
-      continue;
-    }
-
-    const devId = log.deviceId || ((log.details || '').match(/\[Device:\s*([a-zA-Z0-9_\-]+)\]/)?.[1]) || '';
-    const ua = (log.userAgent || '').toLowerCase();
-    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
-    const devKey = devId ? `device_${devId}` : `ip_${log.ip || 'unknown'}_${isMobile ? 'mobile' : 'desktop'}`;
-
-    if (!seenLocationDevices.has(devKey)) {
-      seenLocationDevices.add(devKey);
-      dedupedLogs.push(log);
-    }
-  }
-
-  logs = dedupedLogs;
 
   const uniqueIps = new Set(logs.map((l) => l.ip)).size;
   const scrapbookVisits = logs.filter((l) => l.section === 'Scrapbook').length;

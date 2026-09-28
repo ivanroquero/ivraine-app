@@ -258,11 +258,20 @@ async function detectPublicIp(): Promise<string> {
   return '127.0.0.1';
 }
 
-// Local storage logs
+// Local storage logs (30-day retention policy: auto-remove entries older than 30 days)
+const LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 function getLocalLogs(): VisitorLog[] {
   try {
     const raw = localStorage.getItem('ivraine_visitor_logs');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const list: VisitorLog[] = JSON.parse(raw);
+      const cutoff = Date.now() - LOG_RETENTION_MS;
+      return list.filter(l => {
+        const time = new Date(l.timestamp).getTime();
+        return Number.isFinite(time) ? time >= cutoff : true;
+      });
+    }
   } catch {}
   return [];
 }
@@ -271,10 +280,11 @@ function saveLocalLog(entry: VisitorLog) {
   try {
     const existing = getLocalLogs();
     existing.unshift(entry);
-    if (existing.length > 500) existing.length = 500;
+    if (existing.length > 50000) existing.length = 50000;
     localStorage.setItem('ivraine_visitor_logs', JSON.stringify(existing));
   } catch {}
 }
+
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1272,7 +1282,8 @@ async function loadAdminData() {
         .from('ivraine_visitor_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(300);
+        .limit(5000);
+
 
       if (!error && Array.isArray(data) && data.length > 0) {
         const sbLogs: VisitorLog[] = data.map((row: any) => ({
@@ -1317,6 +1328,14 @@ async function loadAdminData() {
       existingKeys.add(key);
     }
   }
+
+  // 30-day retention policy: ensure logs older than 30 days are automatically removed
+  const thirtyDaysCutoff = Date.now() - LOG_RETENTION_MS;
+  fetchedLogs = fetchedLogs.filter(l => {
+    const time = new Date(l.timestamp).getTime();
+    return Number.isFinite(time) ? time >= thirtyDaysCutoff : true;
+  });
+
 
   // 4. Ensure any saved location is pinned ONLY if no location logs already exist for Loraine's phone
   try {

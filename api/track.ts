@@ -102,19 +102,16 @@ export default async function handler(
   };
 
   // Shared in-memory cache for Vercel functions:
-  // If this entry has coordinates, purge older location entries for this device
+  // 30-day retention policy: keep all logs, auto-remove only logs older than 30 days
+  const thirtyDaysCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   let memoryLogs: TrackLogEntry[] = Array.isArray((globalThis as any).__ivraine_logs) ? (globalThis as any).__ivraine_logs : [];
-  if (latitude != null && longitude != null) {
-    memoryLogs = memoryLogs.filter((l) => {
-      const isTarget = (deviceId && l.deviceId === deviceId) ||
-        (userName && l.user && userName.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
-        (!deviceId && l.ip === ip);
-      return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
-    });
-  }
+  memoryLogs = memoryLogs.filter((l) => {
+    const ts = new Date(l.created_at || l.timestamp).getTime();
+    return Number.isFinite(ts) ? ts >= thirtyDaysCutoff : true;
+  });
 
   memoryLogs.unshift(logEntry);
-  if (memoryLogs.length > 500) memoryLogs.length = 500;
+  if (memoryLogs.length > 50000) memoryLogs.length = 50000;
   (globalThis as any).__ivraine_logs = memoryLogs;
 
   // If Supabase environment variables exist in Vercel, record to database
@@ -128,20 +125,18 @@ export default async function handler(
 
   if (sbUrl && sbKey) {
     try {
-      if (latitude != null && longitude != null) {
-        const filterCol = userName && userName !== 'Visitor'
-          ? `user_name=eq.${encodeURIComponent(userName)}`
-          : `ip=eq.${encodeURIComponent(ip)}`;
-        await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${sbKey}`
-          }
-        });
-      }
+      // 30-day auto retention policy: clean up rows older than 30 days
+      const thirtyDaysAgoIso = new Date(thirtyDaysCutoff).toISOString();
+      void fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?created_at=lt.${encodeURIComponent(thirtyDaysAgoIso)}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        }
+      }).catch(() => {});
 
       await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

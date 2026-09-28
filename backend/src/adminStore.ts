@@ -31,14 +31,27 @@ export interface AdminStats {
 
 export class AdminStore {
   private logs: VisitorLog[] = [];
-  private readonly maxLogs = 1000;
+  private readonly maxLogs = 50000;
   private proposalAccepted = false;
   private proposalAcceptedAt: string | null = null;
   private totalDodges = 0;
 
   /**
-   * Removes any previous location coordinates/pins for a device so that
-   * every device has strictly AT MOST 1 active pin on the map.
+   * 30-day retention policy: automatically removes logs older than 30 days.
+   */
+  pruneExpiredLogs(maxAgeDays = 30): number {
+    const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const initialCount = this.logs.length;
+    this.logs = this.logs.filter(l => {
+      const logTime = new Date(l.timestamp).getTime();
+      return Number.isFinite(logTime) ? logTime >= cutoffMs : true;
+    });
+    return initialCount - this.logs.length;
+  }
+
+  /**
+   * Removes location coordinates/pins for a device ONLY when explicitly requested
+   * (e.g. user toggles location off or admin clicks Remove Pin).
    */
   removeDeviceLocation(filter: { deviceId?: string; ip?: string; user?: string }): number {
     const initialCount = this.logs.length;
@@ -47,10 +60,6 @@ export class AdminStore {
       if (l.latitude == null && l.longitude == null) {
         return true;
       }
-      // Strict per-device isolation: a device's pin is only ever replaced by
-      // that SAME device (matched by deviceId). A device with no deviceId
-      // falls back to IP, but only against other deviceId-less entries, so a
-      // real device's pin is never clobbered by an anonymous/legacy one.
       const sameDevice = filter.deviceId
         ? Boolean(l.deviceId && l.deviceId === filter.deviceId)
         : Boolean(filter.ip && l.ip === filter.ip && !l.deviceId);
@@ -74,13 +83,10 @@ export class AdminStore {
     fullAddress?: string;
     city?: string;
     country?: string;
+    timestamp?: string;
   }): VisitorLog {
-    // If incoming log is a location update, automatically purge previous location pins for this device!
-    const hasCoords = typeof log.latitude === 'number' && typeof log.longitude === 'number' && !isNaN(log.latitude) && !isNaN(log.longitude);
-    const isLocationAction = log.action.toLowerCase().includes('location');
-    if (hasCoords || (isLocationAction && (log.action.toLowerCase().includes('turned off') || log.action.toLowerCase().includes('denied')))) {
-      this.removeDeviceLocation({ deviceId: log.deviceId, ip: log.ip, user: log.user });
-    }
+    // 30-day retention: automatically remove logs older than 30 days
+    this.pruneExpiredLogs(30);
 
     const entry: VisitorLog = {
       id: randomUUID(),
@@ -97,7 +103,7 @@ export class AdminStore {
       fullAddress: log.fullAddress || '',
       city: log.city || '',
       country: log.country || '',
-      timestamp: new Date().toISOString()
+      timestamp: log.timestamp || new Date().toISOString()
     };
 
     const actionLower = entry.action.toLowerCase();
@@ -117,8 +123,10 @@ export class AdminStore {
   }
 
   getLogs(): VisitorLog[] {
+    this.pruneExpiredLogs(30);
     return [...this.logs];
   }
+
 
   getStats(): AdminStats {
     const uniqueIps = new Set(this.logs.map(l => l.ip)).size;

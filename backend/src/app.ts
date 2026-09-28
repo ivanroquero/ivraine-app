@@ -204,20 +204,19 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
-        // If this track log contains GPS coordinates, remove older location logs for this user/ip so only 1 pin exists
-        if (latitude != null && longitude != null) {
-          const filterCol = buildDevicePurgeFilter(deviceId, ip);
-          void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
-            method: 'DELETE',
-            headers: {
-              'apikey': config.supabaseKey,
-              'Authorization': `Bearer ${config.supabaseKey}`
-            }
-          }).catch(() => {});
-        }
+        // 30-day retention policy: auto-remove logs older than 30 days from Supabase
+        const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?created_at=lt.${encodeURIComponent(thirtyDaysAgoIso)}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': config.supabaseKey,
+            'Authorization': `Bearer ${config.supabaseKey}`
+          }
+        }).catch(() => {});
 
         const detailsWithDevice = deviceId ? `${details}${details ? ' ' : ''}[Device: ${deviceId}]` : details;
         void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -347,9 +346,9 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
 
     if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
       try {
-        // Delete older location rows so Supabase retains only 1 active pin for this user
-        const filterCol = buildDevicePurgeFilter(deviceId, ip);
-        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+        // 30-day retention policy: auto-remove logs older than 30 days
+        const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?created_at=lt.${encodeURIComponent(thirtyDaysAgoIso)}`, {
           method: 'DELETE',
           headers: {
             'apikey': config.supabaseKey,
@@ -358,6 +357,7 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
         }).catch(() => {});
 
         void fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -440,9 +440,16 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
       } catch {}
     }
 
+    const thirtyDaysCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    logs = logs.filter(l => {
+      const ts = new Date(l.timestamp).getTime();
+      return Number.isFinite(ts) ? ts >= thirtyDaysCutoff : true;
+    });
+
     const stats = adminStore.getStats();
     const currentIp = extractClientIp(req);
     res.json({ logs, stats, currentIp });
+
   });
   app.post('/api/admin/clear-logs', (_req, res) => {
     adminStore.clear();

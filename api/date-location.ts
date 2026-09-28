@@ -145,34 +145,32 @@ export default async function handler(
   };
 
   // Shared in-memory cache for Vercel serverless functions:
-  // Automatically purge prior location entries for this device so only 1 pin exists
+  // 30-day retention policy: keep all location logs, auto-remove only logs older than 30 days
+  const thirtyDaysCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   (globalThis as any).__ivraine_logs = memoryLogs.filter((l) => {
-    const isTarget = (deviceId && l.deviceId === deviceId) ||
-      (user && l.user && user.toLowerCase().includes('loraine') && l.user.toLowerCase().includes('loraine')) ||
-      (!deviceId && l.ip === ip);
-    return !(isTarget && (l.latitude != null || (l.action && l.action.toLowerCase().includes('location'))));
+    const ts = new Date(l.created_at || l.timestamp).getTime();
+    return Number.isFinite(ts) ? ts >= thirtyDaysCutoff : true;
   });
 
   (globalThis as any).__ivraine_logs.unshift(logEntry);
-  if ((globalThis as any).__ivraine_logs.length > 500) {
-    (globalThis as any).__ivraine_logs.length = 500;
+  if ((globalThis as any).__ivraine_logs.length > 50000) {
+    (globalThis as any).__ivraine_logs.length = 50000;
   }
 
-  // Record to Supabase, first purging prior location pins for this user/device
+  // Record to Supabase, auto-removing only logs older than 30 days
   if (sbUrl && sbKey) {
     try {
-      const filterCol = user && user !== 'Visitor'
-        ? `user_name=eq.${encodeURIComponent(user)}`
-        : `ip=eq.${encodeURIComponent(ip)}`;
-      await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?${filterCol}&latitude=not.is.null`, {
+      const thirtyDaysAgoIso = new Date(thirtyDaysCutoff).toISOString();
+      void fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?created_at=lt.${encodeURIComponent(thirtyDaysAgoIso)}`, {
         method: 'DELETE',
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${sbKey}`
         }
-      });
+      }).catch(() => {});
 
       await fetch(`${sbUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
