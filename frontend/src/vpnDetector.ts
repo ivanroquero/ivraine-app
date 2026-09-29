@@ -429,7 +429,7 @@ function updateVpnGuardContent(overlay: HTMLDivElement, status: VpnStatus, onRes
   overrideBtn.addEventListener('click', () => {
     const input = prompt('Enter Administrator Passcode to bypass VPN lock:');
     const passcode = input ? input.trim() : '';
-    if (passcode === '03201952' || passcode === '02252006$$') {
+    if (passcode === '03201952') {
       sessionStorage.setItem(ADMIN_OVERRIDE_KEY, 'true');
       overlay.remove();
       activeOverlay = null;

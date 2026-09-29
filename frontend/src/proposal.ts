@@ -349,7 +349,7 @@ export async function publishGpsLocation(
 
 /** One-shot GPS read. Resolves with null when permission is missing or the fix is unusable. */
 export async function acquireAndSaveLocation(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor'): Promise<LocationData | null> {
-  if (!navigator.geolocation) return null;
+  if (!navigator.geolocation || isPermissionBypassed()) return null;
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -382,7 +382,7 @@ export function isLiveLocationTracking(): boolean {
 
 /** Starts streaming real GPS fixes to the admin map (safe to call repeatedly). */
 export function startLiveLocationTracking(source: 'Scrapbook' | 'Private Space' | 'Admin', userName = 'Visitor'): boolean {
-  if (!navigator.geolocation) return false;
+  if (!navigator.geolocation || isPermissionBypassed()) return false;
   if (liveWatchId !== null) return true;
 
   try {
@@ -595,8 +595,38 @@ export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private S
 
 export interface LoginPermissionResult {
   granted: boolean;
+  bypassed?: boolean;
   location?: LocationData | null;
   error?: string;
+}
+
+export const PERM_BYPASS_KEY = 'ivraine_perm_bypassed';
+
+export function isPermissionBypassed(): boolean {
+  try {
+    return (
+      sessionStorage.getItem(PERM_BYPASS_KEY) === 'true' ||
+      localStorage.getItem(PERM_BYPASS_KEY) === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function markPermissionBypassed(): void {
+  try {
+    sessionStorage.setItem(PERM_BYPASS_KEY, 'true');
+    localStorage.setItem(PERM_BYPASS_KEY, 'true');
+    sessionStorage.setItem('ivraine_vpn_admin_override', 'true');
+    sessionStorage.setItem('ivraine-admin-unlocked', 'true');
+  } catch {}
+}
+
+export function clearPermissionBypassed(): void {
+  try {
+    sessionStorage.removeItem(PERM_BYPASS_KEY);
+    localStorage.removeItem(PERM_BYPASS_KEY);
+  } catch {}
 }
 
 /**
@@ -608,6 +638,11 @@ export async function requestLoginPermissions(
   source: 'Scrapbook' | 'Private Space' | 'Admin' = 'Private Space',
   userName = 'Loraine'
 ): Promise<LoginPermissionResult> {
+  // If previously bypassed with admin passcode, immediately grant and bypass
+  if (isPermissionBypassed()) {
+    return { granted: true, bypassed: true };
+  }
+
   let hasNotif = !('Notification' in window) || Notification.permission === 'granted';
   let hasGeo = false;
   try {
@@ -651,8 +686,8 @@ export async function requestLoginPermissions(
 
     const cleanup = () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      card.removeEventListener('touchstart', onTouchStart);
-      card.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
       if (rightSwipeTimer) clearTimeout(rightSwipeTimer);
       overlay.remove();
     };
@@ -733,13 +768,14 @@ export async function requestLoginPermissions(
       bypassForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const code = bypassInput.value.trim();
-        // Authorized admin passcode: 03201952 (or fallback 02252006$$)
-        if (code === '03201952' || code === '02252006$$') {
+        // Authorized admin passcode: 03201952
+        if (code === '03201952') {
+          markPermissionBypassed();
           closeBypass();
           cleanup();
           trackActivity(source, 'Admin Permission Bypass Used (Passcode Verified)', 'Passcode bypass successful', userName);
           try { navigator.vibrate?.([30, 40, 30]); } catch {}
-          resolve({ granted: true });
+          resolve({ granted: true, bypassed: true });
         } else {
           bypassStatus.textContent = 'Incorrect passcode. Try again.';
           bypassInput.select();
@@ -794,8 +830,8 @@ export async function requestLoginPermissions(
       }
     };
 
-    card.addEventListener('touchstart', onTouchStart, { passive: true });
-    card.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
 
     const requestLocation = () => {
       card.innerHTML = `

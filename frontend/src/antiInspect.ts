@@ -7,7 +7,7 @@
  * 3. Deploys an evasive anti-debugger trap to freeze DevTools if opened via browser menus.
  * 4. Silences sensitive console methods in production builds.
  * 5. Clears console memory on DevTools detection.
- * 6. Honors admin bypass passcode (02252006$$) to allow authorized debugging.
+ * 6. Honors admin bypass passcode (03201952) to allow authorized debugging.
  */
 
 const ADMIN_OVERRIDE_KEY = 'ivraine_vpn_admin_override';

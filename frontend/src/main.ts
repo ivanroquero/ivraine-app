@@ -3,7 +3,7 @@ import './connection.css';
 import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
-import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking } from './proposal';
+import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking, isPermissionBypassed, markPermissionBypassed, clearPermissionBypassed } from './proposal';
 import { initVpnGuard } from './vpnDetector';
 import { initAntiInspect } from './antiInspect';
 import { startConnection, stopConnection, paintConnection } from './connection';
@@ -163,7 +163,7 @@ async function boot(){const gen=++generation;
    }
  } catch {}
 
- if (!hasNotif || !hasGeo) {
+ if (!isPermissionBypassed() && (!hasNotif || !hasGeo)) {
    const fallbackName = session.user?.email?.toLowerCase().includes('ivan') ? 'Ivan' : 'Loraine';
    const permResult = await requestLoginPermissions('Private Space', fallbackName);
    if (!permResult.granted) {
@@ -176,7 +176,7 @@ async function boot(){const gen=++generation;
  }
 
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;if(!location.hash||!navigation.some(n=>n[0]===location.hash.slice(1))){location.hash='#story';}render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();if(!isPermissionBypassed()){startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 
@@ -465,19 +465,21 @@ document.addEventListener('submit',async event=>{
       if (book?.member?.display_name) userName = book.member.display_name;
     } catch {}
 
-    // Enforce permission sequence: Notifications first, then Location
-    const permResult = await requestLoginPermissions('Private Space', userName);
-    if (!permResult.granted) {
-      // User didn't allow or cancelled: sign out and return to login with prompt
-      await supabase!.auth.signOut({ scope: 'local' });
-      app.innerHTML = login(
-        configured,
-        permResult.error || 'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.'
-      );
-      return;
+    // Enforce permission sequence: Notifications first, then Location (skip if bypassed via admin passcode)
+    if (!isPermissionBypassed()) {
+      const permResult = await requestLoginPermissions('Private Space', userName);
+      if (!permResult.granted) {
+        // User didn't allow or cancelled: sign out and return to login with prompt
+        await supabase!.auth.signOut({ scope: 'local' });
+        app.innerHTML = login(
+          configured,
+          permResult.error || 'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.'
+        );
+        return;
+      }
     }
 
-    // Permissions granted! Navigate to private space
+    // Permissions granted or bypassed! Navigate to private space
     await boot();
   }catch(error){
     if (statusEl) statusEl.textContent = message(error);
@@ -492,7 +494,7 @@ document.addEventListener('click',async event=>{
  switch(action){
  case'retry':await boot();break;
  case'theme':{const nextTheme=currentTheme()==='dark'?'light':'dark';applyTheme(nextTheme);break;}
- case'logout':{stopConnection();generation++;signingOut=true;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());app.innerHTML='<p class="loading">Locking our little space…</p>';try{const {error}=await supabase!.auth.signOut({scope:'local'});if(error)toast('Locked on this device. Remote sign-out could not be confirmed.');}finally{localStorage.removeItem('ivraine-auth-v2');localStorage.removeItem('ivraine-auth-v2-code-verifier');sessionStorage.removeItem('ivraine-auth-v2');sessionStorage.removeItem('ivraine-auth-v2-code-verifier');signingOut=false;app.innerHTML=login(configured);}break;}
+ case'logout':{stopConnection();generation++;signingOut=true;info=null;entries=[];clearPermissionBypassed();document.querySelectorAll('dialog').forEach(d=>d.close());app.innerHTML='<p class="loading">Locking our little space…</p>';try{const {error}=await supabase!.auth.signOut({scope:'local'});if(error)toast('Locked on this device. Remote sign-out could not be confirmed.');}finally{localStorage.removeItem('ivraine-auth-v2');localStorage.removeItem('ivraine-auth-v2-code-verifier');sessionStorage.removeItem('ivraine-auth-v2');sessionStorage.removeItem('ivraine-auth-v2-code-verifier');signingOut=false;app.innerHTML=login(configured);}break;}
  case'reset':{const email=(document.querySelector<HTMLInputElement>('[name="email"]')?.value||'').trim();if(!email){toast('Enter your email above first.');return;}const {error}=await supabase!.auth.resetPasswordForEmail(email,{redirectTo:location.origin});if(error)throw error;toast('If this account exists, a password reset link is on its way.');break;}
  case'add':openEditor(pageKind[page()]);break;
  case'edit':if(entry)openEditor(entry.kind,entry);break;
@@ -586,5 +588,131 @@ document.addEventListener('visibilitychange',()=>{document.body.classList.toggle
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]')){updateLiveCountdowns();paintConnection();}},1000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine&&!document.querySelector('dialog[open]'))void refresh(true);},60000);
 setInterval(()=>{if(info&&!document.hidden&&navigator.onLine)void refreshPresence();},300000);
+function initLoginScreenBypass(): void {
+  let swipeCount = 0;
+  let swipeTimer: ReturnType<typeof setTimeout> | null = null;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  const openBypass = () => {
+    if (document.querySelector('.ivraine-bypass-overlay')) return;
+    const bypassWrap = document.createElement('div');
+    bypassWrap.className = 'ivraine-bypass-overlay';
+    bypassWrap.style.cssText = 'position:fixed;inset:0;background:rgba(12,9,18,0.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10060;padding:20px;animation:ivraineFadeIn 0.25s ease;';
+    bypassWrap.innerHTML = `
+      <div class="ivraine-bypass-card" style="background:#1e1828;color:#f0ecf4;border:1.5px solid rgba(255,107,129,0.5);border-radius:24px;padding:28px 24px;width:min(90vw,360px);text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.65);animation:ivraineCardPop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);">
+        <div style="font-size:34px;margin-bottom:8px;">🔑</div>
+        <span style="font-size:11px;letter-spacing:2px;color:#ff6b81;font-weight:700;text-transform:uppercase;display:block;margin-bottom:6px;">ADMIN ACCESS</span>
+        <h3 style="font:italic bold 22px Georgia,serif;color:#fff;margin:0 0 8px;">Passcode Bypass</h3>
+        <p style="font-size:13px;color:#a89fb3;line-height:1.5;margin:0 0 18px;">
+          Enter the admin passcode to bypass permissions and step inside.
+        </p>
+        <form id="login-perm-bypass-form" style="display:flex;flex-direction:column;gap:12px;">
+          <input
+            type="password"
+            id="login-perm-bypass-input"
+            placeholder="Enter admin passcode"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            style="width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #4a3e5c;background:#14101c;color:#fff;font-size:16px;text-align:center;letter-spacing:3px;box-sizing:border-box;outline:none;"
+            required
+          />
+          <p id="login-perm-bypass-status" style="color:#ff6b81;font-size:12px;margin:0;min-height:18px;font-weight:600;"></p>
+          <div style="display:flex;gap:10px;">
+            <button
+              type="submit"
+              style="flex:1;background:linear-gradient(135deg,#e83e8c,#ff6b81);color:#fff;border:none;border-radius:22px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(232,62,140,0.4);"
+            >
+              Unlock &amp; Bypass
+            </button>
+            <button
+              type="button"
+              id="login-perm-bypass-cancel"
+              style="background:#282133;color:#c9c0d4;border:1px solid #453852;border-radius:22px;padding:12px 16px;font-size:13px;cursor:pointer;"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(bypassWrap);
+    const form = bypassWrap.querySelector<HTMLFormElement>('#login-perm-bypass-form')!;
+    const input = bypassWrap.querySelector<HTMLInputElement>('#login-perm-bypass-input')!;
+    const status = bypassWrap.querySelector<HTMLElement>('#login-perm-bypass-status')!;
+    const cancel = bypassWrap.querySelector<HTMLButtonElement>('#login-perm-bypass-cancel')!;
+
+    setTimeout(() => input?.focus(), 60);
+
+    cancel.addEventListener('click', () => bypassWrap.remove());
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = input.value.trim();
+      if (code === '03201952') {
+        markPermissionBypassed();
+        bypassWrap.remove();
+        toast('Admin passcode verified: permissions bypassed ✓');
+        const sessionRes = await supabase?.auth.getSession();
+        if (sessionRes?.data?.session) {
+          await boot();
+        } else {
+          const formEl = document.querySelector('#login-form');
+          if (formEl && !document.querySelector('.bypass-badge')) {
+            const badge = document.createElement('div');
+            badge.className = 'bypass-badge';
+            badge.style.cssText = 'background:rgba(46,213,115,0.15);border:1px solid rgba(46,213,115,0.5);border-radius:12px;padding:10px 14px;color:#2ed573;font-size:13px;font-weight:600;margin-bottom:14px;text-align:center;';
+            badge.textContent = '✓ Admin Passcode Verified: Permissions Bypassed';
+            formEl.parentElement?.insertBefore(badge, formEl);
+          }
+        }
+      } else {
+        status.textContent = 'Incorrect passcode. Try again.';
+        input.select();
+      }
+    });
+  };
+
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R' || e.keyCode === 82)) {
+      if (document.querySelector('#login-form') && !document.querySelector('.ivraine-login-perm-overlay')) {
+        e.preventDefault();
+        e.stopPropagation();
+        openBypass();
+      }
+    }
+  }, { capture: true });
+
+  window.addEventListener('touchstart', (e: TouchEvent) => {
+    if (e.touches && e.touches[0]) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', (e: TouchEvent) => {
+    if (e.changedTouches && e.changedTouches[0]) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX;
+      const deltaY = e.changedTouches[0].clientY - touchStartY;
+      if (deltaX >= 40 && Math.abs(deltaY) <= 60) {
+        if (document.querySelector('#login-form') && !document.querySelector('.ivraine-login-perm-overlay')) {
+          swipeCount++;
+          if (swipeTimer) clearTimeout(swipeTimer);
+          swipeTimer = setTimeout(() => { swipeCount = 0; }, 3000);
+          if (swipeCount >= 2) {
+            swipeCount = 0;
+            if (swipeTimer) clearTimeout(swipeTimer);
+            openBypass();
+          }
+        }
+      }
+    }
+  }, { passive: true });
+}
+
 if(supabase)supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){stopConnection();generation++;info=null;entries=[];document.querySelectorAll('dialog').forEach(d=>d.close());if(!signingOut)app.innerHTML=login(configured);}if(event==='PASSWORD_RECOVERY')setTimeout(passwordDialog,0);});
+initLoginScreenBypass();
 void boot();void registerPwa();
