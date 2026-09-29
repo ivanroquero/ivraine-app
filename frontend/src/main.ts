@@ -170,7 +170,7 @@ async function boot(){const gen=++generation;
      await supabase.auth.signOut({ scope: 'local' });
      info = null;
      entries = [];
-     app.innerHTML = login(configured, permResult.error || 'Notifications and location permissions are required to make the web app work properly. Please allow both permissions to access your private space ♡');
+     app.innerHTML = login(configured, permResult.error || 'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.');
      return;
    }
  }
@@ -472,7 +472,7 @@ document.addEventListener('submit',async event=>{
       await supabase!.auth.signOut({ scope: 'local' });
       app.innerHTML = login(
         configured,
-        permResult.error || 'Notifications and location permissions are required to make the web app work properly. Please allow both permissions to access your private space ♡'
+        permResult.error || 'Please turn on location and notifications to ensure your private space syncs smoothly and features work seamlessly.'
       );
       return;
     }
