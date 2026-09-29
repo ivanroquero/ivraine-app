@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "name": "Ivraine (Web & Backend)",
+      "path": "."
+    },
+    {
+      "name": "Ivraine Flutter (Mobile App)",
+      "path": "ivraine_flutter"
+    }
+  ],
+  "settings": {
+    "dart.projectSearchPaths": [
+      "ivraine_flutter"
+    ]
+  }
+}
