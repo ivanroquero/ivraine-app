@@ -12,9 +12,18 @@ import {
   getMonthsaryConfig,
   saveMonthsaryConfig,
   getMonthsaryVisibility,
-  DEFAULT_MONTHSARY_DATA
+  DEFAULT_MONTHSARY_DATA,
+  submitMonthsaryAnswers,
+  getStoredMonthsaryAnswers,
+  deleteMonthsarySubmission,
+  MONTHSARY_QUESTIONS
 } from './monthsary3d';
-import type { MonthsaryConfig, MonthsaryButtonVisibility } from '@api/types';
+import type {
+  MonthsaryConfig,
+  MonthsaryButtonVisibility,
+  MonthsarySubmission,
+  MonthsaryAnswerItem
+} from '@api/types';
 import { initAntiInspect } from './antiInspect';
 import { initVpnGuard } from './vpnDetector';
 
@@ -1676,6 +1685,9 @@ function setupAppConfigControls() {
     btnTest3D?.addEventListener('click', () => {
       openMonthsaryExperience('Admin');
     });
+
+    // Setup 1st Monthsary Quiz Answers Management
+    setupMonthsaryAnswersUI();
   }
 
   // Fetch latest config from server to stay up-to-date
@@ -1686,6 +1698,198 @@ function setupAppConfigControls() {
       if (cfg.monthsary) updateMonthsaryUI(cfg.monthsary);
     }
   });
+}
+
+// -----------------------------------------------------------------------------------------
+// 1ST MONTHSARY QUIZ ANSWERS MANAGEMENT IN ADMIN
+// -----------------------------------------------------------------------------------------
+let monthsaryAnswersList: MonthsarySubmission[] = [];
+
+async function loadMonthsaryAnswers(): Promise<void> {
+  const container = document.getElementById('monthsary-answers-list');
+  const countBadge = document.getElementById('monthsary-answers-count-badge');
+  if (!container) return;
+
+  // 1. Get from local storage first (instant rendering)
+  const localList = getStoredMonthsaryAnswers();
+  let merged: MonthsarySubmission[] = [...localList];
+
+  // 2. Fetch from backend/Supabase API
+  try {
+    const res = await fetch('/api/monthsary/answers', { signal: AbortSignal.timeout(3500) });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.submissions)) {
+        for (const sub of data.submissions) {
+          if (!merged.some(m => m.id === sub.id)) {
+            merged.push(sub);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  merged.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  monthsaryAnswersList = merged;
+
+  try {
+    localStorage.setItem('ivraine_monthsary_submissions', JSON.stringify(merged));
+  } catch {}
+
+  renderMonthsaryAnswersUI(merged);
+}
+
+function renderMonthsaryAnswersUI(submissions: MonthsarySubmission[]): void {
+  const container = document.getElementById('monthsary-answers-list');
+  const countBadge = document.getElementById('monthsary-answers-count-badge');
+  if (!container) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${submissions.length} ${submissions.length === 1 ? 'Submission' : 'Submissions'}`;
+    countBadge.style.background = submissions.length > 0 ? 'rgba(255,64,129,0.18)' : 'rgba(255,255,255,0.06)';
+    countBadge.style.color = submissions.length > 0 ? '#ff4081' : 'var(--muted)';
+  }
+
+  if (submissions.length === 0) {
+    container.innerHTML = `
+      <div style="background:#201a2b;border:1px solid #362947;border-radius:14px;padding:24px;text-align:center;color:var(--muted);">
+        <div style="font-size:32px;margin-bottom:8px;">💌</div>
+        <strong style="color:#fff;display:block;font-size:15px;margin-bottom:6px;">No Quiz Responses Received Yet</strong>
+        <p style="font-size:13px;line-height:1.5;max-width:440px;margin:0 auto 14px;">
+          When Loraine completes the 5-question 1st Monthsary quiz, her choices and reactions will appear here in real-time.
+        </p>
+        <button class="nav-btn" id="btn-create-sample-answer" style="font-size:12px;padding:6px 16px;background:rgba(255,64,129,0.15);color:#ff4081;border-color:rgba(255,64,129,0.35);">
+          ✨ Generate Sample Response for Preview
+        </button>
+      </div>
+    `;
+
+    document.getElementById('btn-create-sample-answer')?.addEventListener('click', () => {
+      createSampleMonthsarySubmission();
+    });
+    return;
+  }
+
+  container.innerHTML = submissions.map(sub => {
+    const formattedDate = new Date(sub.timestamp).toLocaleString();
+    const relTime = timeAgo(sub.timestamp);
+
+    const questionsHtml = sub.answers.map(ans => `
+      <div class="submission-q-item">
+        <div class="submission-q-title">
+          <span style="color:#ff85a2;">Q${ans.questionId}:</span>
+          <span>${escapeHtml(ans.question)}</span>
+        </div>
+        <div class="submission-answer-choice">
+          <span class="submission-key-badge">${escapeHtml(ans.selectedKey)}</span>
+          <span>${escapeHtml(ans.selectedText)}</span>
+        </div>
+        <div class="submission-reaction-text">
+          💬 Ivan's Reaction: &ldquo;${escapeHtml(ans.reaction)}&rdquo;
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="monthsary-submission-card" id="submission-card-${sub.id}">
+        <div class="submission-topbar">
+          <div class="submission-user-badge">
+            <div class="submission-avatar">💖</div>
+            <div>
+              <div style="font-weight:700;font-size:15px;color:#fff;display:flex;align-items:center;gap:6px;">
+                <span>${escapeHtml(sub.user || 'Loraine')}</span>
+                <span style="font-size:11px;background:rgba(255,64,129,0.2);color:#ff85a2;padding:2px 8px;border-radius:10px;font-weight:700;">1st Monthsary Quiz</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">
+                ${relTime} · ${formattedDate}
+              </div>
+            </div>
+          </div>
+          <button class="submission-delete-btn" data-id="${sub.id}">
+            🗑️ Delete Response
+          </button>
+        </div>
+
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Summary:</span>
+          ${sub.answers.map(a => `<span style="background:#2a1f36;color:#ff85a2;border:1px solid #4a3458;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">Q${a.questionId}: ${a.selectedKey}</span>`).join('')}
+        </div>
+
+        <div class="submission-q-list">
+          ${questionsHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Attach individual delete handlers
+  container.querySelectorAll<HTMLButtonElement>('.submission-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!id) return;
+      if (!confirm('Are you sure you want to delete this quiz response?')) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+      await deleteMonthsarySubmission(id);
+      monthsaryAnswersList = monthsaryAnswersList.filter(s => s.id !== id);
+      renderMonthsaryAnswersUI(monthsaryAnswersList);
+    });
+  });
+}
+
+function createSampleMonthsarySubmission(): void {
+  const sampleAnswers: MonthsaryAnswerItem[] = MONTHSARY_QUESTIONS.map((q, idx) => {
+    const chosenOpt = idx === 0 ? q.options[3] : idx === 1 ? q.options[3] : idx === 2 ? q.options[1] : idx === 3 ? q.options[3] : q.options[0];
+    return {
+      questionId: q.id,
+      question: q.question,
+      selectedKey: chosenOpt.key,
+      selectedText: chosenOpt.text,
+      reaction: chosenOpt.reaction
+    };
+  });
+
+  const sample: MonthsarySubmission = {
+    id: `ans_sample_${Date.now()}`,
+    user: 'Loraine (Sample Test)',
+    timestamp: new Date().toISOString(),
+    answers: sampleAnswers,
+    summary: sampleAnswers.map(a => `Q${a.questionId}: ${a.selectedKey}`).join(' • ')
+  };
+
+  void submitMonthsaryAnswers(sample);
+  monthsaryAnswersList = [sample, ...monthsaryAnswersList.filter(s => s.id !== sample.id)];
+  renderMonthsaryAnswersUI(monthsaryAnswersList);
+}
+
+function setupMonthsaryAnswersUI(): void {
+  const btnRefresh = document.getElementById('btn-refresh-monthsary-answers');
+  const btnClearAll = document.getElementById('btn-clear-monthsary-answers');
+  const btnPreview = document.getElementById('btn-preview-monthsary-answers');
+
+  btnRefresh?.addEventListener('click', () => {
+    void loadMonthsaryAnswers();
+  });
+
+  btnClearAll?.addEventListener('click', async () => {
+    if (!monthsaryAnswersList.length) {
+      alert('There are no quiz responses to delete.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete all ${monthsaryAnswersList.length} quiz response submissions?`)) return;
+
+    await deleteMonthsarySubmission('all');
+    monthsaryAnswersList = [];
+    renderMonthsaryAnswersUI([]);
+  });
+
+  btnPreview?.addEventListener('click', () => {
+    createSampleMonthsarySubmission();
+  });
+
+  // Initial load
+  void loadMonthsaryAnswers();
 }
 
 // Real-time synchronization across browser tabs
@@ -1753,6 +1957,8 @@ try {
       if (event.data.config) {
         updateMonthsaryUI(event.data.config);
       }
+    } else if (event.data?.type === 'MONTHSARY_ANSWERS_ADDED' || event.data?.type === 'MONTHSARY_ANSWERS_DELETED') {
+      void loadMonthsaryAnswers();
     }
   };
 } catch {}
@@ -1773,6 +1979,8 @@ window.addEventListener('storage', (e) => {
     try {
       updateMonthsaryUI(JSON.parse(e.newValue));
     } catch {}
+  } else if (e.key === 'ivraine_monthsary_submissions') {
+    void loadMonthsaryAnswers();
   }
 });
 

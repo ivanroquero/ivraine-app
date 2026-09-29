@@ -265,3 +265,34 @@ export interface AppConfigResponse {
   error?: string;
 }
 
+// -----------------------------------------------------------------------------
+// Endpoint 8: /api/monthsary/answers
+// -----------------------------------------------------------------------------
+export interface MonthsaryAnswerItem {
+  questionId: number;
+  question: string;
+  selectedKey: string;
+  selectedText: string;
+  reaction: string;
+}
+
+export interface MonthsarySubmission {
+  id: string;
+  user: string;
+  timestamp: string;
+  answers: MonthsaryAnswerItem[];
+  summary?: string;
+  ip?: string;
+  deviceId?: string;
+  userAgent?: string;
+}
+
+export interface MonthsaryAnswersResponse {
+  status: 'ok' | 'error';
+  success: boolean;
+  submissions?: MonthsarySubmission[];
+  submission?: MonthsarySubmission;
+  deletedId?: string;
+  error?: string;
+}
+

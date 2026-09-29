@@ -552,6 +552,133 @@
       box-shadow: 0 0 8px var(--pink);
     }
 
+    /* Monthsary Quiz Submissions Card & Items */
+    .monthsary-submission-card {
+      background: #1c1626;
+      border: 1.5px solid #3d2c4e;
+      border-radius: 18px;
+      padding: 20px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    .monthsary-submission-card:hover {
+      border-color: #ff758c;
+      box-shadow: 0 8px 24px rgba(255, 107, 129, 0.15);
+    }
+    .submission-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .submission-user-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .submission-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff4081, #9333ea);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #fff;
+    }
+    .submission-q-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .submission-q-item {
+      background: #241c30;
+      border: 1px solid #433157;
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .submission-q-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .submission-answer-choice {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #ffd6e4;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    .submission-key-badge {
+      background: #ff4081;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .submission-reaction-text {
+      font-size: 12px;
+      font-style: italic;
+      color: #c4b5fd;
+      padding-left: 28px;
+    }
+    .submission-delete-btn {
+      background: rgba(255, 51, 102, 0.15);
+      border: 1px solid rgba(255, 51, 102, 0.35);
+      color: #ff6b8b;
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+    }
+    .submission-delete-btn:hover {
+      background: #ff3366;
+      color: #fff;
+      border-color: #ff3366;
+    }
+
+    [data-theme="light"] .monthsary-submission-card {
+      background: #ffffff;
+      border: 1.5px solid #ebd0dd;
+      box-shadow: 0 4px 16px rgba(120, 30, 70, 0.08);
+    }
+    [data-theme="light"] .submission-topbar {
+      border-bottom-color: #f0dfe7;
+    }
+    [data-theme="light"] .submission-q-item {
+      background: #fdf6f9;
+      border-color: #ebdbe3;
+    }
+    [data-theme="light"] .submission-q-title {
+      color: #170712;
+    }
+    [data-theme="light"] .submission-answer-choice {
+      color: #6e0e33;
+    }
+    [data-theme="light"] .submission-reaction-text {
+      color: #7c3aed;
+    }
+
     /* Location Cards & Map Elements */
     .location-card {
       background: #231c2d;
@@ -1842,6 +1969,40 @@
           <button class="nav-btn primary" id="btn-save-monthsary-letter">💾 Save Monthsary Letter</button>
           <button class="nav-btn" id="btn-test-monthsary-3d" style="background:#3b1e36;border-color:#ff4081;color:#ff85a2;">✨ Test 3D Experience</button>
           <span id="monthsary-save-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+
+      <!-- 1st Monthsary Quiz Answers Submissions Card -->
+      <div class="info-card" id="card-monthsary-answers">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <h3 style="margin-bottom:0;">💌 Loraine's 1st Monthsary Quiz Responses</h3>
+              <span class="badge-tag" id="monthsary-answers-count-badge">0 Submissions</span>
+            </div>
+            <p style="color:var(--muted);font-size:13px;margin:0;">
+              View the answers chosen by Loraine during the 3D 1st Monthsary experience. Stored in database and synced live.
+            </p>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button class="nav-btn" id="btn-refresh-monthsary-answers" style="font-size:12px;padding:6px 14px;">🔄 Refresh Answers</button>
+            <button class="nav-btn" id="btn-preview-monthsary-answers" style="font-size:12px;padding:6px 14px;background:#2d1e36;color:#ff85a2;border-color:#ff4081;">✨ Test Sample</button>
+            <button class="nav-btn" id="btn-clear-monthsary-answers" style="font-size:12px;padding:6px 14px;background:rgba(255,51,102,0.15);color:#ff6b8b;border-color:rgba(255,51,102,0.35);">🗑️ Delete All</button>
+          </div>
+        </div>
+
+        <!-- Answers List Container -->
+        <div id="monthsary-answers-list" style="display:flex;flex-direction:column;gap:16px;">
+          <div style="background:#201a2b;border:1px solid #362947;border-radius:14px;padding:24px;text-align:center;color:var(--muted);">
+            <div style="font-size:32px;margin-bottom:8px;">💌</div>
+            <strong style="color:#fff;display:block;font-size:15px;margin-bottom:6px;">No Quiz Responses Received Yet</strong>
+            <p style="font-size:13px;line-height:1.5;max-width:440px;margin:0 auto 14px;">
+              When Loraine completes the 5-question 1st Monthsary quiz, her choices and reactions will appear here in real-time.
+            </p>
+            <button class="nav-btn" id="btn-create-sample-answer" style="font-size:12px;padding:6px 16px;background:rgba(255,64,129,0.15);color:#ff4081;border-color:rgba(255,64,129,0.35);">
+              ✨ Generate Sample Response for Preview
+            </button>
+          </div>
         </div>
       </div>
 

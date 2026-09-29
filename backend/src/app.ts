@@ -511,6 +511,159 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     return res.status(200).json({ status: 'ok', success: true, config: inMemoryAppConfig });
   });
 
+  // 1st Monthsary Quiz Answers endpoints
+  let inMemoryMonthsarySubmissions: any[] = [];
+
+  app.get('/api/monthsary/answers', async (_req, res) => {
+    let allSubmissions: any[] = [...inMemoryMonthsarySubmissions];
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        const response = await fetch(
+          `${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?action=eq.MONTHSARY_QUIZ_SUBMISSION&order=created_at.desc&limit=100`,
+          {
+            headers: {
+              apikey: config.supabaseKey,
+              Authorization: `Bearer ${config.supabaseKey}`
+            }
+          }
+        );
+        if (response.ok) {
+          const rows = await response.json();
+          if (Array.isArray(rows)) {
+            for (const r of rows) {
+              if (r.details) {
+                try {
+                  const parsed = JSON.parse(r.details);
+                  if (parsed && parsed.id && Array.isArray(parsed.answers)) {
+                    if (!allSubmissions.some(s => s.id === parsed.id)) {
+                      allSubmissions.push(parsed);
+                    }
+                  }
+                } catch {}
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    allSubmissions.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    inMemoryMonthsarySubmissions = allSubmissions;
+    res.json({ status: 'ok', success: true, submissions: allSubmissions });
+  });
+
+  app.post('/api/monthsary/answers', async (req, res) => {
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    }
+
+    const answers = Array.isArray(body.answers) ? body.answers : [];
+    if (answers.length === 0) {
+      return res.status(400).json({ status: 'error', success: false, error: 'No answers provided.' });
+    }
+
+    const user = typeof body.user === 'string' && body.user.trim() ? body.user.trim() : 'Loraine';
+    const timestamp = typeof body.timestamp === 'string' ? body.timestamp : new Date().toISOString();
+    const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : `ans_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const deviceId = typeof body.deviceId === 'string' ? body.deviceId : '';
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
+    const ip = extractClientIp(req);
+
+    const summaryParts = answers.map((a: any) => `Q${a.questionId}: ${a.selectedKey}`);
+    const summary = summaryParts.join(' • ');
+
+    const newSubmission = {
+      id,
+      user,
+      timestamp,
+      answers,
+      summary,
+      ip,
+      deviceId,
+      userAgent
+    };
+
+    inMemoryMonthsarySubmissions = inMemoryMonthsarySubmissions.filter(s => s.id !== id);
+    inMemoryMonthsarySubmissions.unshift(newSubmission);
+    if (inMemoryMonthsarySubmissions.length > 500) inMemoryMonthsarySubmissions.length = 500;
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: config.supabaseKey,
+            Authorization: `Bearer ${config.supabaseKey}`,
+            Prefer: 'return=minimal'
+          },
+          body: JSON.stringify({
+            ip,
+            section: 'Private Space',
+            action: 'MONTHSARY_QUIZ_SUBMISSION',
+            details: JSON.stringify(newSubmission),
+            user_name: user,
+            created_at: timestamp
+          })
+        });
+      } catch {}
+    }
+
+    res.json({ status: 'ok', success: true, submission: newSubmission });
+  });
+
+  app.delete('/api/monthsary/answers', async (req, res) => {
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    }
+
+    const targetId = (req.query?.id as string) || body.id;
+
+    if (!targetId) {
+      return res.status(400).json({ status: 'error', success: false, error: 'Missing submission id to delete.' });
+    }
+
+    if (targetId === 'all') {
+      inMemoryMonthsarySubmissions = [];
+
+      if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+        try {
+          await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?action=eq.MONTHSARY_QUIZ_SUBMISSION`, {
+            method: 'DELETE',
+            headers: {
+              apikey: config.supabaseKey,
+              Authorization: `Bearer ${config.supabaseKey}`
+            }
+          });
+        } catch {}
+      }
+
+      return res.json({ status: 'ok', success: true, deletedId: 'all' });
+    }
+
+    inMemoryMonthsarySubmissions = inMemoryMonthsarySubmissions.filter(s => s.id !== targetId);
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        await fetch(
+          `${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?action=eq.MONTHSARY_QUIZ_SUBMISSION&details=like.*${encodeURIComponent(targetId)}*`,
+          {
+            method: 'DELETE',
+            headers: {
+              apikey: config.supabaseKey,
+              Authorization: `Bearer ${config.supabaseKey}`
+            }
+          }
+        );
+      } catch {}
+    }
+
+    res.json({ status: 'ok', success: true, deletedId: targetId });
+  });
+
   app.get('/api/vpn-check', handleVpnCheck);
   app.post('/api/vpn-check', handleVpnCheck);
   app.get('/api/admin/logs', async (req, res) => {

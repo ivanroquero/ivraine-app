@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import confetti from 'canvas-confetti';
 import './monthsary3d.css';
-import type { MonthsaryConfig, MonthsaryButtonVisibility } from '@api/types';
+import type {
+  MonthsaryConfig,
+  MonthsaryButtonVisibility,
+  MonthsaryAnswerItem,
+  MonthsarySubmission,
+  MonthsaryAnswersResponse
+} from '@api/types';
 
 // Default configuration for 1st Monthsary
 export const DEFAULT_MONTHSARY_DATA: MonthsaryConfig = {
@@ -119,6 +125,89 @@ export function getMonthsaryVisibility(): MonthsaryButtonVisibility {
 export function setMonthsaryVisibility(val: MonthsaryButtonVisibility): void {
   saveMonthsaryConfig({ buttonVisibility: val });
 }
+
+// -----------------------------------------------------------------------------
+// Monthsary Quiz Answers Submission & Management Helpers
+// -----------------------------------------------------------------------------
+export async function submitMonthsaryAnswers(submission: MonthsarySubmission): Promise<boolean> {
+  // 1. Save to local storage cache
+  try {
+    const list: MonthsarySubmission[] = getStoredMonthsaryAnswers();
+    const updated = [submission, ...list.filter(s => s.id !== submission.id)];
+    localStorage.setItem('ivraine_monthsary_submissions', JSON.stringify(updated));
+  } catch {}
+
+  // 2. Broadcast immediately to any open Admin dashboard tab
+  try {
+    const channel = new BroadcastChannel('ivraine_admin_channel');
+    channel.postMessage({ type: 'MONTHSARY_ANSWERS_ADDED', submission });
+  } catch {}
+
+  // 3. Post to backend/Supabase API
+  try {
+    await fetch('/api/monthsary/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submission)
+    });
+  } catch {}
+
+  // 4. Also track in main visitor activity log
+  try {
+    void fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: 'Private Space',
+        action: '💌 Answered 1st Monthsary Quiz',
+        user: submission.user || 'Loraine',
+        details: `5 Questions Answered: ${submission.summary || ''}`
+      })
+    });
+  } catch {}
+
+  return true;
+}
+
+export function getStoredMonthsaryAnswers(): MonthsarySubmission[] {
+  try {
+    const raw = localStorage.getItem('ivraine_monthsary_submissions');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export async function deleteMonthsarySubmission(id: string): Promise<boolean> {
+  // 1. Delete from local storage
+  try {
+    if (id === 'all') {
+      localStorage.removeItem('ivraine_monthsary_submissions');
+    } else {
+      const list = getStoredMonthsaryAnswers().filter(s => s.id !== id);
+      localStorage.setItem('ivraine_monthsary_submissions', JSON.stringify(list));
+    }
+  } catch {}
+
+  // 2. Broadcast to other tabs
+  try {
+    const channel = new BroadcastChannel('ivraine_admin_channel');
+    channel.postMessage({ type: 'MONTHSARY_ANSWERS_DELETED', id });
+  } catch {}
+
+  // 3. Delete from backend/Supabase
+  try {
+    const res = await fetch(`/api/monthsary/answers?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 
 // -----------------------------------------------------------------------------
 // Web Audio Synthesizer: Sweet Romantic Chimes & Background Music Box
@@ -855,6 +944,7 @@ function startPhase2Quiz(
   onComplete: () => void
 ): void {
   let currentQuestionIndex = 0;
+  const collectedAnswers: MonthsaryAnswerItem[] = [];
 
   const renderQuestion = () => {
     const q = MONTHSARY_QUESTIONS[currentQuestionIndex];
@@ -901,6 +991,15 @@ function startPhase2Quiz(
         optionBtns.forEach(b => (b.disabled = true));
         btn.classList.add('selected');
 
+        // Record chosen answer
+        collectedAnswers.push({
+          questionId: q.id,
+          question: q.question,
+          selectedKey: matched.key,
+          selectedText: matched.text,
+          reaction: matched.reaction
+        });
+
         // Sound, haptics & confetti
         playChimeSound();
         try { navigator.vibrate?.([30, 20, 40]); } catch {}
@@ -926,7 +1025,17 @@ function startPhase2Quiz(
             currentQuestionIndex++;
             renderQuestion();
           } else {
-            // All 5 answered!
+            // All 5 answered! Submit to backend, Supabase, and Admin
+            const summaryParts = collectedAnswers.map(a => `Q${a.questionId}: ${a.selectedKey}`);
+            const submission: MonthsarySubmission = {
+              id: `ans_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              user: 'Loraine',
+              timestamp: new Date().toISOString(),
+              answers: collectedAnswers,
+              summary: summaryParts.join(' • ')
+            };
+            void submitMonthsaryAnswers(submission);
+
             confetti({
               particleCount: 100,
               spread: 100,
