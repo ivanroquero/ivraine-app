@@ -195,3 +195,147 @@
 .voice-preview-btns{display:flex;align-items:center;gap:8px;}
 .voice-existing-card{background:rgba(255,255,255,.85);padding:10px 14px;border-radius:14px;border:1px solid #ebd0dd;margin-bottom:8px;}
 [data-theme="dark"] .voice-existing-card{background:rgba(30,22,26,.85);border-color:#5c3545;}
+
+/* ==================== MODERN FULL-NATIVE PWA STYLES ==================== */
+
+/* Standalone Native App Mode (Android TWA, iOS Home Screen, Desktop PWA) */
+:root[data-pwa="standalone"],
+html.is-standalone {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior-y: none;
+}
+
+:root[data-pwa="standalone"] body,
+html.is-standalone body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+:root[data-pwa="standalone"] .topbar,
+html.is-standalone .topbar {
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+
+/* Hide web-only install buttons when already running inside native app container */
+:root[data-pwa="standalone"] #install,
+html.is-standalone #install,
+:root[data-pwa="standalone"] .pwa-install-banner,
+html.is-standalone .pwa-install-banner,
+:root[data-pwa="standalone"] [data-action="install"],
+html.is-standalone [data-action="install"] {
+  display: none !important;
+}
+
+/* Network Status Pill */
+.network-pill {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translate(-50%, -60px);
+  z-index: 10000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.network-pill.is-visible {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.network-pill.is-offline {
+  background: #2b1f24;
+  color: #fca5a5;
+  border: 1px solid #7f1d1d;
+}
+
+.network-pill.is-online {
+  background: #14241b;
+  color: #86efac;
+  border: 1px solid #166534;
+}
+
+/* Modern Install Sheet UI */
+.install-sheet-body {
+  padding: 4px 0 12px;
+}
+
+.install-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.install-app-icon {
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.install-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.install-tags .tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(128, 59, 79, 0.1);
+  color: var(--rose);
+}
+
+.ios-install-steps {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.ios-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(128, 59, 79, 0.05);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.ios-step .step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--rose);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ios-step p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+

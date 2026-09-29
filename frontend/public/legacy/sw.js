@@ -2,7 +2,7 @@
 // Each release has a complete, separate cache: shell and encrypted book move together.
 const CACHE = 'ivraine-pwa-vpn-fedc82066a37cee1';
 const PREFIX = 'ivraine-pwa-';
-const FILES = ["index.html", "lock.css", "lock.js", "proposal.css", "proposal.js", "vpn-shield.css", "vpn-shield.js", "pwa.js", "manifest.webmanifest", "scrapbook.sealed", "icons/couple-180.png", "icons/couple-192.png", "icons/couple-32.png", "icons/couple-512.png", "icons/couple-maskable-512.png"];
+const FILES = ["index.html", "lock.css", "lock.js", "proposal.css", "proposal.js", "vpn-shield.css", "vpn-shield.js", "pwa.js", "manifest.webmanifest", "manifest.json", "scrapbook.sealed", "icons/couple-180.png", "icons/couple-192.png", "icons/couple-32.png", "icons/couple-512.png", "icons/couple-maskable-512.png"];
 const ROOT = new URL('./', self.registration.scope).href;
 const urls = FILES.map(path => new URL(path, ROOT).href);
 const allowed = new Set(urls);

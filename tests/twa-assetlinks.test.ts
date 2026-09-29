@@ -53,7 +53,9 @@ test('TWA: backend serves /.well-known/assetlinks.json and handles /api/admin/as
     trustProxy: 1
   });
 
-  const server = app.listen(0, '127.0.0.1');
+  const server: any = await new Promise(resolve => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
   const port = (server.address() as { port: number }).port;
   const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -94,6 +96,7 @@ test('TWA: backend serves /.well-known/assetlinks.json and handles /api/admin/as
     assert.equal(updatedData[0].target.package_name, 'com.test.pwabuilder.twa');
     assert.ok(updatedData[0].target.sha256_cert_fingerprints.includes('AA:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:00:AA:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:00'));
   } finally {
+    server.closeAllConnections?.();
     server.close();
   }
 });

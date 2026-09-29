@@ -6,8 +6,14 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#18151f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ivraine">
+  <meta name="application-name" content="Ivraine">
   <link rel="icon" href="/icons/couple-32.png">
   <link rel="apple-touch-icon" href="/icons/couple-180.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <title>Ivraine Admin — Space & Scrapbook Management</title>
   <link rel="stylesheet" href="/src/proposal.css">
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
@@ -2278,8 +2284,20 @@
             <li>Open the zip file and find <code style="color:#d8b4fe;">assetlinks.json</code> inside.</li>
             <li>Copy the <code style="color:#d8b4fe;">package_name</code> and <code style="color:#d8b4fe;">sha256_cert_fingerprints</code> and paste them into the form above.</li>
             <li>Click <strong>Save &amp; Apply AssetLinks</strong>.</li>
-            <li><strong>Important:</strong> On your Android phone, if Chrome previously cached a failed verification: go to Android <strong>Settings &gt; Apps &gt; Chrome &gt; Force Stop</strong>, then reopen your TWA app. It will now open in full standalone mode with <strong>NO Chrome address bar</strong>!</li>
+            <li><strong>Important for Android:</strong> If Chrome previously showed the URL bar due to cached verification: on your Android phone, go to <em>Settings &gt; Apps &gt; Chrome &gt; Force Stop</em>, then reopen Ivraine. Chrome will re-verify the matching fingerprint and open in 100% full-screen native mode with <strong>NO Chrome address bar</strong>!</li>
           </ol>
+        </div>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+          <h4 style="font-size:13px;color:#fff;margin-bottom:8px;">🍎 Apple (iOS / macOS) Full Native Setup</h4>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px;">
+            Ivraine is pre-configured with Apple WebKit standalone tags (<code style="color:#d8b4fe;">apple-mobile-web-app-capable</code>, <code style="color:#d8b4fe;">black-translucent</code> status bar, safe-area insets, and in-app link interception).
+          </p>
+          <ul style="font-size:12px;color:var(--muted);line-height:1.6;padding-left:18px;">
+            <li><strong>When adding via Safari:</strong> Tap <em>Share &gt; Add to Home Screen &gt; Add</em>. Ivraine runs in 100% full-screen native mode with <strong>NO Safari navigation or address bar</strong>.</li>
+            <li><strong>When packaging via PWABuilder for iOS:</strong> Download the iOS zip package from PWABuilder. The manifest, app icons, and standalone configurations are bundled automatically for Xcode.</li>
+            <li><strong>In-App Link Interceptor:</strong> Active on all internal links, preventing iOS from kicking out to Safari.</li>
+          </ul>
         </div>
       </div>
 

@@ -21,7 +21,7 @@ async function toApp(type,payload){try{const windows=await self.clients.matchAll
 /* Cache the offline page AND all static Vite build assets so the app shell works offline. */
 self.addEventListener('install',event=>{event.waitUntil((async()=>{
  const cache=await caches.open(CACHE);
- await cache.addAll(['/offline.html','/offline.css']);
+ await cache.addAll(['/offline.html','/offline.css','/manifest.webmanifest','/manifest.json']).catch(()=>{});
  /* Cache all pre-known static resources; the dynamic Vite assets are picked up on fetch. */
  try{const manifest=await fetch('/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);if(manifest){const icons=Object.values(manifest.icons||{}).map((i)=>i.src).filter(Boolean);await cache.addAll(icons.filter(Boolean)).catch(()=>{});}}catch{}
  await self.skipWaiting();

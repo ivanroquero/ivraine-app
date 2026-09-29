@@ -1,1 +1,51 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Ivraine — Offline</title><link rel="stylesheet" href="/offline.css"></head><body><main><span>♡</span><h1>Our memories will be here.</h1><p>You’re offline. Reconnect to open your private scrapbook.</p><a href="/">Try again</a></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#17141D">
+  <title>Ivraine — Offline</title>
+  <link rel="stylesheet" href="/offline.css">
+  <link rel="icon" href="/icons/couple-32.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+  <main class="offline-card">
+    <div class="offline-heart" aria-hidden="true">♡</div>
+    <span class="offline-eyebrow">OFFLINE SPACE</span>
+    <h1>Our memories will be here.</h1>
+    <p>You’re currently offline or on a weak connection. Cached stories and photos are preserved. Once your connection returns, your scrapbook will sync automatically.</p>
+    <div class="offline-actions">
+      <button id="retry-btn" type="button" class="primary-btn">Check Connection</button>
+      <a href="/" class="secondary-btn">Reload Page</a>
+    </div>
+    <p id="retry-status" class="status-msg"></p>
+  </main>
+  <script>
+    window.addEventListener('online', function() {
+      var s = document.getElementById('retry-status');
+      if (s) s.textContent = 'Connection restored! Refreshing…';
+      setTimeout(function() { location.reload(); }, 600);
+    });
+    var btn = document.getElementById('retry-btn');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        btn.disabled = true;
+        btn.textContent = 'Checking…';
+        var s = document.getElementById('retry-status');
+        fetch('/manifest.json?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+          .then(function() {
+            if (s) s.textContent = 'Back online! Reloading…';
+            setTimeout(function() { location.reload(); }, 400);
+          })
+          .catch(function() {
+            btn.disabled = false;
+            btn.textContent = 'Check Connection';
+            if (s) s.textContent = 'Still offline. Check Wi-Fi or mobile data.';
+          });
+      });
+    }
+  </script>
+</body>
+</html>

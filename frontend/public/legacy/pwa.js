@@ -11,13 +11,34 @@
  let registration = null;
  let reloadForUpdate = false;
  const standalone = window.matchMedia('(display-mode: standalone)');
- const isInstalled = () => installedThisSession || standalone.matches || navigator.standalone === true;
+ const isInstalled = () => installedThisSession || standalone.matches || navigator.standalone === true || document.referrer.startsWith('android-app://');
+ if (isInstalled()) {
+   document.documentElement.classList.add('is-standalone');
+   document.documentElement.dataset.pwa = 'standalone';
+ }
+ // In-app link interceptor: keep navigation strictly inside native app container
+ document.addEventListener('click', event => {
+   const a = event.target && event.target.closest ? event.target.closest('a') : null;
+   if (!a || !a.href) return;
+   const href = a.getAttribute('href') || '';
+   if (href.startsWith('#') || href.startsWith('javascript:') || a.hasAttribute('download')) return;
+   if (a.origin === window.location.origin && (isInstalled() || /iPhone|iPad|iPod/.test(navigator.userAgent))) {
+     event.preventDefault();
+     window.location.assign(a.href);
+   }
+ }, { capture: true });
  function refreshInstallUI() {
   installButton.hidden = !pendingPrompt || isInstalled();
   helpButton.hidden = isInstalled() || !!pendingPrompt;
  }
  refreshInstallUI();
- standalone.addEventListener('change', refreshInstallUI);
+ standalone.addEventListener('change', () => {
+   if (isInstalled()) {
+     document.documentElement.classList.add('is-standalone');
+     document.documentElement.dataset.pwa = 'standalone';
+   }
+   refreshInstallUI();
+ });
  window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
   pendingPrompt = event;

@@ -4,22 +4,34 @@
   "short_name": "Ivraine",
   "description": "Our little scrapbook. Just between us.",
   "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "display_override": [
+    "window-controls-overlay",
     "standalone",
-    "fullscreen",
-    "minimal-ui"
+    "minimal-ui",
+    "fullscreen"
   ],
   "background_color": "#ededf0",
   "theme_color": "#ededf0",
   "categories": [
     "lifestyle",
     "personalization",
-    "entertainment"
+    "entertainment",
+    "social",
+    "productivity"
   ],
+  "prefer_related_applications": false,
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "edge_side_panel": {
+    "preferred_width": 460
+  },
   "icons": [
     {
       "src": "/icons/couple-192.png",
@@ -44,6 +56,34 @@
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/couple-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/couple-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop.png",
+      "sizes": "1440x1872",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Ivraine Scrapbook & Timeline"
+    },
+    {
+      "src": "/screenshots/mobile.png",
+      "sizes": "390x2660",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Ivraine Mobile Private Space"
     }
   ],
   "shortcuts": [
@@ -60,6 +100,22 @@
       "description": "Open our private space",
       "url": "/index.html?space=true",
       "icons": [{ "src": "/icons/couple-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Admin Controls",
+      "short_name": "Admin",
+      "description": "Open scrapbook admin dashboard",
+      "url": "/admin.html",
+      "icons": [{ "src": "/icons/couple-192.png", "sizes": "192x192" }]
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/index.html?space=true&shared=true",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
