@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Ivraine Flutter (Debug)",
+            "cwd": "ivraine_flutter",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "Ivraine Flutter (Profile mode)",
+            "cwd": "ivraine_flutter",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "Ivraine Flutter (Release mode)",
+            "cwd": "ivraine_flutter",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}
