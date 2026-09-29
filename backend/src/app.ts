@@ -393,6 +393,124 @@ export function createApp(config:Config, clientFactory?:(token:string)=>Supabase
     const ip = extractClientIp(req);
     res.json({ ip });
   });
+
+  const DEFAULT_APP_CONFIG = {
+    proposalVisibility: 'visible' as const,
+    defaultEntry: 'scrapbook' as const,
+    monthsary: {
+      enabled: true,
+      buttonVisibility: 'visible' as const,
+      letterTitle: 'Happy 1st Monthsary, My Love ♡',
+      letterGreeting: 'Dearest Loraine,',
+      letterBody: `Happy 1st Monthsary, my beautiful love! ✨\n\nCan you believe it has already been 30 incredible days since September 2, 2026? Every single moment with you has felt like a dream I never want to wake up from. From our late-night conversations to the simple laughs that brighten my whole world, having you in my life is the greatest blessing I could ever ask for.\n\nThank you for your warmth, your pure heart, your gentle patience, and for loving me the way you do. You have turned ordinary days into unforgettable memories, and you make every single second worth cherishing.\n\nThis is only the very first page of our forever story. No matter what comes our way, I promise to hold your hand tighter, choose you every single day, and love you more than yesterday but less than tomorrow.\n\nHappy 1st Month to us, my baby! Here is to a lifetime of love, laughter, and endless adventures with you.`,
+      letterSignoff: 'Forever & Always Yours,\nIvan ♡',
+      musicEnabled: true,
+      vows: [
+        'Promise to always make you smile even on the hardest days.',
+        'Promise to listen to your stories with my whole heart.',
+        'Promise to choose you and only you, today and for all our tomorrows.'
+      ]
+    },
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'System'
+  };
+
+  let inMemoryAppConfig = { ...DEFAULT_APP_CONFIG };
+
+  app.get('/api/config', async (req, res) => {
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        const response = await fetch(
+          `${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs?action=eq.APP_CONFIG_UPDATE&order=created_at.desc&limit=1`,
+          {
+            headers: {
+              apikey: config.supabaseKey,
+              Authorization: `Bearer ${config.supabaseKey}`
+            }
+          }
+        );
+        if (response.ok) {
+          const rows = await response.json();
+          if (Array.isArray(rows) && rows.length > 0 && rows[0].details) {
+            try {
+              const parsed = JSON.parse(rows[0].details);
+              if (parsed && typeof parsed === 'object') {
+                inMemoryAppConfig = {
+                  proposalVisibility: ['visible', 'hidden', 'removed'].includes(parsed.proposalVisibility)
+                    ? parsed.proposalVisibility
+                    : inMemoryAppConfig.proposalVisibility,
+                  defaultEntry: ['scrapbook', 'space'].includes(parsed.defaultEntry)
+                    ? parsed.defaultEntry
+                    : inMemoryAppConfig.defaultEntry,
+                  monthsary: parsed.monthsary && typeof parsed.monthsary === 'object'
+                    ? { ...DEFAULT_APP_CONFIG.monthsary, ...parsed.monthsary }
+                    : inMemoryAppConfig.monthsary || DEFAULT_APP_CONFIG.monthsary,
+                  updatedAt: rows[0].created_at || inMemoryAppConfig.updatedAt,
+                  updatedBy: rows[0].user_name || inMemoryAppConfig.updatedBy
+                };
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+    return res.status(200).json({ status: 'ok', success: true, config: inMemoryAppConfig });
+  });
+
+  app.post('/api/config', async (req, res) => {
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const ip = extractClientIp(req);
+    const nextVisibility = ['visible', 'hidden', 'removed'].includes(body.proposalVisibility)
+      ? body.proposalVisibility
+      : inMemoryAppConfig.proposalVisibility;
+    const nextDefaultEntry = ['scrapbook', 'space'].includes(body.defaultEntry)
+      ? body.defaultEntry
+      : inMemoryAppConfig.defaultEntry;
+    const nextMonthsary = body.monthsary && typeof body.monthsary === 'object'
+      ? {
+          ...DEFAULT_APP_CONFIG.monthsary,
+          ...(inMemoryAppConfig.monthsary || {}),
+          ...body.monthsary,
+          updatedAt: new Date().toISOString(),
+          updatedBy: body.updatedBy || 'Admin'
+        }
+      : inMemoryAppConfig.monthsary || DEFAULT_APP_CONFIG.monthsary;
+
+    inMemoryAppConfig = {
+      proposalVisibility: nextVisibility,
+      defaultEntry: nextDefaultEntry,
+      monthsary: nextMonthsary,
+      updatedAt: new Date().toISOString(),
+      updatedBy: body.updatedBy || 'Admin'
+    };
+
+    if (config.supabaseUrl && config.supabaseKey && !config.supabaseUrl.includes('example.supabase.co')) {
+      try {
+        await fetch(`${config.supabaseUrl.replace(/\/+$/, '')}/rest/v1/ivraine_visitor_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: config.supabaseKey,
+            Authorization: `Bearer ${config.supabaseKey}`,
+            Prefer: 'return=minimal'
+          },
+          body: JSON.stringify({
+            ip,
+            section: 'Admin',
+            action: 'APP_CONFIG_UPDATE',
+            details: JSON.stringify(inMemoryAppConfig),
+            user_name: inMemoryAppConfig.updatedBy || 'Admin',
+            created_at: inMemoryAppConfig.updatedAt
+          })
+        });
+      } catch {}
+    }
+    return res.status(200).json({ status: 'ok', success: true, config: inMemoryAppConfig });
+  });
+
   app.get('/api/vpn-check', handleVpnCheck);
   app.post('/api/vpn-check', handleVpnCheck);
   app.get('/api/admin/logs', async (req, res) => {

@@ -235,10 +235,25 @@ export interface VpnCheckResponse {
 // -----------------------------------------------------------------------------
 export type ProposalVisibility = 'visible' | 'hidden' | 'removed';
 export type DefaultEntryDestination = 'scrapbook' | 'space';
+export type MonthsaryButtonVisibility = 'visible' | 'hidden';
+
+export interface MonthsaryConfig {
+  enabled: boolean;
+  buttonVisibility?: MonthsaryButtonVisibility;
+  letterTitle: string;
+  letterGreeting: string;
+  letterBody: string;
+  letterSignoff: string;
+  musicEnabled?: boolean;
+  vows?: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
 
 export interface AppConfig {
   proposalVisibility: ProposalVisibility;
   defaultEntry: DefaultEntryDestination;
+  monthsary?: MonthsaryConfig;
   updatedAt?: string;
   updatedBy?: string;
 }

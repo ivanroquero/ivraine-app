@@ -4,12 +4,37 @@ import type {
   AppConfig,
   AppConfigResponse,
   ProposalVisibility,
-  DefaultEntryDestination
+  DefaultEntryDestination,
+  MonthsaryConfig
 } from './types';
+
+export const DEFAULT_MONTHSARY_CONFIG: MonthsaryConfig = {
+  enabled: true,
+  buttonVisibility: 'visible',
+  letterTitle: 'Happy 1st Monthsary, My Love ♡',
+  letterGreeting: 'Dearest Loraine,',
+  letterBody: `Happy 1st Monthsary, my beautiful love! ✨
+
+Can you believe it has already been 30 incredible days since September 2, 2026? Every single moment with you has felt like a dream I never want to wake up from. From our late-night conversations to the simple laughs that brighten my whole world, having you in my life is the greatest blessing I could ever ask for.
+
+Thank you for your warmth, your pure heart, your gentle patience, and for loving me the way you do. You have turned ordinary days into unforgettable memories, and you make every single second worth cherishing.
+
+This is only the very first page of our forever story. No matter what comes our way, I promise to hold your hand tighter, choose you every single day, and love you more than yesterday but less than tomorrow.
+
+Happy 1st Month to us, my baby! Here is to a lifetime of love, laughter, and endless adventures with you.`,
+  letterSignoff: 'Forever & Always Yours,\nIvan ♡',
+  musicEnabled: true,
+  vows: [
+    'Promise to always make you smile even on the hardest days.',
+    'Promise to listen to your stories with my whole heart.',
+    'Promise to choose you and only you, today and for all our tomorrows.'
+  ]
+};
 
 const DEFAULT_CONFIG: AppConfig = {
   proposalVisibility: 'visible',
   defaultEntry: 'scrapbook',
+  monthsary: DEFAULT_MONTHSARY_CONFIG,
   updatedAt: new Date().toISOString(),
   updatedBy: 'System'
 };
@@ -74,6 +99,9 @@ export default async function handler(
                   defaultEntry: ['scrapbook', 'space'].includes(parsed.defaultEntry)
                     ? parsed.defaultEntry
                     : inMemoryConfig.defaultEntry,
+                  monthsary: parsed.monthsary && typeof parsed.monthsary === 'object'
+                    ? { ...DEFAULT_MONTHSARY_CONFIG, ...parsed.monthsary }
+                    : inMemoryConfig.monthsary || DEFAULT_MONTHSARY_CONFIG,
                   updatedAt: rows[0].created_at || inMemoryConfig.updatedAt,
                   updatedBy: rows[0].user_name || inMemoryConfig.updatedBy
                 };
@@ -109,9 +137,20 @@ export default async function handler(
       ? (body.defaultEntry as DefaultEntryDestination)
       : inMemoryConfig.defaultEntry;
 
+    const nextMonthsary: MonthsaryConfig = body.monthsary && typeof body.monthsary === 'object'
+      ? {
+          ...DEFAULT_MONTHSARY_CONFIG,
+          ...(inMemoryConfig.monthsary || {}),
+          ...body.monthsary,
+          updatedAt: new Date().toISOString(),
+          updatedBy: body.updatedBy || 'Admin'
+        }
+      : inMemoryConfig.monthsary || DEFAULT_MONTHSARY_CONFIG;
+
     const updatedConfig: AppConfig = {
       proposalVisibility: nextVisibility,
       defaultEntry: nextDefaultEntry,
+      monthsary: nextMonthsary,
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || 'Admin'
     };
