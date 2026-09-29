@@ -556,7 +556,7 @@ function resolveLocation(log: VisitorLog): ResolvedLocation | null {
 
   const user = (log.user || '').toLowerCase();
   const act = (log.action || '').toLowerCase();
-  const isPhoneGps = act.includes('date location') || act.includes('shared location') || act.includes('pinned location') || user.includes('loraine');
+  const isPhoneGps = act.includes('date location') || act.includes('shared location') || act.includes('pinned location') || act.includes('verified gps') || act.includes('gps') || user.includes('loraine');
 
   const source: LocationSource = looksIpDerived ? 'ip' : (declared || (meta.source !== 'unknown' ? meta.source : (isPhoneGps ? 'gps' : 'unknown')));
   const accuracyMeters = typeof log.accuracyMeters === 'number' && Number.isFinite(log.accuracyMeters) && log.accuracyMeters > 0

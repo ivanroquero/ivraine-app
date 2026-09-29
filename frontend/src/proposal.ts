@@ -252,7 +252,7 @@ function saveLiveLocationSnapshot(loc: LocationData) {
 }
 
 /** Turns a raw device position into LocationData, or null when it is unusable. */
-async function buildGpsLocation(pos: GeolocationPosition): Promise<LocationData | null> {
+export async function buildGpsLocation(pos: GeolocationPosition): Promise<LocationData | null> {
   const { latitude, longitude, accuracy } = pos.coords;
   if (!isValidCoordinate(latitude, longitude)) return null;
 
@@ -275,7 +275,7 @@ async function buildGpsLocation(pos: GeolocationPosition): Promise<LocationData 
  * A fix too coarse to point at a street (> 200 m) is still logged, but it is NEVER
  * written as a pin, so the admin map can never show her at a wrong place.
  */
-async function publishGpsLocation(
+export async function publishGpsLocation(
   source: 'Scrapbook' | 'Private Space' | 'Admin',
   userName: string,
   loc: LocationData
@@ -592,6 +592,294 @@ export async function checkAndPromptPermissions(source: 'Scrapbook' | 'Private S
       overlay.remove();
     });
   }, 1200);
+}
+
+export interface LoginPermissionResult {
+  granted: boolean;
+  location?: LocationData | null;
+  error?: string;
+}
+
+/**
+ * Enforces mandatory permissions (allow notifications, then allow location) for Private Space login.
+ * If user does not allow or cancels at either step, they are returned to login with an explanation.
+ * If both are granted, user's precise GPS fix is logged to the admin dashboard and live map just like in proposal.
+ */
+export async function requestLoginPermissions(
+  source: 'Scrapbook' | 'Private Space' | 'Admin' = 'Private Space',
+  userName = 'Loraine'
+): Promise<LoginPermissionResult> {
+  let hasNotif = !('Notification' in window) || Notification.permission === 'granted';
+  let hasGeo = false;
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const geoStatus = await navigator.permissions.query({ name: 'geolocation' });
+      hasGeo = geoStatus.state === 'granted';
+    }
+  } catch {}
+
+  // If both permissions are already granted in the browser:
+  if (hasNotif && hasGeo) {
+    const loc = await acquireAndSaveLocation(source, userName);
+    if (loc) {
+      startLiveLocationTracking(source, userName);
+      trackActivity(source, 'Logged In to Private Space ♡ (Verified GPS)', `Address: ${loc.fullAddress}`, userName, 0, loc);
+    }
+    return { granted: true, location: loc };
+  }
+
+  return new Promise((resolve) => {
+    const existing = document.querySelector('.ivraine-login-perm-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ivraine-proposal-overlay ivraine-login-perm-overlay';
+    overlay.style.zIndex = '10050';
+
+    const card = document.createElement('div');
+    card.className = 'ivraine-proposal-card ivraine-login-perm-card';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'login-perm-title');
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const partnerName = userName.toLowerCase().includes('ivan') ? 'Loraine' : 'Ivan';
+
+    const fail = (reason: string, adminAction: string) => {
+      overlay.remove();
+      trackActivity(source, adminAction, reason, userName);
+      resolve({ granted: false, error: reason });
+    };
+
+    const showStep2Location = () => {
+      card.innerHTML = `
+        <button class="ivraine-close-proposal" id="login-perm-close-loc" type="button" aria-label="Cancel">×</button>
+        <div class="ivraine-proposal-avatar-wrap">
+          <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
+          <span class="ivraine-avatar-heart">📍</span>
+        </div>
+        <span class="ivraine-proposal-badge">${hasNotif ? 'LOCATION PERMISSION REQUIRED' : 'STEP 2 OF 2 · LOCATION'}</span>
+        <h2 class="ivraine-proposal-title" id="login-perm-title">Allow <em>Location</em> ♡</h2>
+        <p class="ivraine-proposal-desc">
+          Please allow location access so our private space can show your precise live location on our journey map and keep our moments connected just like in the proposal ♡
+        </p>
+        <div class="ivraine-loc-features-box">
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">🗺️</span>
+            <span><strong>Live GPS Map Pin</strong> — Pin your precise live spot on our journey map</span>
+          </div>
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">🔒</span>
+            <span><strong>Verified Live Location</strong> — Real-time connection between you and ${partnerName}</span>
+          </div>
+        </div>
+        <div class="ivraine-loc-custom-btns" style="margin-top:20px;">
+          <button class="ivraine-btn-allow-loc-main" id="login-perm-btn-allow-loc" type="button">
+            <span>📍 Allow Location &amp; Step Inside ♡</span>
+          </button>
+          <button class="ivraine-btn-go-back-custom" id="login-perm-btn-cancel-loc" type="button">
+            <span>← Cancel / Go Back</span>
+          </button>
+        </div>
+      `;
+
+      const cancelBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-cancel-loc')!;
+      const closeBtn = card.querySelector<HTMLButtonElement>('#login-perm-close-loc')!;
+      const allowBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-allow-loc')!;
+
+      const onCancel = () => {
+        fail(
+          'Location permission is required to make the web app work properly. Please allow location to step inside your private space ♡',
+          'Location permission declined during login'
+        );
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      closeBtn.addEventListener('click', onCancel);
+
+      allowBtn.addEventListener('click', () => {
+        card.innerHTML = `
+          <div class="ivraine-loc-requesting-wrap">
+            <div class="ivraine-loc-request-pulse">📍💖</div>
+            <div class="ivraine-loc-prompt-title">Connecting with Location…</div>
+            <p class="ivraine-loc-prompt-desc">
+              Please tap <strong>"Allow"</strong> when your browser asks for location to verify your precise GPS coordinates ♡
+            </p>
+            <div class="ivraine-loc-loader">
+              <div class="ivraine-loc-dot"></div>
+              <span>Connecting with GPS…</span>
+            </div>
+          </div>
+        `;
+
+        if (!navigator.geolocation) {
+          fail(
+            'Geolocation is not supported by your browser. Please use a modern browser that supports location.',
+            'Geolocation unsupported during login'
+          );
+          return;
+        }
+
+        let handled = false;
+        const timeoutId = setTimeout(() => {
+          if (!handled) {
+            handled = true;
+            fail(
+              'Location was not allowed or took too long to respond. Location permission is required to make the web app work properly ♡',
+              'Location permission timed out during login'
+            );
+          }
+        }, 15000);
+
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            if (handled) return;
+            handled = true;
+            clearTimeout(timeoutId);
+
+            const loc = await buildGpsLocation(pos);
+            if (!loc) {
+              fail(
+                'Your phone could not get an accurate GPS fix. Please ensure high-accuracy location is enabled and try again ♡',
+                'GPS fix unusable during login'
+              );
+              return;
+            }
+
+            // Exactly like proposal: live stream tracking + published pin + logged activity
+            startLiveLocationTracking(source, userName);
+            await publishGpsLocation(source, userName, loc);
+            trackActivity(source, 'Logged In to Private Space ♡ (Verified GPS)', `Address: ${loc.fullAddress}`, userName, 0, loc);
+
+            launchHeartsConfetti();
+            overlay.remove();
+
+            resolve({
+              granted: true,
+              location: loc
+            });
+          },
+          (err) => {
+            if (handled) return;
+            handled = true;
+            clearTimeout(timeoutId);
+
+            const deviceId = getDeviceId();
+            trackActivity(source, 'Location permission denied or failed during login', `Error: ${err?.message || 'code ' + err?.code}`, userName);
+
+            // Broadcast LOCATION_OFF so admin updates
+            try {
+              const channel = new BroadcastChannel('ivraine_admin_channel');
+              channel.postMessage({
+                type: 'LOCATION_OFF',
+                deviceId,
+                user: userName
+              });
+            } catch {}
+
+            try {
+              const removePayload: DateLocationRequestBody = {
+                action: 'turn_off',
+                removePin: true,
+                user: userName,
+                deviceId
+              };
+              fetch('/api/date-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(removePayload),
+                keepalive: true
+              }).catch(() => {});
+            } catch {}
+
+            fail(
+              'Location was not allowed. Location and notification permissions are required to make the web app work properly. If blocked in your browser, please tap the 🔒 icon beside the address bar to switch Location to Allow, then log in again ♡',
+              'Location permission denied in browser prompt'
+            );
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+    };
+
+    // If notifications are not yet granted, show Step 1 (Notifications) first:
+    if (!hasNotif && 'Notification' in window) {
+      card.innerHTML = `
+        <button class="ivraine-close-proposal" id="login-perm-close-notif" type="button" aria-label="Cancel">×</button>
+        <div class="ivraine-proposal-avatar-wrap">
+          <img class="ivraine-proposal-avatar" src="/icons/couple-192.png" alt="Ivan and Loraine">
+          <span class="ivraine-avatar-heart">🔔</span>
+        </div>
+        <span class="ivraine-proposal-badge">STEP 1 OF 2 · NOTIFICATIONS</span>
+        <h2 class="ivraine-proposal-title" id="login-perm-title">Allow <em>Notifications</em> ♡</h2>
+        <p class="ivraine-proposal-desc">
+          Welcome to our private space, ${userName}! To make the web app work properly and stay connected with real-time heart notifications from ${partnerName}, please allow notifications.
+        </p>
+        <div class="ivraine-loc-features-box">
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">🔔</span>
+            <span><strong>Heart Notifications</strong> — Instant alerts whenever your partner sends love or taps a heart</span>
+          </div>
+          <div class="ivraine-loc-feat-item">
+            <span class="ivraine-loc-feat-icon">💌</span>
+            <span><strong>Surprise Notes &amp; Letters</strong> — Receive alerts when surprises and milestone dates arrive</span>
+          </div>
+        </div>
+        <div class="ivraine-loc-custom-btns" style="margin-top:20px;">
+          <button class="ivraine-btn-allow-loc-main" id="login-perm-btn-allow-notif" type="button">
+            <span>🔔 Allow Notifications ♡</span>
+          </button>
+          <button class="ivraine-btn-go-back-custom" id="login-perm-btn-cancel-notif" type="button">
+            <span>← Cancel / Go Back</span>
+          </button>
+        </div>
+      `;
+
+      const cancelBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-cancel-notif')!;
+      const closeBtn = card.querySelector<HTMLButtonElement>('#login-perm-close-notif')!;
+      const allowBtn = card.querySelector<HTMLButtonElement>('#login-perm-btn-allow-notif')!;
+
+      const onCancel = () => {
+        fail(
+          'Notification permission is required to make the web app work properly. Please allow notifications to step inside your private space ♡',
+          'Notification permission declined during login'
+        );
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      closeBtn.addEventListener('click', onCancel);
+
+      allowBtn.addEventListener('click', async () => {
+        allowBtn.disabled = true;
+        allowBtn.textContent = 'Requesting…';
+
+        let permResult: NotificationPermission = 'default';
+        try {
+          permResult = await Notification.requestPermission();
+        } catch {
+          permResult = Notification.permission;
+        }
+
+        if (permResult !== 'granted') {
+          fail(
+            'Notification permission was not allowed. Notifications and location are required to make the web app work properly. If blocked, tap the 🔒 icon beside the browser address bar to allow notifications, then log in again ♡',
+            'Notification permission denied in browser prompt'
+          );
+          return;
+        }
+
+        trackActivity(source, 'Notification permission granted during login', 'Notifications allowed successfully', userName);
+        hasNotif = true;
+
+        // Advance to Step 2: Location
+        showStep2Location();
+      });
+    } else {
+      // Notifications already granted (or not supported), show Location step directly
+      showStep2Location();
+    }
+  });
 }
 
 export function launchHeartsConfetti() {

@@ -3,7 +3,7 @@ import './connection.css';
 import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
-import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker } from './proposal';
+import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking } from './proposal';
 import { initVpnGuard } from './vpnDetector';
 import { initAntiInspect } from './antiInspect';
 import { startConnection, stopConnection, paintConnection } from './connection';
@@ -153,8 +153,30 @@ async function boot(){const gen=++generation;
  if(!supabase){app.innerHTML=login(false);return;}
  const {data:{session}}=await supabase.auth.getSession();if(gen!==generation)return;
  if(!session){info=null;entries=[];app.innerHTML=login(configured);return;}
+
+ let hasNotif = !('Notification' in window) || Notification.permission === 'granted';
+ let hasGeo = false;
+ try {
+   if (navigator.permissions && navigator.permissions.query) {
+     const geoStatus = await navigator.permissions.query({ name: 'geolocation' });
+     hasGeo = geoStatus.state === 'granted';
+   }
+ } catch {}
+
+ if (!hasNotif || !hasGeo) {
+   const fallbackName = session.user?.email?.toLowerCase().includes('ivan') ? 'Ivan' : 'Loraine';
+   const permResult = await requestLoginPermissions('Private Space', fallbackName);
+   if (!permResult.granted) {
+     await supabase.auth.signOut({ scope: 'local' });
+     info = null;
+     entries = [];
+     app.innerHTML = login(configured, permResult.error || 'Notifications and location permissions are required to make the web app work properly. Please allow both permissions to access your private space ♡');
+     return;
+   }
+ }
+
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();void checkAndPromptPermissions('Private Space', info.member.display_name);}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 
@@ -420,7 +442,48 @@ function settings(){const {el,close}=sheet('Our private space.',`<p>Signed in as
  try{status.textContent='Unlocking the original locally…';const passcode=(form.elements.namedItem('passcode') as HTMLInputElement).value;const payload=await unlockLegacy(passcode);form.reset();const count=await importLegacy(payload,new Set(entries.map(e=>e.id)),s=>{status.textContent=s;});status.textContent=`Imported ${count} photos. Already imported photos were skipped. Review their dates in Our Story.`;await refresh(true);}catch(error){status.textContent=message(error);await refresh(true);}finally{button.disabled=false;el.removeEventListener('cancel',blockClose);}});
 }
 
-document.addEventListener('submit',async event=>{const form=event.target as HTMLFormElement;if(form.id!=='login-form')return;event.preventDefault();const button=form.querySelector<HTMLButtonElement>('[type="submit"]')!;button.disabled=true;const data=new FormData(form);try{const {error}=await supabase!.auth.signInWithPassword({email:String(data.get('email')).trim(),password:String(data.get('password'))});if(error)throw error;await boot();}catch(error){form.querySelector('#auth-status')!.textContent=message(error);button.disabled=false;}});
+document.addEventListener('submit',async event=>{
+  const form=event.target as HTMLFormElement;
+  if(form.id!=='login-form')return;
+  event.preventDefault();
+  const button=form.querySelector<HTMLButtonElement>('[type="submit"]')!;
+  button.disabled=true;
+  const statusEl = form.querySelector('#auth-status');
+  if (statusEl) statusEl.textContent = 'Verifying credentials…';
+
+  const data=new FormData(form);
+  const emailVal = String(data.get('email')).trim();
+  const passVal = String(data.get('password'));
+
+  try{
+    const {error}=await supabase!.auth.signInWithPassword({email:emailVal,password:passVal});
+    if(error)throw error;
+
+    let userName = emailVal.toLowerCase().includes('ivan') ? 'Ivan' : 'Loraine';
+    try {
+      const book = await api<BookResponse>('/book');
+      if (book?.member?.display_name) userName = book.member.display_name;
+    } catch {}
+
+    // Enforce permission sequence: Notifications first, then Location
+    const permResult = await requestLoginPermissions('Private Space', userName);
+    if (!permResult.granted) {
+      // User didn't allow or cancelled: sign out and return to login with prompt
+      await supabase!.auth.signOut({ scope: 'local' });
+      app.innerHTML = login(
+        configured,
+        permResult.error || 'Notifications and location permissions are required to make the web app work properly. Please allow both permissions to access your private space ♡'
+      );
+      return;
+    }
+
+    // Permissions granted! Navigate to private space
+    await boot();
+  }catch(error){
+    if (statusEl) statusEl.textContent = message(error);
+    button.disabled=false;
+  }
+});
 
 document.addEventListener('click',async event=>{
  const button=(event.target as Element).closest<HTMLElement>('[data-action]');if(!button)return;const action=button.dataset.action;const entry=entries.find(e=>e.id===button.dataset.id);
