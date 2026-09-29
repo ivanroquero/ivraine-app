@@ -31,6 +31,10 @@
           command = ["npm" "run" "dev" "--" "--port" "$PORT" "--host" "0.0.0.0"];
           manager = "web";
         };
+        android = {
+          manager = "flutter";
+          cwd = "ivraine_flutter";
+        };
       };
     };
   };
