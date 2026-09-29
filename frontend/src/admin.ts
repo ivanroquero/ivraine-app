@@ -7,6 +7,14 @@ import {
   type ProposalVisibility,
   type DefaultEntryDestination
 } from './proposal';
+import {
+  openMonthsaryExperience,
+  getMonthsaryConfig,
+  saveMonthsaryConfig,
+  getMonthsaryVisibility,
+  DEFAULT_MONTHSARY_DATA
+} from './monthsary3d';
+import type { MonthsaryConfig, MonthsaryButtonVisibility } from '@api/types';
 import { initAntiInspect } from './antiInspect';
 import { initVpnGuard } from './vpnDetector';
 
@@ -1484,9 +1492,56 @@ function updateDefaultEntryUI(val: DefaultEntryDestination) {
   });
 }
 
+let currentMonthsaryVis: MonthsaryButtonVisibility = getMonthsaryVisibility();
+
+function updateMonthsaryUI(cfg: MonthsaryConfig) {
+  const vis = cfg.buttonVisibility || 'visible';
+  currentMonthsaryVis = vis;
+
+  const badge = document.getElementById('monthsary-vis-badge');
+  if (badge) {
+    if (vis === 'visible') {
+      badge.textContent = '● 3D Active';
+      badge.style.color = '#ff4081';
+      badge.style.background = 'rgba(255,64,129,0.15)';
+      badge.style.borderColor = 'rgba(255,64,129,0.3)';
+    } else {
+      badge.textContent = '○ Hidden';
+      badge.style.color = '#958ba3';
+      badge.style.background = 'rgba(149,139,163,0.15)';
+      badge.style.borderColor = 'rgba(149,139,163,0.3)';
+    }
+  }
+
+  const optVis = document.getElementById('opt-monthsary-visible');
+  const optHid = document.getElementById('opt-monthsary-hidden');
+  if (optVis && optHid) {
+    if (vis === 'visible') {
+      optVis.classList.add('selected');
+      optHid.classList.remove('selected');
+    } else {
+      optVis.classList.remove('selected');
+      optHid.classList.add('selected');
+    }
+  }
+
+  const titleInput = document.getElementById('monthsary-letter-title') as HTMLInputElement | null;
+  const greetingInput = document.getElementById('monthsary-letter-greeting') as HTMLInputElement | null;
+  const bodyInput = document.getElementById('monthsary-letter-body') as HTMLTextAreaElement | null;
+  const signoffInput = document.getElementById('monthsary-letter-signoff') as HTMLInputElement | null;
+  const musicToggle = document.getElementById('monthsary-music-toggle') as HTMLInputElement | null;
+
+  if (titleInput && !titleInput.dataset.dirty) titleInput.value = cfg.letterTitle || DEFAULT_MONTHSARY_DATA.letterTitle;
+  if (greetingInput && !greetingInput.dataset.dirty) greetingInput.value = cfg.letterGreeting || DEFAULT_MONTHSARY_DATA.letterGreeting;
+  if (bodyInput && !bodyInput.dataset.dirty) bodyInput.value = cfg.letterBody || DEFAULT_MONTHSARY_DATA.letterBody;
+  if (signoffInput && !signoffInput.dataset.dirty) signoffInput.value = cfg.letterSignoff || DEFAULT_MONTHSARY_DATA.letterSignoff;
+  if (musicToggle) musicToggle.checked = cfg.musicEnabled ?? true;
+}
+
 function setupAppConfigControls() {
   updateProposalVisibilityUI(getProposalVisibility());
   updateDefaultEntryUI(getDefaultEntry());
+  updateMonthsaryUI(getMonthsaryConfig());
 
   if (!appConfigInitialized) {
     appConfigInitialized = true;
@@ -1542,6 +1597,75 @@ function setupAppConfigControls() {
         setTimeout(() => { if (destStatus) destStatus.textContent = ''; }, 3500);
       }
     });
+
+    // Monthsary button visibility options
+    const optMonthVis = document.getElementById('opt-monthsary-visible');
+    const optMonthHid = document.getElementById('opt-monthsary-hidden');
+    optMonthVis?.addEventListener('click', () => {
+      currentMonthsaryVis = 'visible';
+      const cfg = getMonthsaryConfig();
+      cfg.buttonVisibility = 'visible';
+      updateMonthsaryUI(cfg);
+    });
+    optMonthHid?.addEventListener('click', () => {
+      currentMonthsaryVis = 'hidden';
+      const cfg = getMonthsaryConfig();
+      cfg.buttonVisibility = 'hidden';
+      updateMonthsaryUI(cfg);
+    });
+
+    // Mark letter fields dirty on user edit so background sync does not overwrite typing
+    ['monthsary-letter-title', 'monthsary-letter-greeting', 'monthsary-letter-body', 'monthsary-letter-signoff'].forEach(id => {
+      const el = document.getElementById(id);
+      el?.addEventListener('input', () => { el.dataset.dirty = 'true'; });
+    });
+
+    // Save Monthsary Letter
+    const btnSaveMonthsary = document.getElementById('btn-save-monthsary-letter') as HTMLButtonElement | null;
+    const monthsaryStatus = document.getElementById('monthsary-save-status') as HTMLSpanElement | null;
+    btnSaveMonthsary?.addEventListener('click', async () => {
+      if (btnSaveMonthsary) btnSaveMonthsary.disabled = true;
+      if (monthsaryStatus) {
+        monthsaryStatus.style.color = '#ff80bf';
+        monthsaryStatus.textContent = 'Saving letter…';
+      }
+
+      const titleInput = document.getElementById('monthsary-letter-title') as HTMLInputElement | null;
+      const greetingInput = document.getElementById('monthsary-letter-greeting') as HTMLInputElement | null;
+      const bodyInput = document.getElementById('monthsary-letter-body') as HTMLTextAreaElement | null;
+      const signoffInput = document.getElementById('monthsary-letter-signoff') as HTMLInputElement | null;
+      const musicToggle = document.getElementById('monthsary-music-toggle') as HTMLInputElement | null;
+
+      const currentCfg = getMonthsaryConfig();
+      const updatedMonthsary: MonthsaryConfig = {
+        ...currentCfg,
+        enabled: true,
+        buttonVisibility: currentMonthsaryVis,
+        letterTitle: titleInput?.value.trim() || currentCfg.letterTitle || DEFAULT_MONTHSARY_DATA.letterTitle,
+        letterGreeting: greetingInput?.value.trim() || currentCfg.letterGreeting || DEFAULT_MONTHSARY_DATA.letterGreeting,
+        letterBody: bodyInput?.value.trim() || currentCfg.letterBody || DEFAULT_MONTHSARY_DATA.letterBody,
+        letterSignoff: signoffInput?.value.trim() || currentCfg.letterSignoff || DEFAULT_MONTHSARY_DATA.letterSignoff,
+        musicEnabled: musicToggle ? musicToggle.checked : true,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'Admin'
+      };
+
+      saveMonthsaryConfig(updatedMonthsary);
+      const ok = await updateAppConfig({ monthsary: updatedMonthsary });
+
+      if (btnSaveMonthsary) btnSaveMonthsary.disabled = false;
+      if (monthsaryStatus) {
+        monthsaryStatus.style.color = ok ? '#2ecc71' : '#2ecc71';
+        monthsaryStatus.textContent = '✓ Saved! 1st Monthsary Letter updated & synced.';
+        setTimeout(() => { if (monthsaryStatus) monthsaryStatus.textContent = ''; }, 3500);
+      }
+    });
+
+    // Test 3D Monthsary Experience
+    const btnTest3D = document.getElementById('btn-test-monthsary-3d') as HTMLButtonElement | null;
+    btnTest3D?.addEventListener('click', () => {
+      openMonthsaryExperience('Admin');
+    });
   }
 
   // Fetch latest config from server to stay up-to-date
@@ -1549,6 +1673,7 @@ function setupAppConfigControls() {
     if (cfg) {
       if (cfg.proposalVisibility) updateProposalVisibilityUI(cfg.proposalVisibility);
       if (cfg.defaultEntry) updateDefaultEntryUI(cfg.defaultEntry);
+      if (cfg.monthsary) updateMonthsaryUI(cfg.monthsary);
     }
   });
 }
@@ -1611,6 +1736,13 @@ try {
       if (cfg?.defaultEntry) {
         updateDefaultEntryUI(cfg.defaultEntry);
       }
+      if (cfg?.monthsary) {
+        updateMonthsaryUI(cfg.monthsary);
+      }
+    } else if (event.data?.type === 'MONTHSARY_CONFIG_UPDATE') {
+      if (event.data.config) {
+        updateMonthsaryUI(event.data.config);
+      }
     }
   };
 } catch {}
@@ -1627,6 +1759,10 @@ window.addEventListener('storage', (e) => {
     updateProposalVisibilityUI(e.newValue as ProposalVisibility);
   } else if (e.key === 'ivraine_default_entry' && e.newValue) {
     updateDefaultEntryUI(e.newValue as DefaultEntryDestination);
+  } else if (e.key === 'ivraine_monthsary_config' && e.newValue) {
+    try {
+      updateMonthsaryUI(JSON.parse(e.newValue));
+    } catch {}
   }
 });
 

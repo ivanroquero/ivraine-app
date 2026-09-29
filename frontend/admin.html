@@ -1747,6 +1747,102 @@
           <button class="nav-btn primary" id="btn-save-proposal-vis">💾 Save Proposal Visibility</button>
           <span id="proposal-vis-status" style="font-size:12px;color:var(--muted);"></span>
         </div>
+      <!-- 1st Monthsary 3D Feature & Letter Controls Card -->
+      <div class="info-card" id="card-monthsary-controls">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <h3 style="margin-bottom:0;">💖 1st Monthsary 3D Feature &amp; Love Letter</h3>
+              <span class="badge-tag">SEPT 2, 2026</span>
+            </div>
+            <p style="color:var(--muted);font-size:13px;margin:0;">
+              Configure the 3D floating button, 5-second galaxy animation, 5-question quiz, and edit the heartfelt love letter for Loraine.
+            </p>
+          </div>
+          <span id="monthsary-vis-badge" style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(255,64,129,0.15);color:#ff4081;border:1px solid rgba(255,64,129,0.3);text-transform:uppercase;letter-spacing:0.5px;">
+            ● 3D Active
+          </span>
+        </div>
+
+        <!-- 3D Floating Button Visibility -->
+        <label style="display:block;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:14px;margin-bottom:8px;">
+          3D Floating Button Visibility (Positioned Safely Above Bottom Navbar)
+        </label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:18px;">
+          <!-- Option 1: Visible -->
+          <div class="proposal-mode-option selected" id="opt-monthsary-visible" data-value="visible">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:18px;">✨</span>
+              <span class="mode-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Show 3D Button</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Floats safely above the bottom navigation bar with 3D tilting and levitation animation.
+            </p>
+          </div>
+
+          <!-- Option 2: Hidden -->
+          <div class="proposal-mode-option" id="opt-monthsary-hidden" data-value="hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:18px;">🙈</span>
+              <span class="mode-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Hide Button</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Hides the 3D floating button from visitors. You can still test it anytime below.
+            </p>
+          </div>
+        </div>
+
+        <!-- Letter Fields -->
+        <div style="background:#1b1624;border:1px solid #332a42;border-radius:16px;padding:20px;margin-bottom:18px;">
+          <h4 style="color:#ff758c;font-size:14px;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+            <span>✍️</span> Edit 1st Month Letter Text (Saved to Cloud &amp; Live Synced)
+          </h4>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-bottom:14px;">
+            <div>
+              <label for="monthsary-letter-title" style="display:block;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                Letter Header Title
+              </label>
+              <input type="text" id="monthsary-letter-title" style="width:100%;background:#231c2d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:#fff;font-size:13px;" placeholder="Happy 1st Monthsary, My Love ♡">
+            </div>
+            <div>
+              <label for="monthsary-letter-greeting" style="display:block;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                Greeting
+              </label>
+              <input type="text" id="monthsary-letter-greeting" style="width:100%;background:#231c2d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:#fff;font-size:13px;" placeholder="Dearest Loraine,">
+            </div>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <label for="monthsary-letter-body" style="display:block;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+              Heartfelt Message Body (Line breaks and paragraphs will be displayed beautifully)
+            </label>
+            <textarea id="monthsary-letter-body" rows="9" style="width:100%;background:#231c2d;border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:#fff;font-size:13px;line-height:1.6;resize:vertical;" placeholder="Write your message here..."></textarea>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-bottom:14px;">
+            <div>
+              <label for="monthsary-letter-signoff" style="display:block;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                Sign-off
+              </label>
+              <input type="text" id="monthsary-letter-signoff" style="width:100%;background:#231c2d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:#fff;font-size:13px;" placeholder="Forever &amp; Always Yours, Ivan ♡">
+            </div>
+            <div style="display:flex;align-items:center;padding-top:20px;">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:#fff;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="monthsary-music-toggle" checked style="width:18px;height:18px;accent-color:#d63384;">
+                <span>Enable Romantic Lofi Music Box on Letter</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+          <button class="nav-btn primary" id="btn-save-monthsary-letter">💾 Save Monthsary Letter</button>
+          <button class="nav-btn" id="btn-test-monthsary-3d" style="background:#3b1e36;border-color:#ff4081;color:#ff85a2;">✨ Test 3D Experience</button>
+          <span id="monthsary-save-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
       </div>
 
       <!-- Default App Entry Destination (ivraine.space direct link / PWA) -->

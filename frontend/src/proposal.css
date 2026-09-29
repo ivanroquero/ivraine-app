@@ -234,6 +234,12 @@
   animation: ivraineFloatPill 3s infinite ease-in-out;
 }
 .ivraine-proposal-prompt-pill:hover { transform: scale(1.08) translateY(-2px); box-shadow: 0 12px 30px rgba(214,51,132,0.6); }
+@media (max-width: 760px) {
+  .ivraine-proposal-prompt-pill {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+  }
+}
 @keyframes ivraineFloatPill {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }

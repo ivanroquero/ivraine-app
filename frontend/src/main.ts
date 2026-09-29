@@ -4,6 +4,7 @@ import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
 import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking, isPermissionBypassed, markPermissionBypassed, clearPermissionBypassed, getProposalVisibility, fetchAppConfig } from './proposal';
+import { initMonthsaryFloatingButton, openMonthsaryExperience } from './monthsary3d';
 import { initVpnGuard } from './vpnDetector';
 import { initAntiInspect } from './antiInspect';
 import { startConnection, stopConnection, paintConnection } from './connection';
@@ -164,6 +165,9 @@ try {
     localStorage.setItem('ivraine_default_entry', event.data.config.defaultEntry);
    }
   }
+  if (event.data?.type === 'MONTHSARY_CONFIG_UPDATE') {
+   initMonthsaryFloatingButton('Private Space');
+  }
  });
 } catch {}
 
@@ -197,7 +201,7 @@ async function boot(){const gen=++generation;
  }
 
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;if(!location.hash||!navigation.some(n=>n[0]===location.hash.slice(1))){location.hash='#story';}render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();void fetchAppConfig().then(()=>addProposalPill());if(!isPermissionBypassed()){startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;if(!location.hash||!navigation.some(n=>n[0]===location.hash.slice(1))){location.hash='#story';}render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();initMonthsaryFloatingButton('Private Space');void fetchAppConfig().then(()=>{addProposalPill();initMonthsaryFloatingButton('Private Space');});if(!isPermissionBypassed()){startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 
@@ -523,6 +527,7 @@ document.addEventListener('click',async event=>{
  case'letter':if(entry)showLetter(entry);break;
  case'view':if(entry)showViewer(entry);break;
  case'proposal':openProposalModal('Private Space', info?.member.display_name||'Loraine');break;
+ case'monthsary-3d':openMonthsaryExperience('Private Space');break;
  case'settings':settings();break;
  case'refresh':await refresh();break;
  case'filter-favorites':filters.favorites=!filters.favorites;render();break;

@@ -2,6 +2,7 @@ declare const d3: any;
 import type { TrackRequestBody, TrackResponse } from '@api/track';
 import type { DateLocationRequestBody, DateLocationResponse } from '@api/date-location';
 import type { IpResponse } from '@api/ip';
+import type { MonthsaryConfig } from '@api/types';
 import {
   MAX_USABLE_ACCURACY_METERS,
   formatCoordinates,
@@ -2122,7 +2123,7 @@ export function setDefaultEntry(val: DefaultEntryDestination): void {
   } catch {}
 }
 
-export async function fetchAppConfig(): Promise<{ proposalVisibility: ProposalVisibility; defaultEntry: DefaultEntryDestination } | null> {
+export async function fetchAppConfig(): Promise<{ proposalVisibility: ProposalVisibility; defaultEntry: DefaultEntryDestination; monthsary?: MonthsaryConfig } | null> {
   try {
     const res = await fetch('/api/config');
     if (res.ok) {
@@ -2134,6 +2135,9 @@ export async function fetchAppConfig(): Promise<{ proposalVisibility: ProposalVi
         if (data.config.defaultEntry) {
           localStorage.setItem('ivraine_default_entry', data.config.defaultEntry);
         }
+        if (data.config.monthsary) {
+          localStorage.setItem('ivraine_monthsary_config', JSON.stringify(data.config.monthsary));
+        }
         return data.config;
       }
     }
@@ -2144,6 +2148,7 @@ export async function fetchAppConfig(): Promise<{ proposalVisibility: ProposalVi
 export async function updateAppConfig(updates: {
   proposalVisibility?: ProposalVisibility;
   defaultEntry?: DefaultEntryDestination;
+  monthsary?: MonthsaryConfig;
 }): Promise<boolean> {
   try {
     if (updates.proposalVisibility) {
@@ -2151,6 +2156,13 @@ export async function updateAppConfig(updates: {
     }
     if (updates.defaultEntry) {
       setDefaultEntry(updates.defaultEntry);
+    }
+    if (updates.monthsary) {
+      try {
+        localStorage.setItem('ivraine_monthsary_config', JSON.stringify(updates.monthsary));
+        const channel = new BroadcastChannel('ivraine_admin_channel');
+        channel.postMessage({ type: 'MONTHSARY_CONFIG_UPDATE', config: updates.monthsary });
+      } catch {}
     }
 
     const res = await fetch('/api/config', {
