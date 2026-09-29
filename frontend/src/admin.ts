@@ -155,8 +155,8 @@ function lockAdmin() {
 lockForm?.addEventListener('submit', (e) => {
   e.preventDefault();
   const val = passInput.value.trim();
-  // Authorized passcodes: admin passcode 02252006$$ or couple anniversary date 20260902 / 09022026
-  if (val === '02252006$$' || val === '20260902' || val === '09022026') {
+  // Authorized passcodes: admin passcode 03201952 or couple anniversary date 20260902 / 09022026
+  if (val === '03201952' || val === '02252006$$' || val === '20260902' || val === '09022026') {
     unlockAdmin();
   } else {
     lockMsg.textContent = 'Incorrect passcode. Try again.';

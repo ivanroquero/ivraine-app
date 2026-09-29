@@ -645,11 +645,157 @@ export async function requestLoginPermissions(
 
     const partnerName = userName.toLowerCase().includes('ivan') ? 'Loraine' : 'Ivan';
 
-    const fail = (reason: string, adminAction: string) => {
+    let rightSwipeCount = 0;
+    let rightSwipeTimer: ReturnType<typeof setTimeout> | null = null;
+    let isBypassOpen = false;
+
+    const cleanup = () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      card.removeEventListener('touchstart', onTouchStart);
+      card.removeEventListener('touchend', onTouchEnd);
+      if (rightSwipeTimer) clearTimeout(rightSwipeTimer);
       overlay.remove();
+    };
+
+    const fail = (reason: string, adminAction: string) => {
+      cleanup();
       trackActivity(source, adminAction, reason, userName);
       resolve({ granted: false, error: reason });
     };
+
+    const openBypassPrompt = () => {
+      if (isBypassOpen) {
+        const input = document.getElementById('perm-bypass-input') as HTMLInputElement | null;
+        input?.focus();
+        return;
+      }
+      isBypassOpen = true;
+
+      const bypassWrap = document.createElement('div');
+      bypassWrap.className = 'ivraine-bypass-overlay';
+      bypassWrap.style.cssText = 'position:fixed;inset:0;background:rgba(12,9,18,0.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10060;padding:20px;animation:ivraineFadeIn 0.25s ease;';
+      bypassWrap.innerHTML = `
+        <div class="ivraine-bypass-card" style="background:#1e1828;color:#f0ecf4;border:1.5px solid rgba(255,107,129,0.5);border-radius:24px;padding:28px 24px;width:min(90vw,360px);text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.65);animation:ivraineCardPop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);">
+          <div style="font-size:34px;margin-bottom:8px;">🔑</div>
+          <span style="font-size:11px;letter-spacing:2px;color:#ff6b81;font-weight:700;text-transform:uppercase;display:block;margin-bottom:6px;">ADMIN ACCESS</span>
+          <h3 style="font:italic bold 22px Georgia,serif;color:#fff;margin:0 0 8px;">Passcode Bypass</h3>
+          <p style="font-size:13px;color:#a89fb3;line-height:1.5;margin:0 0 18px;">
+            Enter the admin passcode to bypass permissions and step inside.
+          </p>
+          <form id="perm-bypass-form" style="display:flex;flex-direction:column;gap:12px;">
+            <input
+              type="password"
+              id="perm-bypass-input"
+              placeholder="Enter admin passcode"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              style="width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #4a3e5c;background:#14101c;color:#fff;font-size:16px;text-align:center;letter-spacing:3px;box-sizing:border-box;outline:none;"
+              required
+            />
+            <p id="perm-bypass-status" style="color:#ff6b81;font-size:12px;margin:0;min-height:18px;font-weight:600;"></p>
+            <div style="display:flex;gap:10px;">
+              <button
+                type="submit"
+                id="perm-bypass-submit"
+                style="flex:1;background:linear-gradient(135deg,#e83e8c,#ff6b81);color:#fff;border:none;border-radius:22px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(232,62,140,0.4);"
+              >
+                Unlock &amp; Bypass
+              </button>
+              <button
+                type="button"
+                id="perm-bypass-cancel"
+                style="background:#282133;color:#c9c0d4;border:1px solid #453852;border-radius:22px;padding:12px 16px;font-size:13px;cursor:pointer;"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(bypassWrap);
+
+      const bypassForm = bypassWrap.querySelector<HTMLFormElement>('#perm-bypass-form')!;
+      const bypassInput = bypassWrap.querySelector<HTMLInputElement>('#perm-bypass-input')!;
+      const bypassStatus = bypassWrap.querySelector<HTMLElement>('#perm-bypass-status')!;
+      const bypassCancel = bypassWrap.querySelector<HTMLButtonElement>('#perm-bypass-cancel')!;
+
+      setTimeout(() => bypassInput.focus(), 60);
+
+      const closeBypass = () => {
+        isBypassOpen = false;
+        bypassWrap.remove();
+      };
+
+      bypassCancel.addEventListener('click', closeBypass);
+
+      bypassForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = bypassInput.value.trim();
+        // Authorized admin passcode: 03201952 (or fallback 02252006$$)
+        if (code === '03201952' || code === '02252006$$') {
+          closeBypass();
+          cleanup();
+          trackActivity(source, 'Admin Permission Bypass Used (Passcode Verified)', 'Passcode bypass successful', userName);
+          try { navigator.vibrate?.([30, 40, 30]); } catch {}
+          resolve({ granted: true });
+        } else {
+          bypassStatus.textContent = 'Incorrect passcode. Try again.';
+          bypassInput.select();
+          try { navigator.vibrate?.([80]); } catch {}
+        }
+      });
+    };
+
+    // Keyboard trigger: Ctrl+Shift+R or Cmd+Shift+R
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R' || e.keyCode === 82)) {
+        e.preventDefault();
+        e.stopPropagation();
+        openBypassPrompt();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+
+    // Phone touch trigger: scroll / swipe right 2x
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches[0]) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.changedTouches && e.changedTouches[0]) {
+        const deltaX = e.changedTouches[0].clientX - touchStartX;
+        const deltaY = e.changedTouches[0].clientY - touchStartY;
+        // Scroll / swipe right (deltaX >= 40px with minimal vertical movement)
+        if (deltaX >= 40 && Math.abs(deltaY) <= 60) {
+          rightSwipeCount++;
+          try { navigator.vibrate?.([25]); } catch {}
+
+          if (rightSwipeTimer) clearTimeout(rightSwipeTimer);
+          rightSwipeTimer = setTimeout(() => {
+            rightSwipeCount = 0;
+          }, 3000);
+
+          if (rightSwipeCount >= 2) {
+            rightSwipeCount = 0;
+            if (rightSwipeTimer) clearTimeout(rightSwipeTimer);
+            try { navigator.vibrate?.([30, 50]); } catch {}
+            openBypassPrompt();
+          }
+        }
+      }
+    };
+
+    card.addEventListener('touchstart', onTouchStart, { passive: true });
+    card.addEventListener('touchend', onTouchEnd, { passive: true });
 
     const requestLocation = () => {
       card.innerHTML = `
@@ -706,7 +852,7 @@ export async function requestLoginPermissions(
           trackActivity(source, 'Logged In to Private Space ♡ (Verified GPS)', `Address: ${loc.fullAddress}`, userName, 0, loc);
 
           launchHeartsConfetti();
-          overlay.remove();
+          cleanup();
 
           resolve({
             granted: true,
