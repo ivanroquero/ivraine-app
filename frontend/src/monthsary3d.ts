@@ -324,6 +324,19 @@ export function initMonthsaryFloatingButton(source: 'Private Space' | 'Scrapbook
   document.body.appendChild(fab);
 }
 
+export function getCurrentAppTheme(): 'light' | 'dark' {
+  if (typeof document !== 'undefined') {
+    const docTheme = document.documentElement.dataset.theme;
+    if (docTheme === 'light' || docTheme === 'dark') return docTheme;
+    try {
+      const saved = localStorage.getItem('ivraine-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {}
+    if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
+  }
+  return 'dark';
+}
+
 // -----------------------------------------------------------------------------
 // Fullscreen 3D Monthsary Experience
 // -----------------------------------------------------------------------------
@@ -334,12 +347,15 @@ export function openMonthsaryExperience(source: 'Private Space' | 'Scrapbook' | 
   const existing = document.querySelector('.ivraine-monthsary-modal-overlay');
   if (existing) existing.remove();
 
+  let activeTheme = getCurrentAppTheme();
+
   const overlay = document.createElement('div');
   overlay.className = 'ivraine-monthsary-modal-overlay';
+  overlay.dataset.theme = activeTheme;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
 
-  // Topbar
+  // Topbar with Theme Toggle and Close
   overlay.innerHTML = `
     <div class="monthsary-three-canvas-container" id="monthsary-canvas-host"></div>
     <header class="monthsary-modal-topbar">
@@ -347,6 +363,9 @@ export function openMonthsaryExperience(source: 'Private Space' | 'Scrapbook' | 
         ivraine <span>♡</span> 1st Monthsary
       </div>
       <div class="monthsary-modal-actions">
+        <button class="monthsary-glass-btn monthsary-theme-btn" id="btn-toggle-monthsary-theme" aria-label="Toggle dark/light theme" title="Switch theme">
+          ${activeTheme === 'dark' ? '☀' : '☾'}
+        </button>
         <button class="monthsary-glass-btn monthsary-close-btn" id="btn-close-monthsary" aria-label="Close">✕</button>
       </div>
     </header>
@@ -358,9 +377,23 @@ export function openMonthsaryExperience(source: 'Private Space' | 'Scrapbook' | 
   const canvasHost = overlay.querySelector<HTMLDivElement>('#monthsary-canvas-host')!;
   const stageHost = overlay.querySelector<HTMLDivElement>('#monthsary-stage-host')!;
   const closeBtn = overlay.querySelector<HTMLButtonElement>('#btn-close-monthsary')!;
+  const themeToggleBtn = overlay.querySelector<HTMLButtonElement>('#btn-toggle-monthsary-theme')!;
 
-  // 1. Initialize Three.js WebGL Scene
-  const sceneController = initMonthsary3DScene(canvasHost);
+  // 1. Initialize Three.js WebGL Scene with Active Theme
+  const sceneController = initMonthsary3DScene(canvasHost, activeTheme);
+
+  // Theme toggle handler
+  themeToggleBtn.addEventListener('click', () => {
+    activeTheme = activeTheme === 'dark' ? 'light' : 'dark';
+    overlay.dataset.theme = activeTheme;
+    themeToggleBtn.textContent = activeTheme === 'dark' ? '☀' : '☾';
+    sceneController.updateTheme(activeTheme);
+    try {
+      localStorage.setItem('ivraine-theme', activeTheme);
+      document.documentElement.dataset.theme = activeTheme;
+      document.documentElement.style.colorScheme = activeTheme;
+    } catch {}
+  });
 
   // Close handler
   const cleanup = () => {
@@ -395,12 +428,14 @@ interface SceneController {
   warpSpeed: (speed: number) => void;
   setAmbientMode: () => void;
   triggerHeartExplosion: () => void;
+  updateTheme: (theme: 'light' | 'dark') => void;
   dispose: () => void;
 }
 
-function initMonthsary3DScene(container: HTMLDivElement): SceneController {
+function initMonthsary3DScene(container: HTMLDivElement, initialTheme: 'light' | 'dark' = 'dark'): SceneController {
+  const isLight = initialTheme === 'light';
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x0c0914, 0.035);
+  scene.fog = new THREE.FogExp2(isLight ? 0xf7eff3 : 0x0c0914, 0.035);
 
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 0, 16);
@@ -408,23 +443,24 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(isLight ? 0xf7eff3 : 0x0c0914, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+  renderer.toneMappingExposure = isLight ? 1.05 : 1.25;
   container.appendChild(renderer.domElement);
 
   // Lights
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+  const ambientLight = new THREE.AmbientLight(0xffffff, isLight ? 1.15 : 0.85);
   scene.add(ambientLight);
 
-  const lightPink = new THREE.PointLight(0xff3388, 3.5, 50);
+  const lightPink = new THREE.PointLight(isLight ? 0xd63384 : 0xff3388, isLight ? 2.6 : 3.5, 50);
   lightPink.position.set(5, 5, 8);
   scene.add(lightPink);
 
-  const lightPurple = new THREE.PointLight(0x8a2be2, 3, 50);
+  const lightPurple = new THREE.PointLight(isLight ? 0x7c3aed : 0x8a2be2, isLight ? 2.0 : 3.0, 50);
   lightPurple.position.set(-6, -4, 6);
   scene.add(lightPurple);
 
-  const lightGold = new THREE.PointLight(0xffd700, 2.5, 40);
+  const lightGold = new THREE.PointLight(isLight ? 0xd97706 : 0xffd700, isLight ? 1.8 : 2.5, 40);
   lightGold.position.set(0, 8, 4);
   scene.add(lightGold);
 
@@ -450,10 +486,10 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   heartGeo.center();
 
   const heartMat = new THREE.MeshStandardMaterial({
-    color: 0xff2d75,
-    emissive: 0x991144,
-    emissiveIntensity: 0.35,
-    metalness: 0.3,
+    color: isLight ? 0xd63384 : 0xff2d75,
+    emissive: isLight ? 0x5a0b2c : 0x991144,
+    emissiveIntensity: isLight ? 0.2 : 0.35,
+    metalness: isLight ? 0.2 : 0.3,
     roughness: 0.2,
     wireframe: false
   });
@@ -465,8 +501,8 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   const crystalsGroup = new THREE.Group();
   const crystalMat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
-    emissive: 0xff80bf,
-    emissiveIntensity: 0.4,
+    emissive: isLight ? 0xd63384 : 0xff80bf,
+    emissiveIntensity: isLight ? 0.25 : 0.4,
     metalness: 0.1,
     roughness: 0.1,
     transmission: 0.85,
@@ -486,19 +522,29 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   }
   scene.add(crystalsGroup);
 
-  // 3. Double-Armed Love Galaxy Particle System
+  // 3. Double-Armed Love Galaxy Particle System with Falling Snow Dynamics
   const particleCount = 2800;
   const positions = new Float32Array(particleCount * 3);
   const colors = new Float32Array(particleCount * 3);
   const particleVelocities = new Float32Array(particleCount * 3);
 
-  const palette = [
+  const darkSnowPalette = [
     new THREE.Color(0xff4081), // Hot Pink
     new THREE.Color(0xff758c), // Rose
     new THREE.Color(0xc084fc), // Lavender Purple
     new THREE.Color(0xffd700), // Celestial Gold
-    new THREE.Color(0xffffff)  // Pure Stardust
+    new THREE.Color(0xffffff)  // Pure Stardust Snow
   ];
+
+  const lightSnowPalette = [
+    new THREE.Color(0xd63384), // Deep Romantic Rose
+    new THREE.Color(0xbe185d), // Rich Crimson Berry
+    new THREE.Color(0x7c3aed), // Vivid Violet Amethyst
+    new THREE.Color(0xd97706), // Warm Amber Gold
+    new THREE.Color(0x9d174d)  // Deep Raspberry Magenta
+  ];
+
+  const initialPalette = isLight ? lightSnowPalette : darkSnowPalette;
 
   for (let i = 0; i < particleCount; i++) {
     const arm = i % 2;
@@ -506,20 +552,20 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
     const spiralAngle = distance * 0.75 + (arm * Math.PI);
 
     const jitterX = (Math.random() - 0.5) * (distance * 0.28);
-    const jitterY = (Math.random() - 0.5) * 2.5;
+    const jitterY = (Math.random() - 0.5) * 20; // Spread vertically for falling snow effect
     const jitterZ = (Math.random() - 0.5) * (distance * 0.28);
 
     positions[i * 3] = Math.cos(spiralAngle) * distance + jitterX;
     positions[i * 3 + 1] = jitterY;
     positions[i * 3 + 2] = Math.sin(spiralAngle) * distance + jitterZ;
 
-    const chosenColor = palette[Math.floor(Math.random() * palette.length)];
+    const chosenColor = initialPalette[Math.floor(Math.random() * initialPalette.length)];
     colors[i * 3] = chosenColor.r;
     colors[i * 3 + 1] = chosenColor.g;
     colors[i * 3 + 2] = chosenColor.b;
 
     particleVelocities[i * 3] = (Math.random() - 0.5) * 0.02;
-    particleVelocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+    particleVelocities[i * 3 + 1] = -(0.012 + Math.random() * 0.018); // Downward snow drift
     particleVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
   }
 
@@ -527,27 +573,38 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   particlesGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  // Programmatically generate a glowing soft circular sprite texture
-  const spriteCanvas = document.createElement('canvas');
-  spriteCanvas.width = 64;
-  spriteCanvas.height = 64;
-  const sCtx = spriteCanvas.getContext('2d')!;
-  const grad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.3, 'rgba(255,100,180,0.85)');
-  grad.addColorStop(0.7, 'rgba(180,50,220,0.3)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  sCtx.fillStyle = grad;
-  sCtx.fillRect(0, 0, 64, 64);
-  const particleTexture = new THREE.CanvasTexture(spriteCanvas);
+  // Generates a soft glowing circular snowflake/stardust sprite texture adapted to theme
+  const createParticleTexture = (lightMode: boolean): THREE.CanvasTexture => {
+    const spriteCanvas = document.createElement('canvas');
+    spriteCanvas.width = 64;
+    spriteCanvas.height = 64;
+    const sCtx = spriteCanvas.getContext('2d')!;
+    const grad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    if (lightMode) {
+      grad.addColorStop(0, 'rgba(214, 51, 132, 0.95)');
+      grad.addColorStop(0.35, 'rgba(190, 24, 93, 0.75)');
+      grad.addColorStop(0.7, 'rgba(124, 58, 237, 0.35)');
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    } else {
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      grad.addColorStop(0.3, 'rgba(255, 100, 180, 0.85)');
+      grad.addColorStop(0.7, 'rgba(180, 50, 220, 0.3)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    }
+    sCtx.fillStyle = grad;
+    sCtx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(spriteCanvas);
+  };
+
+  let particleTexture = createParticleTexture(isLight);
 
   const particlesMat = new THREE.PointsMaterial({
-    size: 0.35,
+    size: isLight ? 0.34 : 0.38,
     vertexColors: true,
     map: particleTexture,
     transparent: true,
-    opacity: 0.9,
-    blending: THREE.AdditiveBlending,
+    opacity: isLight ? 0.82 : 0.92,
+    blending: isLight ? THREE.NormalBlending : THREE.AdditiveBlending,
     depthWrite: false
   });
 
@@ -567,11 +624,10 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
   };
   window.addEventListener('resize', onWindowResize);
 
-  // Render loop
+  // Render loop with dynamic falling snow & rotation
   const animate = () => {
     animId = requestAnimationFrame(animate);
     const elapsedTime = clock.getElapsedTime();
-    const delta = clock.getDelta();
 
     // 1. Heart rotation & gentle hovering
     heartMesh.rotation.y = elapsedTime * 0.65;
@@ -587,9 +643,19 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
       obj.rotation.y += obj.userData.rotSpeed * 0.8;
     });
 
-    // 3. Spiral galaxy rotation
+    // 3. Spiral galaxy rotation & gentle romantic snowfall
     particlesSystem.rotation.y = elapsedTime * 0.08 * warpFactor;
     particlesSystem.rotation.x = Math.sin(elapsedTime * 0.04) * 0.15;
+
+    const posArray = particlesGeo.attributes.position.array as Float32Array;
+    for (let i = 0; i < particleCount; i++) {
+      // Downward snow drift
+      posArray[i * 3 + 1] -= (0.015 + (i % 5) * 0.003) * warpFactor;
+      if (posArray[i * 3 + 1] < -12) {
+        posArray[i * 3 + 1] = 12;
+      }
+    }
+    particlesGeo.attributes.position.needsUpdate = true;
 
     // 4. Moving Point Lights for shimmering specular highlights
     lightPink.position.x = Math.cos(elapsedTime * 1.2) * 7;
@@ -634,6 +700,48 @@ function initMonthsary3DScene(container: HTMLDivElement): SceneController {
       }
       posAttr.needsUpdate = true;
     },
+    updateTheme: (newTheme: 'light' | 'dark') => {
+      const light = newTheme === 'light';
+      scene.fog = new THREE.FogExp2(light ? 0xf7eff3 : 0x0c0914, 0.035);
+      renderer.setClearColor(light ? 0xf7eff3 : 0x0c0914, 1);
+      renderer.toneMappingExposure = light ? 1.05 : 1.25;
+
+      ambientLight.intensity = light ? 1.15 : 0.85;
+      lightPink.color.setHex(light ? 0xd63384 : 0xff3388);
+      lightPink.intensity = light ? 2.6 : 3.5;
+
+      lightPurple.color.setHex(light ? 0x7c3aed : 0x8a2be2);
+      lightPurple.intensity = light ? 2.0 : 3.0;
+
+      lightGold.color.setHex(light ? 0xd97706 : 0xffd700);
+      lightGold.intensity = light ? 1.8 : 2.5;
+
+      heartMat.color.setHex(light ? 0xd63384 : 0xff2d75);
+      heartMat.emissive.setHex(light ? 0x5a0b2c : 0x991144);
+      heartMat.emissiveIntensity = light ? 0.2 : 0.35;
+
+      crystalMat.emissive.setHex(light ? 0xd63384 : 0xff80bf);
+
+      // Dynamically update snow particle colors & texture based on theme
+      const pal = light ? lightSnowPalette : darkSnowPalette;
+      const colAttr = particlesGeo.attributes.color as THREE.BufferAttribute;
+      const colArray = colAttr.array as Float32Array;
+      for (let i = 0; i < particleCount; i++) {
+        const c = pal[i % pal.length];
+        colArray[i * 3] = c.r;
+        colArray[i * 3 + 1] = c.g;
+        colArray[i * 3 + 2] = c.b;
+      }
+      colAttr.needsUpdate = true;
+
+      particleTexture.dispose();
+      particleTexture = createParticleTexture(light);
+      particlesMat.map = particleTexture;
+      particlesMat.size = light ? 0.34 : 0.38;
+      particlesMat.opacity = light ? 0.82 : 0.92;
+      particlesMat.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending;
+      particlesMat.needsUpdate = true;
+    },
     dispose: () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', onWindowResize);
@@ -658,25 +766,32 @@ function startPhase1IntroAnimation(
 ): void {
   host.innerHTML = `
     <div class="monthsary-intro-hud" id="phase1-hud">
-      <div class="hud-countdown-ring-wrap">
-        <svg class="hud-ring-svg" viewBox="0 0 140 140">
-          <defs>
-            <linearGradient id="hudNeonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#ff2d75" />
-              <stop offset="50%" stop-color="#ff758c" />
-              <stop offset="100%" stop-color="#9333ea" />
-            </linearGradient>
-          </defs>
-          <circle class="hud-ring-bg" cx="70" cy="70" r="60" />
-          <circle class="hud-ring-fill" id="hud-ring-fill" cx="70" cy="70" r="60" />
-        </svg>
-        <span class="hud-countdown-number" id="hud-counter-num">5</span>
-      </div>
-      <span class="hud-title-badge">✨ 1st Month Special Edition</span>
-      <h2 class="hud-headline">Entering Our <em>Love Universe</em></h2>
-      <p class="hud-subtext">30 Days · 720 Hours of Falling in Love with Loraine...</p>
-      <div class="hud-skip-action">
-        <button class="monthsary-glass-btn" id="btn-skip-intro">Skip to Quiz ⏭</button>
+      <div class="monthsary-intro-hud-card">
+        <div class="hud-countdown-ring-wrap">
+          <svg class="hud-ring-svg" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="hudNeonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ff2d75" />
+                <stop offset="50%" stop-color="#ff758c" />
+                <stop offset="100%" stop-color="#9333ea" />
+              </linearGradient>
+              <linearGradient id="hudNeonGradLight" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#d63384" />
+                <stop offset="50%" stop-color="#b8144c" />
+                <stop offset="100%" stop-color="#7c3aed" />
+              </linearGradient>
+            </defs>
+            <circle class="hud-ring-bg" cx="70" cy="70" r="60" />
+            <circle class="hud-ring-fill" id="hud-ring-fill" cx="70" cy="70" r="60" />
+          </svg>
+          <span class="hud-countdown-number" id="hud-counter-num">5</span>
+        </div>
+        <span class="hud-title-badge">✨ 1st Month Special Edition</span>
+        <h2 class="hud-headline">Entering Our <em>Love Universe</em></h2>
+        <p class="hud-subtext">30 Days · 720 Hours of Falling in Love with Loraine...</p>
+        <div class="hud-skip-action">
+          <button class="monthsary-glass-btn" id="btn-skip-intro">Skip to Quiz ⏭</button>
+        </div>
       </div>
     </div>
   `;

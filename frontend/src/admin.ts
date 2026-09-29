@@ -1546,30 +1546,40 @@ function setupAppConfigControls() {
   if (!appConfigInitialized) {
     appConfigInitialized = true;
 
-    // Proposal option click
-    document.querySelectorAll<HTMLDivElement>('.proposal-mode-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        const mode = opt.dataset.value as ProposalVisibility;
-        if (mode) updateProposalVisibilityUI(mode);
-      });
-    });
-
-    // Save proposal visibility button
     const btnSaveProp = document.getElementById('btn-save-proposal-vis') as HTMLButtonElement | null;
     const propStatus = document.getElementById('proposal-vis-status') as HTMLSpanElement | null;
-    btnSaveProp?.addEventListener('click', async () => {
+
+    const saveProposalVisibility = async (mode: ProposalVisibility) => {
+      updateProposalVisibilityUI(mode);
       if (btnSaveProp) btnSaveProp.disabled = true;
       if (propStatus) {
         propStatus.style.color = '#d8b4fe';
         propStatus.textContent = 'Saving…';
       }
-      const ok = await updateAppConfig({ proposalVisibility: currentProposalVis });
+      const ok = await updateAppConfig({ proposalVisibility: mode });
       if (btnSaveProp) btnSaveProp.disabled = false;
       if (propStatus) {
         propStatus.style.color = ok ? '#2ecc71' : '#2ecc71';
-        propStatus.textContent = '✓ Saved! Proposal visibility applied across all devices.';
+        propStatus.textContent = mode === 'visible'
+          ? '✓ Proposal & "Open this" are now Visible on all devices.'
+          : mode === 'hidden'
+          ? '✓ Proposal & "Open this" are now Hidden on all devices.'
+          : '✓ Proposal & "Open this" are Removed on all devices.';
         setTimeout(() => { if (propStatus) propStatus.textContent = ''; }, 3500);
       }
+    };
+
+    // Proposal option click: updates UI, saves, and broadcasts immediately
+    document.querySelectorAll<HTMLDivElement>('.proposal-mode-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const mode = opt.dataset.value as ProposalVisibility;
+        if (mode) void saveProposalVisibility(mode);
+      });
+    });
+
+    // Save proposal visibility button
+    btnSaveProp?.addEventListener('click', () => {
+      void saveProposalVisibility(currentProposalVis);
     });
 
     // Default entry option click

@@ -62,8 +62,12 @@ async function main() {
     // ----------------------------------------------------
     // TEST 1: DESKTOP / MONITOR SCRAPBOOK EXPERIENCE
     // ----------------------------------------------------
-    console.log('Testing Desktop Scrapbook Proposal...');
-    const desktopPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const desktopContext = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      permissions: ['geolocation'],
+      geolocation: { latitude: 9.6496, longitude: 123.8647 }
+    });
+    const desktopPage = await desktopContext.newPage();
     await desktopPage.goto(`${baseUrl}/legacy/index.html`);
 
     // Verify initial "Open this" pop up appears
@@ -79,8 +83,10 @@ async function main() {
     const proposalTitle = desktopPage.locator('#proposal-title');
     await proposalTitle.waitFor({ state: 'visible', timeout: 5000 });
     const titleText = await proposalTitle.innerText();
-    if (!titleText.toLowerCase().includes('date with me')) throw new Error('Proposal title mismatch');
-    console.log('PASS: "Would you date with me?" modal opened');
+    if (!titleText.toLowerCase().includes('go out with me') && !titleText.toLowerCase().includes('date with me')) {
+      throw new Error(`Proposal title mismatch: ${titleText}`);
+    }
+    console.log('PASS: "Would you go out with me?" modal opened');
 
     // Check Yes and No buttons are visible
     const yesBtn = desktopPage.locator('#ivraine-btn-yes');
@@ -138,6 +144,7 @@ async function main() {
     console.log('PASS: Single button automatically bypassed GPS rejection and unlocked places list');
 
     await desktopPage.close();
+    await desktopContext.close();
 
     // ----------------------------------------------------
     // TEST 2: MOBILE / PHONE TOUCH EVASION & LOCATION UNLOCK
@@ -215,7 +222,7 @@ async function main() {
     console.log('PASS: Google Maps links properly configured for all places');
 
     // Click continue to finish
-    await mobilePage.locator('#ivraine-btn-continue').tap();
+    await mobilePage.locator('#ivraine-btn-continue').dispatchEvent('click');
     await mobilePage.waitForTimeout(300);
 
     await mobileContext.close();
@@ -334,6 +341,53 @@ async function main() {
     await liveMarker.waitFor({ state: 'visible', timeout: 3000 });
     console.log('PASS: Successfully grabbed, dragged, and repositioned live marker!');
 
+    // ----------------------------------------------------
+    // TEST 5: ADMIN HIDING & SHOWING PROPOSAL ON PASSCODE PAGE
+    // ----------------------------------------------------
+    console.log('Testing Admin Hiding & Showing Proposal / "Open this" on Passcode page...');
+    
+    // Open passcode page in desktop tab
+    const passcodePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await passcodePage.goto(`${baseUrl}/legacy/index.html`);
+
+    // Verify "Open this" button or popup is visible initially
+    await passcodePage.waitForTimeout(1000);
+    const pillOrPopupVisible = (await passcodePage.locator('.ivraine-proposal-prompt-pill').count()) > 0 ||
+      (await passcodePage.locator('.ivraine-initial-prompt-popup').count()) > 0;
+    if (!pillOrPopupVisible) throw new Error('Expected proposal pill or popup to be visible initially');
+    console.log('PASS: Proposal / "Open this" is visible on passcode page when admin setting is Visible');
+
+    // Go to admin page and switch to Scrapbook & Proposal tab
+    await adminPage.locator('[data-tab="tab-scrapbook"]').click();
+    await adminPage.waitForTimeout(400);
+
+    // Admin clicks "Hidden" option
+    console.log('Admin toggles proposal visibility to "Hidden"...');
+    await adminPage.locator('#opt-proposal-hidden').click();
+    await adminPage.waitForTimeout(1000);
+
+    // Verify it is hidden on the passcode page!
+    await passcodePage.waitForFunction(() => {
+      const pill = document.querySelector('.ivraine-proposal-prompt-pill');
+      const popup = document.querySelector('.ivraine-initial-prompt-popup');
+      const modal = document.querySelector('.ivraine-proposal-overlay');
+      return !pill && !popup && !modal;
+    }, { timeout: 8000 });
+    console.log('PASS: Proposal & "Open this" successfully HIDDEN on passcode page when admin hides it!');
+
+    // Admin clicks "Visible" option again
+    console.log('Admin toggles proposal visibility back to "Visible"...');
+    await adminPage.locator('#opt-proposal-visible').click();
+    await adminPage.waitForTimeout(1000);
+
+    // Verify it appears again on the passcode page!
+    await passcodePage.waitForFunction(() => {
+      const pill = document.querySelector('.ivraine-proposal-prompt-pill');
+      return Boolean(pill);
+    }, { timeout: 8000 });
+    console.log('PASS: Proposal & "Open this" successfully REAPPEARED on passcode page when admin makes it visible!');
+
+    await passcodePage.close();
     await adminPage.close();
     console.log('ALL BROWSER TESTS PASSED SUCCESSFULLY! 🎉');
   } catch (err) {

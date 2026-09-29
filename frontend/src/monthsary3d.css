@@ -1,6 +1,7 @@
 /* ==========================================================================
    Ivraine - 3D 1st Monthsary Experience Styles
    Modern, Advanced, Ultra-Fast & Responsive 3D Aesthetics
+   Supports Flawless High-Contrast Dark & Light Mode Theme Adaptations
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -16,10 +17,10 @@
   align-items: center;
   gap: 10px;
   padding: 8px 18px 8px 10px;
-  background: linear-gradient(135deg, rgba(255, 45, 117, 0.92), rgba(138, 43, 226, 0.92));
+  background: linear-gradient(135deg, rgba(255, 45, 117, 0.94), rgba(138, 43, 226, 0.94));
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
   border-radius: 50px;
   color: #ffffff;
   font-family: Inter, system-ui, -apple-system, sans-serif;
@@ -36,6 +37,15 @@
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, opacity 0.3s ease;
   animation: fabLevitate 3.5s ease-in-out infinite;
   touch-action: manipulation;
+}
+
+[data-theme="light"] .ivraine-3d-monthsary-fab {
+  background: linear-gradient(135deg, #e83e8c, #845ec2);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 10px 24px rgba(180, 50, 110, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    inset 0 1px 3px rgba(255, 255, 255, 0.7);
 }
 
 @keyframes fabLevitate {
@@ -101,7 +111,7 @@
   letter-spacing: 1px;
   text-transform: uppercase;
   color: #ffe6f0;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
   padding: 1px 6px;
   border-radius: 8px;
   line-height: 1.3;
@@ -113,12 +123,13 @@
   color: #ffffff;
   letter-spacing: 0.2px;
   white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Responsive Safe Clearance:
    The bottom navigation bar on mobile (< 760px) occupies bottom: 0 with height ~64px + safe-area.
-   We place the 3D FAB at bottom: calc(76px + env(safe-area-inset-bottom, 0px)) so it sits with
-   a generous 12-16px clearance above the navbar and NEVER covers any nav tab! */
+   We place the 3D FAB at bottom: calc(78px + env(safe-area-inset-bottom, 0px)) so it sits with
+   a generous 14-16px clearance above the navbar and NEVER covers any nav tab! */
 @media (max-width: 760px) {
   .ivraine-3d-monthsary-fab {
     bottom: calc(78px + env(safe-area-inset-bottom, 0px));
@@ -144,18 +155,20 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 @media (max-width: 760px) {
   body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
-    bottom: calc(130px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(132px + env(safe-area-inset-bottom, 0px));
   }
 }
 
 /* --------------------------------------------------------------------------
    2. Fullscreen Immersive 3D Experience Overlay
+   Supports Dark and Light Mode with crystal-clear contrast
    -------------------------------------------------------------------------- */
 .ivraine-monthsary-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
   background: #0d0a14;
+  color: #f5edf3;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -163,6 +176,12 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   opacity: 0;
   animation: modalFadeIn 0.4s ease forwards;
   perspective: 1200px;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] {
+  background: #f7eff3;
+  color: #2b1a25;
 }
 
 @keyframes modalFadeIn {
@@ -206,12 +225,21 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   display: flex;
   align-items: center;
   gap: 6px;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
   pointer-events: auto;
 }
 
 .monthsary-top-brand span {
   color: #ff4081;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-top-brand {
+  color: #3b1b2a;
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.9);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-top-brand span {
+  color: #d63384;
 }
 
 .monthsary-modal-actions {
@@ -222,29 +250,45 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .monthsary-glass-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: #ffffff;
   font-size: 12px;
   font-weight: 600;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .monthsary-glass-btn:hover {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-1px);
 }
 
-.monthsary-close-btn {
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-glass-btn {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(214, 51, 132, 0.35);
+  color: #5c1836;
+  font-weight: 700;
+  box-shadow: 0 3px 12px rgba(130, 40, 75, 0.12);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-glass-btn:hover {
+  background: #ffffff;
+  border-color: #d63384;
+  color: #3b0a21;
+}
+
+.monthsary-close-btn,
+.monthsary-theme-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -252,11 +296,11 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 /* --------------------------------------------------------------------------
-   3. Phase 1: 5-Second 3D Animation HUD
+   3. Phase 1: 5-Second 3D Snow & Galaxy Animation HUD
    -------------------------------------------------------------------------- */
 .monthsary-intro-hud {
   position: absolute;
@@ -270,6 +314,36 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   text-align: center;
   pointer-events: none;
   transition: opacity 0.5s ease;
+}
+
+.monthsary-intro-hud-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 34px 28px 28px;
+  border-radius: 32px;
+  max-width: 580px;
+  width: min(92vw, 580px);
+  background: rgba(18, 12, 26, 0.78);
+  border: 1.5px solid rgba(255, 107, 129, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.7),
+    0 0 35px rgba(255, 107, 129, 0.25);
+  animation: cardFlyIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-intro-hud-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1.5px solid #e2b4cb;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow:
+    0 24px 60px rgba(120, 30, 70, 0.16),
+    0 4px 20px rgba(214, 51, 132, 0.12);
 }
 
 .hud-countdown-ring-wrap {
@@ -292,8 +366,12 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 
 .hud-ring-bg {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.14);
   stroke-width: 6;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-ring-bg {
+  stroke: rgba(140, 40, 80, 0.18);
 }
 
 .hud-ring-fill {
@@ -307,14 +385,24 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   filter: drop-shadow(0 0 8px rgba(255, 64, 129, 0.8));
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-ring-fill {
+  stroke: url(#hudNeonGradLight);
+  filter: drop-shadow(0 0 8px rgba(214, 51, 132, 0.5));
+}
+
 .hud-countdown-number {
   font-family: Georgia, serif;
   font-size: 58px;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
   line-height: 1;
   text-shadow: 0 0 20px rgba(255, 105, 180, 0.8), 0 0 40px rgba(138, 43, 226, 0.5);
   animation: numberPulse 1s ease-in-out infinite;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-countdown-number {
+  color: #720d36;
+  text-shadow: 0 2px 10px rgba(255, 255, 255, 0.95), 0 0 16px rgba(214, 51, 132, 0.3);
 }
 
 @keyframes numberPulse {
@@ -329,21 +417,28 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   letter-spacing: 3px;
   text-transform: uppercase;
   color: #ff758c;
-  background: rgba(255, 64, 129, 0.15);
-  border: 1px solid rgba(255, 64, 129, 0.35);
+  background: rgba(255, 64, 129, 0.22);
+  border: 1px solid rgba(255, 64, 129, 0.45);
   padding: 6px 16px;
   border-radius: 20px;
   margin-bottom: 12px;
   backdrop-filter: blur(8px);
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-title-badge {
+  color: #7a1139;
+  background: #ffe4ee;
+  border: 1.5px solid #f09cb8;
+  font-weight: 800;
+}
+
 .hud-headline {
   font-family: Georgia, serif;
   font-size: clamp(26px, 5vw, 42px);
   color: #ffffff;
-  font-weight: 400;
+  font-weight: 600;
   margin: 0 0 10px;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
 }
 
 .hud-headline em {
@@ -351,12 +446,30 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   color: #ff6b81;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-headline {
+  color: #170712;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-headline em {
+  color: #b8144c;
+}
+
 .hud-subtext {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
-  max-width: 440px;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.95);
+  max-width: 460px;
   line-height: 1.5;
   margin: 0 0 24px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  font-weight: 500;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .hud-subtext {
+  color: #2b1120;
+  font-weight: 600;
+  text-shadow: none;
 }
 
 .hud-skip-action {
@@ -365,6 +478,7 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 
 /* --------------------------------------------------------------------------
    4. Phase 2: 5 Interactive Monthsary Questions Card
+   High-contrast, crystal-clear readability in Dark and Light modes
    -------------------------------------------------------------------------- */
 .monthsary-quiz-container {
   position: relative;
@@ -373,18 +487,28 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   max-height: 85vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgba(22, 17, 30, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(20, 15, 28, 0.94);
+  border: 1.5px solid rgba(255, 107, 129, 0.35);
   border-radius: 28px;
   padding: 30px 26px 26px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 107, 129, 0.2),
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 0 35px rgba(255, 107, 129, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
   animation: cardFlyIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  color: #f3eff7;
+  color: #fbf7fd;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-quiz-container {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1.5px solid #ebd0de;
+  color: #281622;
+  box-shadow:
+    0 24px 60px rgba(120, 40, 75, 0.18),
+    0 4px 18px rgba(214, 51, 132, 0.12),
+    inset 0 1px 0 #ffffff;
 }
 
 @keyframes cardFlyIn {
@@ -408,14 +532,18 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .quiz-step-indicator {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 800;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #ff6b81;
+  color: #ff758c;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-step-indicator {
+  color: #a81c4e;
 }
 
 .quiz-hearts-progress {
@@ -424,14 +552,18 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .quiz-heart-dot {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.25);
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.3);
   transition: all 0.3s;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-heart-dot {
+  color: #ebd1dd;
 }
 
 .quiz-heart-dot.active {
   color: #ff3b77;
-  transform: scale(1.2);
+  transform: scale(1.25);
   filter: drop-shadow(0 0 6px rgba(255, 59, 119, 0.8));
 }
 
@@ -444,7 +576,15 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   font-size: clamp(20px, 3.5vw, 26px);
   line-height: 1.35;
   color: #ffffff;
+  font-weight: 600;
   margin: 0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-question-text {
+  color: #170712;
+  font-weight: 700;
+  text-shadow: none;
 }
 
 .quiz-options-list {
@@ -454,13 +594,14 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .quiz-option-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
   border-radius: 16px;
   padding: 14px 18px;
   text-align: left;
-  color: #f3eff7;
-  font-size: 14px;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 600;
   line-height: 1.45;
   cursor: pointer;
   display: flex;
@@ -471,17 +612,39 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .quiz-option-btn:hover {
-  background: rgba(255, 64, 129, 0.15);
-  border-color: rgba(255, 64, 129, 0.5);
+  background: rgba(255, 64, 129, 0.22);
+  border-color: rgba(255, 64, 129, 0.6);
   transform: translateX(4px) translateY(-2px);
-  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.25);
+  box-shadow: 0 8px 24px rgba(214, 51, 132, 0.3);
 }
 
 .quiz-option-btn.selected {
-  background: linear-gradient(135deg, rgba(255, 64, 129, 0.35), rgba(138, 43, 226, 0.35));
+  background: linear-gradient(135deg, rgba(255, 64, 129, 0.45), rgba(138, 43, 226, 0.45));
   border-color: #ff4081;
-  box-shadow: 0 0 25px rgba(255, 64, 129, 0.5);
+  color: #ffffff;
+  box-shadow: 0 0 25px rgba(255, 64, 129, 0.6);
   transform: scale(1.02);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-option-btn {
+  background: #faf4f7;
+  border: 1.5px solid #e4c2d3;
+  color: #170712;
+  box-shadow: 0 2px 6px rgba(120, 30, 70, 0.05);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-option-btn:hover {
+  background: #fff0f6;
+  border-color: #b8144c;
+  color: #61092a;
+  box-shadow: 0 6px 18px rgba(214, 51, 132, 0.18);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-option-btn.selected {
+  background: linear-gradient(135deg, #ffe6f0, #f6e4fa);
+  border-color: #b8144c;
+  color: #520623;
+  box-shadow: 0 4px 18px rgba(184, 20, 76, 0.22);
 }
 
 .quiz-option-letter {
@@ -491,16 +654,26 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 64, 129, 0.25);
   font-size: 12px;
-  font-weight: 700;
-  color: #ff758c;
+  font-weight: 800;
+  color: #ff85a2;
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 .quiz-option-btn.selected .quiz-option-letter {
   background: #ff4081;
+  color: #ffffff;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-option-letter {
+  background: #f3d4e2;
+  color: #780d36;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-option-btn.selected .quiz-option-letter {
+  background: #b8144c;
   color: #ffffff;
 }
 
@@ -512,15 +685,23 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 .quiz-reaction-banner {
   margin-top: 16px;
   padding: 12px 16px;
-  background: rgba(255, 64, 129, 0.18);
-  border: 1px solid rgba(255, 64, 129, 0.4);
+  background: rgba(255, 64, 129, 0.22);
+  border: 1.5px solid rgba(255, 64, 129, 0.5);
   border-radius: 14px;
-  font-size: 13.5px;
+  font-size: 14px;
+  font-weight: 600;
   color: #ffd6e4;
   display: flex;
   align-items: center;
   gap: 10px;
   animation: reactionPop 0.3s ease;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .quiz-reaction-banner {
+  background: #fff0f5;
+  border: 1.5px solid #f0a8c4;
+  color: #6b0c32;
+  font-weight: 700;
 }
 
 @keyframes reactionPop {
@@ -544,13 +725,13 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .unseal-envelope-3d-card {
-  width: min(90vw, 380px);
-  background: linear-gradient(145deg, #231c2d, #191422);
-  border: 1px solid rgba(255, 215, 0, 0.3);
-  border-radius: 24px;
-  padding: 34px 28px;
+  width: min(90vw, 400px);
+  background: linear-gradient(145deg, #241c2e, #181322);
+  border: 1.5px solid rgba(255, 215, 0, 0.4);
+  border-radius: 28px;
+  padding: 36px 30px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 24px 60px rgba(0, 0, 0, 0.75),
     0 0 35px rgba(255, 105, 180, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   display: flex;
@@ -558,19 +739,39 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   align-items: center;
   position: relative;
   overflow: hidden;
+  color: #ffffff;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .unseal-envelope-3d-card {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1.5px solid #e0b4cb;
+  color: #170712;
+  box-shadow:
+    0 24px 60px rgba(120, 30, 70, 0.16),
+    0 4px 20px rgba(214, 51, 132, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .unseal-gold-badge {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #f7d070;
-  background: rgba(247, 208, 112, 0.12);
-  border: 1px solid rgba(247, 208, 112, 0.3);
-  padding: 4px 12px;
+  color: #ffd700;
+  background: rgba(255, 215, 0, 0.16);
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  padding: 5px 14px;
   border-radius: 20px;
   margin-bottom: 20px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .unseal-gold-badge {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1.5px solid #f59e0b;
 }
 
 .wax-seal-interactive-button {
@@ -615,16 +816,26 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 
 .unseal-card-title {
   font-family: Georgia, serif;
-  font-size: 24px;
+  font-size: 25px;
   color: #ffffff;
+  font-weight: 700;
   margin: 0 0 8px;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .unseal-card-title {
+  color: #6e0e33;
+}
+
 .unseal-card-subtitle {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
   line-height: 1.45;
-  margin: 0 0 20px;
+  margin: 0 0 22px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .unseal-card-subtitle {
+  color: #2b1120;
+  font-weight: 500;
 }
 
 .unseal-tap-cta {
@@ -633,7 +844,7 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   border: none;
   border-radius: 20px;
   padding: 10px 22px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(214, 51, 132, 0.45);
@@ -647,6 +858,7 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 
 /* --------------------------------------------------------------------------
    6. Phase 4: The 1st Monthsary 3D Letter Experience
+   Full Theme Adaptation for Dark & Light Mode!
    -------------------------------------------------------------------------- */
 .monthsary-letter-container {
   position: relative;
@@ -656,15 +868,29 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  background: #fffdfc;
-  color: #2c2227;
+  background: rgba(23, 16, 32, 0.96);
+  color: #f7eef5;
+  border: 1.5px solid #4a3458;
   border-radius: 28px;
   padding: 38px 34px 34px;
   box-shadow:
-    0 28px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(214, 51, 132, 0.15);
+    0 28px 80px rgba(0, 0, 0, 0.85),
+    0 0 40px rgba(214, 51, 132, 0.25);
   animation: letterUnfold 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: top center;
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-letter-container {
+  background: rgba(255, 255, 255, 0.98);
+  color: #170712;
+  border: 1.5px solid #dfb9cc;
+  box-shadow:
+    0 28px 80px rgba(110, 30, 65, 0.16),
+    0 4px 20px rgba(214, 51, 132, 0.08);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
 }
 
 @keyframes letterUnfold {
@@ -683,11 +909,15 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #ebdbe2;
+  border-bottom: 1px solid #3c2a47;
   padding-bottom: 20px;
   margin-bottom: 24px;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-wax-stamp-header {
+  border-bottom-color: #ebdbe2;
 }
 
 .stamp-left {
@@ -700,7 +930,7 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #d63384, #91124f);
+  background: linear-gradient(135deg, #ff4081, #a31d45);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -714,20 +944,30 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   font-weight: 800;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #a4506f;
+  color: #ff85a2;
   display: block;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .stamp-meta small {
+  color: #8c1642;
+  font-weight: 800;
 }
 
 .stamp-meta strong {
   font-family: Georgia, serif;
   font-size: 16px;
-  color: #3b2732;
+  color: #ffffff;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .stamp-meta strong {
+  color: #1f0b17;
+  font-weight: 700;
 }
 
 /* Milestone Live Clock Banner */
 .monthsary-clock-banner {
-  background: linear-gradient(135deg, #fdf2f6, #f9e6ee);
-  border: 1px solid #f3d4e0;
+  background: rgba(32, 23, 42, 0.95);
+  border: 1.5px solid #4d365b;
   border-radius: 18px;
   padding: 16px 20px;
   margin-bottom: 28px;
@@ -738,6 +978,11 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   gap: 12px;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .monthsary-clock-banner {
+  background: #fdf2f7;
+  border: 1.5px solid #e8b8ce;
+}
+
 .clock-lead {
   display: flex;
   flex-direction: column;
@@ -745,18 +990,27 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .clock-lead-tag {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 1px;
-  color: #b8336a;
+  color: #ff85a2;
   text-transform: uppercase;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .clock-lead-tag {
+  color: #b8144c;
 }
 
 .clock-lead-title {
   font-family: Georgia, serif;
   font-size: 15px;
   font-weight: 600;
-  color: #442a36;
+  color: #ffffff;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .clock-lead-title {
+  color: #2a0f1d;
+  font-weight: 700;
 }
 
 .clock-digits-row {
@@ -766,29 +1020,45 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .clock-box {
-  background: #ffffff;
-  border: 1px solid #ebd3df;
+  background: #241930;
+  border: 1.5px solid #5a3c6c;
   border-radius: 10px;
   padding: 6px 10px;
   text-align: center;
   min-width: 48px;
-  box-shadow: 0 2px 6px rgba(184, 51, 106, 0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .clock-box {
+  background: #ffffff;
+  border: 1.5px solid #e0adc6;
+  box-shadow: 0 2px 6px rgba(120, 30, 70, 0.08);
 }
 
 .clock-box strong {
   font-family: Georgia, serif;
   font-size: 18px;
   font-weight: 700;
-  color: #8c2a51;
+  color: #ff85a2;
   display: block;
   line-height: 1.1;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .clock-box strong {
+  color: #6e0e33;
+  font-weight: 800;
 }
 
 .clock-box small {
   font-size: 9px;
   text-transform: uppercase;
-  color: #8c7882;
+  color: #cbb6c3;
   font-weight: 600;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .clock-box small {
+  color: #4a182b;
+  font-weight: 800;
 }
 
 /* Letter Prose Typography */
@@ -796,24 +1066,40 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 17.5px;
   line-height: 1.85;
-  color: #382c33;
+  color: #f7eef5;
   margin-bottom: 28px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-content-prose {
+  color: #170712;
+  font-weight: 500;
 }
 
 .letter-main-title {
   font-family: Georgia, serif;
   font-size: clamp(24px, 4vw, 32px);
-  color: #882247;
-  font-weight: 400;
+  color: #ff85a2;
+  font-weight: 700;
   margin: 0 0 16px;
   line-height: 1.25;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-main-title {
+  color: #6e0e33;
+  font-weight: 800;
 }
 
 .letter-greeting {
   font-size: 19px;
   font-style: italic;
-  color: #553b47;
+  color: #ffd1e1;
+  font-weight: 600;
   margin-bottom: 14px;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-greeting {
+  color: #401328;
+  font-weight: 700;
 }
 
 .letter-body-paragraphs {
@@ -825,9 +1111,15 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   font-family: Georgia, serif;
   font-style: italic;
   font-size: 21px;
-  color: #9c2854;
+  color: #ff85a2;
+  font-weight: 700;
   margin-top: 24px;
   white-space: pre-line;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-signoff {
+  color: #6e0e33;
+  font-weight: 800;
 }
 
 /* --------------------------------------------------------------------------
@@ -842,32 +1134,44 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .letter-polaroid-card {
-  background: #ffffff;
+  background: #23192c;
   padding: 10px 10px 16px;
-  border: 1px solid #ebdbe2;
+  border: 1px solid #453255;
   border-radius: 8px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   transform: rotate(var(--rot, 0deg));
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   cursor: pointer;
+  color: #f0e2eb;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-polaroid-card {
+  background: #ffffff;
+  border-color: #ebdbe2;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  color: #29101e;
 }
 
 .letter-polaroid-card:hover {
   transform: rotate(0deg) scale(1.05) translateY(-4px);
-  box-shadow: 0 14px 30px rgba(214, 51, 132, 0.18);
+  box-shadow: 0 14px 30px rgba(214, 51, 132, 0.28);
   z-index: 2;
 }
 
 .polaroid-img-wrap {
   width: 100%;
   aspect-ratio: 1;
-  background: #f7eef2;
+  background: #191220;
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .polaroid-img-wrap {
+  background: #f7eef2;
 }
 
 .polaroid-img-wrap img {
@@ -880,29 +1184,46 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 .polaroid-caption {
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 12.5px;
-  color: #634f59;
+  font-size: 13px;
+  color: #e5d4de;
+  font-weight: 600;
   text-align: center;
   line-height: 1.35;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .polaroid-caption {
+  color: #29101e;
+  font-weight: 700;
+}
+
 /* Sacred Love Vows Section */
 .letter-vows-section {
-  background: #fdf8fa;
-  border: 1px solid #f3e1ea;
+  background: #1e1526;
+  border: 1.5px solid #4a3458;
   border-radius: 20px;
   padding: 22px 20px;
   margin: 28px 0;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-vows-section {
+  background: #fff6fa;
+  border: 1.5px solid #e8b8ce;
+}
+
 .vows-heading {
   font-family: Georgia, serif;
   font-size: 18px;
-  color: #8c2a51;
+  color: #ff85a2;
   margin: 0 0 14px;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 700;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .vows-heading {
+  color: #6e0e33;
+  font-weight: 800;
 }
 
 .vows-list {
@@ -915,16 +1236,26 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  font-size: 14px;
-  color: #4b3642;
+  font-size: 14.5px;
+  color: #f7edf4;
+  font-weight: 500;
   line-height: 1.5;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .vow-item {
+  color: #170712;
+  font-weight: 600;
+}
+
 .vow-heart-bullet {
-  color: #d63384;
+  color: #ff4081;
   font-size: 14px;
   margin-top: 2px;
   flex-shrink: 0;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .vow-heart-bullet {
+  color: #b8144c;
 }
 
 /* Music & Action Controls Toolbar */
@@ -932,21 +1263,25 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #ebdbe2;
+  border-top: 1px solid #3c2a47;
   padding-top: 24px;
   margin-top: 28px;
   flex-wrap: wrap;
   gap: 14px;
 }
 
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-bottom-actions {
+  border-top-color: #ebdbe2;
+}
+
 .letter-music-btn {
-  background: #f8eef3;
-  border: 1px solid #ebd3df;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 25px;
-  padding: 8px 16px;
+  padding: 9px 18px;
   font-size: 13px;
   font-weight: 600;
-  color: #8c2a51;
+  color: #ff85a2;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -955,8 +1290,19 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
 }
 
 .letter-music-btn:hover {
-  background: #f4e1eb;
+  background: rgba(255, 255, 255, 0.18);
   transform: translateY(-1px);
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-music-btn {
+  background: #f8eef3;
+  border-color: #ebd3df;
+  color: #6e0e33;
+  font-weight: 700;
+}
+
+.ivraine-monthsary-modal-overlay[data-theme="light"] .letter-music-btn:hover {
+  background: #f4e1eb;
 }
 
 .letter-music-btn.playing {
@@ -994,20 +1340,20 @@ body:has(.ivraine-proposal-prompt-pill) .ivraine-3d-monthsary-fab {
   color: #ffffff;
   border: none;
   border-radius: 25px;
-  padding: 10px 20px;
+  padding: 10px 22px;
   font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.35);
+  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.4);
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .letter-heart-send-btn:hover {
   transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 12px 28px rgba(214, 51, 132, 0.55);
+  box-shadow: 0 12px 28px rgba(214, 51, 132, 0.6);
 }
 
 .letter-heart-send-btn:active {
