@@ -512,6 +512,46 @@
       color: #fff;
     }
 
+    /* Option Cards for Proposal Controls & Default Entry */
+    .proposal-mode-option,
+    .entry-dest-option {
+      background: #201a2b;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .proposal-mode-option:hover,
+    .entry-dest-option:hover {
+      border-color: rgba(255, 107, 129, 0.5);
+      background: #272033;
+      transform: translateY(-2px);
+    }
+    .proposal-mode-option.selected,
+    .entry-dest-option.selected {
+      border-color: var(--pink) !important;
+      background: rgba(214, 51, 132, 0.12) !important;
+      box-shadow: 0 4px 18px var(--pink-glow);
+    }
+    .mode-radio-check,
+    .dest-radio-check {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: inline-block;
+      transition: all 0.2s ease;
+    }
+    .proposal-mode-option.selected .mode-radio-check,
+    .entry-dest-option.selected .dest-radio-check {
+      border-color: var(--pink);
+      background: var(--pink);
+      box-shadow: 0 0 8px var(--pink);
+    }
+
     /* Location Cards & Map Elements */
     .location-card {
       background: #231c2d;
@@ -1510,7 +1550,7 @@
     <div class="nav-actions">
       <span id="current-ip-indicator" style="font-size:11px;color:#7dd3fc;background:#1e293b;padding:4px 8px;border-radius:6px;font-family:monospace;">Your IP: Loading...</span>
       <button class="nav-btn" id="btn-refresh" title="Refresh logs">🔄 Refresh</button>
-      <a class="nav-btn" href="/legacy/index.html" target="_blank">📖 Scrapbook ↗</a>
+      <a class="nav-btn" href="/legacy/index.html?legacy=true" target="_blank">📖 Scrapbook ↗</a>
       <a class="nav-btn" href="/index.html?space=true" target="_blank">♡ Private Space ↗</a>
       <button class="nav-btn" id="btn-lock">🔒 Lock</button>
     </div>
@@ -1651,6 +1691,110 @@
 
     <!-- TAB 3: SCRAPBOOK & PROPOSAL -->
     <section class="content-panel" id="tab-scrapbook">
+      <!-- Proposal Visibility Controls Card -->
+      <div class="info-card" id="card-proposal-controls">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="margin-bottom:4px;">Proposal &amp; Floating "Open this" Button</h3>
+            <p style="color:var(--muted);font-size:13px;margin:0;">
+              Control visibility of the floating prompt pill and "Would you go out with me?" proposal modal across the site.
+            </p>
+          </div>
+          <span id="proposal-vis-badge" style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(46,204,113,0.15);color:#2ecc71;border:1px solid rgba(46,204,113,0.3);text-transform:uppercase;letter-spacing:0.5px;">
+            ● Visible
+          </span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-top:16px;margin-bottom:16px;">
+          <!-- Option 1: Visible -->
+          <div class="proposal-mode-option selected" id="opt-proposal-visible" data-value="visible">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:18px;">👁️</span>
+              <span class="mode-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Make Visible</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Floating "Open this ♡" prompt and proposal modal are shown to visitors.
+            </p>
+          </div>
+
+          <!-- Option 2: Hidden -->
+          <div class="proposal-mode-option" id="opt-proposal-hidden" data-value="hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:18px;">🙈</span>
+              <span class="mode-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Hide Button &amp; Popup</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Hides floating prompt pill and auto popup from visitors. Still testable by admin.
+            </p>
+          </div>
+
+          <!-- Option 3: Removed -->
+          <div class="proposal-mode-option" id="opt-proposal-removed" data-value="removed">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:18px;">🚫</span>
+              <span class="mode-radio-check"></span>
+            </div>
+            <strong style="color:#ff6b81;font-size:14px;display:block;margin-bottom:4px;">Remove Entirely</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Completely disables the proposal modal, floating prompt, and question triggers everywhere.
+            </p>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+          <button class="nav-btn primary" id="btn-save-proposal-vis">💾 Save Proposal Visibility</button>
+          <span id="proposal-vis-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+
+      <!-- Default App Entry Destination (ivraine.space direct link / PWA) -->
+      <div class="info-card" id="card-default-entry-controls">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="margin-bottom:4px;">Default App Entry Destination (Direct Link &amp; PWA)</h3>
+            <p style="color:var(--muted);font-size:13px;margin:0;">
+              Choose which section opens when visitors visit <code>ivraine.space</code>, <code>/</code>, or launch the installed PWA / Android app.
+            </p>
+          </div>
+          <span id="default-entry-badge" style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(125,211,252,0.15);color:#7dd3fc;border:1px solid rgba(125,211,252,0.3);text-transform:uppercase;letter-spacing:0.5px;">
+            📖 Scrapbook
+          </span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-top:16px;margin-bottom:16px;">
+          <!-- Option A: Scrapbook -->
+          <div class="entry-dest-option selected" id="dest-opt-scrapbook" data-value="scrapbook">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:22px;">📖</span>
+              <span class="dest-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Original Sealed Scrapbook</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Direct link and PWA open the sealed scrapbook (<code>/legacy/index.html</code>) with passcode decryption.
+            </p>
+          </div>
+
+          <!-- Option B: Private Space -->
+          <div class="entry-dest-option" id="dest-opt-space" data-value="space">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:22px;">♡</span>
+              <span class="dest-radio-check"></span>
+            </div>
+            <strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px;">Private Space (Interactive Web App)</strong>
+            <p style="color:var(--muted);font-size:12px;line-height:1.4;margin:0;">
+              Direct link and PWA open the interactive private space (<code>/index.html?space=true#story</code>) with timeline, letters, and gallery.
+            </p>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+          <button class="nav-btn primary" id="btn-save-default-entry">💾 Save Entry Destination</button>
+          <span id="default-entry-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+
       <div class="info-card">
         <h3>"Would You Go Out With Me?" Proposal Tester</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">

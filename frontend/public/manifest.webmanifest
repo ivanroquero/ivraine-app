@@ -4,7 +4,7 @@
   "short_name": "Ivraine",
   "description": "Our little scrapbook. Just between us.",
   "lang": "en",
-  "start_url": "/legacy/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

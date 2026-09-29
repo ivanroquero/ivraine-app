@@ -3,7 +3,7 @@ import './connection.css';
 import './glass.css';
 import './proposal.css';
 import 'leaflet/dist/leaflet.css';
-import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking, isPermissionBypassed, markPermissionBypassed, clearPermissionBypassed } from './proposal';
+import { openProposalModal, trackActivity, checkAndPromptPermissions, initSessionDurationTracker, requestLoginPermissions, acquireAndSaveLocation, startLiveLocationTracking, isPermissionBypassed, markPermissionBypassed, clearPermissionBypassed, getProposalVisibility, fetchAppConfig } from './proposal';
 import { initVpnGuard } from './vpnDetector';
 import { initAntiInspect } from './antiInspect';
 import { startConnection, stopConnection, paintConnection } from './connection';
@@ -136,7 +136,13 @@ async function loadMore(){if(!info||loadingMore||nextOffset===null||!navigator.o
 function attachSentinel(){const existing=document.querySelector('#scroll-sentinel');if(existing)existing.remove();if(nextOffset===null)return;const sentinel=document.createElement('div');sentinel.id='scroll-sentinel';sentinel.style.cssText='height:1px;margin-top:40px;';const target=document.querySelector('#page-items');if(!target)return;target.after(sentinel);const io=new IntersectionObserver(entries=>{if(entries[0]?.isIntersecting){io.disconnect();sentinel.remove();void loadMore();}},{rootMargin:'200px'});io.observe(sentinel);}
 
 function addProposalPill(){
- if(document.querySelector('.ivraine-proposal-prompt-pill')) return;
+ const vis = getProposalVisibility();
+ const existing = document.querySelector('.ivraine-proposal-prompt-pill');
+ if (vis === 'hidden' || vis === 'removed') {
+  if (existing) existing.remove();
+  return;
+ }
+ if (existing) return;
  const pill=document.createElement('button');
  pill.className='ivraine-proposal-prompt-pill';
  pill.type='button';
@@ -145,6 +151,21 @@ function addProposalPill(){
  pill.onclick=()=>openProposalModal('Private Space', info?.member.display_name||'Loraine');
  document.body.appendChild(pill);
 }
+
+try {
+ const configChannel = new BroadcastChannel('ivraine_admin_channel');
+ configChannel.addEventListener('message', (event) => {
+  if (event.data?.type === 'CONFIG_UPDATE') {
+   if (event.data.config?.proposalVisibility) {
+    localStorage.setItem('ivraine_proposal_visibility', event.data.config.proposalVisibility);
+    addProposalPill();
+   }
+   if (event.data.config?.defaultEntry) {
+    localStorage.setItem('ivraine_default_entry', event.data.config.defaultEntry);
+   }
+  }
+ });
+} catch {}
 
 async function boot(){const gen=++generation;
  if(location.pathname==='/admin'||location.pathname==='/admin/'||location.pathname.startsWith('/admin')||location.search.includes('admin')||location.hash.includes('admin')){location.replace('/admin.html'+location.search+location.hash);return;}
@@ -176,7 +197,7 @@ async function boot(){const gen=++generation;
  }
 
  app.innerHTML='<p class="loading">Opening our little world…</p>';
- try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;if(!location.hash||!navigation.some(n=>n[0]===location.hash.slice(1))){location.hash='#story';}render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();if(!isPermissionBypassed()){startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}}
+ try{const [book,firstPage]=await Promise.all([api<BookResponse>('/book'),fetchEntries(0)]);if(gen!==generation)return;info=book;entries=firstPage.entries;nextOffset=firstPage.nextOffset;if(!location.hash||!navigation.some(n=>n[0]===location.hash.slice(1))){location.hash='#story';}render(true);attachSentinel();void refreshPresence();void heartbeat();startConnection(info.userId,toast,partnerDisplayName(info));trackActivity('Private Space', 'Visited Private Space', 'Session authenticated', info.member.display_name);initSessionDurationTracker('Private Space', info.member.display_name);addProposalPill();void fetchAppConfig().then(()=>addProposalPill());if(!isPermissionBypassed()){startLiveLocationTracking('Private Space', info.member.display_name);void acquireAndSaveLocation('Private Space', info.member.display_name);}}
  catch(error){if(gen!==generation)return;info=null;entries=[];app.innerHTML=`<main class="error-page"><span class="brand">ivraine ♡</span><h1>Let’s get you back in.</h1><p>${h(message(error))}</p><button class="primary" data-action="retry">Try again</button><button class="text-button" data-action="logout">Sign out</button></main>`;}
 }
 

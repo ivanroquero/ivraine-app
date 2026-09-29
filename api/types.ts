@@ -229,3 +229,24 @@ export interface VpnCheckResponse {
   clientIp: string;
   details: VpnCheckDetails;
 }
+
+// -----------------------------------------------------------------------------
+// Endpoint 7: /api/config
+// -----------------------------------------------------------------------------
+export type ProposalVisibility = 'visible' | 'hidden' | 'removed';
+export type DefaultEntryDestination = 'scrapbook' | 'space';
+
+export interface AppConfig {
+  proposalVisibility: ProposalVisibility;
+  defaultEntry: DefaultEntryDestination;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface AppConfigResponse {
+  status?: 'ok' | 'error';
+  success?: boolean;
+  config: AppConfig;
+  error?: string;
+}
+

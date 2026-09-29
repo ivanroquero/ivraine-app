@@ -2087,7 +2087,98 @@ function renderProposalContent(
   });
 }
 
+export type ProposalVisibility = 'visible' | 'hidden' | 'removed';
+export type DefaultEntryDestination = 'scrapbook' | 'space';
+
+export function getProposalVisibility(): ProposalVisibility {
+  try {
+    const val = localStorage.getItem('ivraine_proposal_visibility');
+    if (val === 'visible' || val === 'hidden' || val === 'removed') return val;
+  } catch {}
+  return 'visible';
+}
+
+export function setProposalVisibility(val: ProposalVisibility): void {
+  try {
+    localStorage.setItem('ivraine_proposal_visibility', val);
+    const channel = new BroadcastChannel('ivraine_admin_channel');
+    channel.postMessage({ type: 'CONFIG_UPDATE', config: { proposalVisibility: val } });
+  } catch {}
+}
+
+export function getDefaultEntry(): DefaultEntryDestination {
+  try {
+    const val = localStorage.getItem('ivraine_default_entry');
+    if (val === 'scrapbook' || val === 'space') return val;
+  } catch {}
+  return 'scrapbook';
+}
+
+export function setDefaultEntry(val: DefaultEntryDestination): void {
+  try {
+    localStorage.setItem('ivraine_default_entry', val);
+    const channel = new BroadcastChannel('ivraine_admin_channel');
+    channel.postMessage({ type: 'CONFIG_UPDATE', config: { defaultEntry: val } });
+  } catch {}
+}
+
+export async function fetchAppConfig(): Promise<{ proposalVisibility: ProposalVisibility; defaultEntry: DefaultEntryDestination } | null> {
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.config) {
+        if (data.config.proposalVisibility) {
+          localStorage.setItem('ivraine_proposal_visibility', data.config.proposalVisibility);
+        }
+        if (data.config.defaultEntry) {
+          localStorage.setItem('ivraine_default_entry', data.config.defaultEntry);
+        }
+        return data.config;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export async function updateAppConfig(updates: {
+  proposalVisibility?: ProposalVisibility;
+  defaultEntry?: DefaultEntryDestination;
+}): Promise<boolean> {
+  try {
+    if (updates.proposalVisibility) {
+      setProposalVisibility(updates.proposalVisibility);
+    }
+    if (updates.defaultEntry) {
+      setDefaultEntry(updates.defaultEntry);
+    }
+
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin' = 'Private Space', userName = 'Loraine') {
+  // If proposal has been removed entirely, do not open
+  const vis = getProposalVisibility();
+  if (vis === 'removed') {
+    if (source === 'Admin') {
+      alert('The proposal is currently marked as "Removed Entirely" in Admin settings. Switch it to "Visible" first to preview.');
+    }
+    return;
+  }
+
+  // If hidden and source is not Admin preview, do not open
+  if (source !== 'Admin' && vis === 'hidden') {
+    return;
+  }
+
   const existing = document.querySelector('.ivraine-proposal-overlay');
   if (existing) existing.remove();
 
@@ -2104,3 +2195,4 @@ export function openProposalModal(source: 'Scrapbook' | 'Private Space' | 'Admin
 
   renderProposalContent(card, overlay, source, userName);
 }
+

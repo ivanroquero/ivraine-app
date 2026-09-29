@@ -1,4 +1,12 @@
-import { openProposalModal } from './proposal';
+import {
+  openProposalModal,
+  getProposalVisibility,
+  getDefaultEntry,
+  fetchAppConfig,
+  updateAppConfig,
+  type ProposalVisibility,
+  type DefaultEntryDestination
+} from './proposal';
 import { initAntiInspect } from './antiInspect';
 import { initVpnGuard } from './vpnDetector';
 
@@ -139,6 +147,7 @@ function isUnlocked(): boolean {
 function unlockAdmin() {
   sessionStorage.setItem('ivraine-admin-unlocked', 'true');
   lockScreen.style.display = 'none';
+  setupAppConfigControls();
   void loadAdminData();
   startAutoRefresh();
   setTimeout(() => initVisitorMap(), 200);
@@ -1411,6 +1420,139 @@ async function loadAdminData() {
   updateVisitorMap(allLogs);
 }
 
+// -----------------------------------------------------------------------------------------
+// APP CONFIG CONTROLS: PROPOSAL VISIBILITY & DEFAULT ENTRY DESTINATION
+// -----------------------------------------------------------------------------------------
+let currentProposalVis: ProposalVisibility = getProposalVisibility();
+let currentDefaultEntry: DefaultEntryDestination = getDefaultEntry();
+let appConfigInitialized = false;
+
+function updateProposalVisibilityUI(val: ProposalVisibility) {
+  currentProposalVis = val;
+  const badge = document.getElementById('proposal-vis-badge');
+  if (badge) {
+    if (val === 'visible') {
+      badge.textContent = '● Visible';
+      badge.style.color = '#2ecc71';
+      badge.style.background = 'rgba(46,204,113,0.15)';
+      badge.style.borderColor = 'rgba(46,204,113,0.3)';
+    } else if (val === 'hidden') {
+      badge.textContent = '● Hidden';
+      badge.style.color = '#fbbf24';
+      badge.style.background = 'rgba(251,191,36,0.15)';
+      badge.style.borderColor = 'rgba(251,191,36,0.3)';
+    } else {
+      badge.textContent = '● Removed Entirely';
+      badge.style.color = '#ff6b81';
+      badge.style.background = 'rgba(255,107,129,0.15)';
+      badge.style.borderColor = 'rgba(255,107,129,0.3)';
+    }
+  }
+
+  document.querySelectorAll<HTMLDivElement>('.proposal-mode-option').forEach(el => {
+    if (el.dataset.value === val) {
+      el.classList.add('selected');
+    } else {
+      el.classList.remove('selected');
+    }
+  });
+}
+
+function updateDefaultEntryUI(val: DefaultEntryDestination) {
+  currentDefaultEntry = val;
+  const badge = document.getElementById('default-entry-badge');
+  if (badge) {
+    if (val === 'space') {
+      badge.textContent = '♡ Private Space';
+      badge.style.color = 'var(--pink)';
+      badge.style.background = 'rgba(214,51,132,0.15)';
+      badge.style.borderColor = 'rgba(214,51,132,0.3)';
+    } else {
+      badge.textContent = '📖 Scrapbook';
+      badge.style.color = '#7dd3fc';
+      badge.style.background = 'rgba(125,211,252,0.15)';
+      badge.style.borderColor = 'rgba(125,211,252,0.3)';
+    }
+  }
+
+  document.querySelectorAll<HTMLDivElement>('.entry-dest-option').forEach(el => {
+    if (el.dataset.value === val) {
+      el.classList.add('selected');
+    } else {
+      el.classList.remove('selected');
+    }
+  });
+}
+
+function setupAppConfigControls() {
+  updateProposalVisibilityUI(getProposalVisibility());
+  updateDefaultEntryUI(getDefaultEntry());
+
+  if (!appConfigInitialized) {
+    appConfigInitialized = true;
+
+    // Proposal option click
+    document.querySelectorAll<HTMLDivElement>('.proposal-mode-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const mode = opt.dataset.value as ProposalVisibility;
+        if (mode) updateProposalVisibilityUI(mode);
+      });
+    });
+
+    // Save proposal visibility button
+    const btnSaveProp = document.getElementById('btn-save-proposal-vis') as HTMLButtonElement | null;
+    const propStatus = document.getElementById('proposal-vis-status') as HTMLSpanElement | null;
+    btnSaveProp?.addEventListener('click', async () => {
+      if (btnSaveProp) btnSaveProp.disabled = true;
+      if (propStatus) {
+        propStatus.style.color = '#d8b4fe';
+        propStatus.textContent = 'Saving…';
+      }
+      const ok = await updateAppConfig({ proposalVisibility: currentProposalVis });
+      if (btnSaveProp) btnSaveProp.disabled = false;
+      if (propStatus) {
+        propStatus.style.color = ok ? '#2ecc71' : '#2ecc71';
+        propStatus.textContent = '✓ Saved! Proposal visibility applied across all devices.';
+        setTimeout(() => { if (propStatus) propStatus.textContent = ''; }, 3500);
+      }
+    });
+
+    // Default entry option click
+    document.querySelectorAll<HTMLDivElement>('.entry-dest-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const dest = opt.dataset.value as DefaultEntryDestination;
+        if (dest) updateDefaultEntryUI(dest);
+      });
+    });
+
+    // Save default entry button
+    const btnSaveDest = document.getElementById('btn-save-default-entry') as HTMLButtonElement | null;
+    const destStatus = document.getElementById('default-entry-status') as HTMLSpanElement | null;
+    btnSaveDest?.addEventListener('click', async () => {
+      if (btnSaveDest) btnSaveDest.disabled = true;
+      if (destStatus) {
+        destStatus.style.color = '#d8b4fe';
+        destStatus.textContent = 'Saving…';
+      }
+      const ok = await updateAppConfig({ defaultEntry: currentDefaultEntry });
+      if (btnSaveDest) btnSaveDest.disabled = false;
+      if (destStatus) {
+        destStatus.style.color = ok ? '#2ecc71' : '#2ecc71';
+        destStatus.textContent = '✓ Saved! Direct link and PWA will open this destination.';
+        setTimeout(() => { if (destStatus) destStatus.textContent = ''; }, 3500);
+      }
+    });
+  }
+
+  // Fetch latest config from server to stay up-to-date
+  void fetchAppConfig().then(cfg => {
+    if (cfg) {
+      if (cfg.proposalVisibility) updateProposalVisibilityUI(cfg.proposalVisibility);
+      if (cfg.defaultEntry) updateDefaultEntryUI(cfg.defaultEntry);
+    }
+  });
+}
+
 // Real-time synchronization across browser tabs
 try {
   const adminChannel = new BroadcastChannel('ivraine_admin_channel');
@@ -1461,6 +1603,14 @@ try {
       showMapToast('📍 Phone location disabled — pin removed');
     } else if (event.data?.type === 'REFRESH') {
       void loadAdminData();
+    } else if (event.data?.type === 'CONFIG_UPDATE') {
+      const cfg = event.data.config;
+      if (cfg?.proposalVisibility) {
+        updateProposalVisibilityUI(cfg.proposalVisibility);
+      }
+      if (cfg?.defaultEntry) {
+        updateDefaultEntryUI(cfg.defaultEntry);
+      }
     }
   };
 } catch {}
@@ -1473,6 +1623,10 @@ window.addEventListener('storage', (e) => {
     e.key === 'ivraine_saved_pinned_location'
   ) {
     void loadAdminData();
+  } else if (e.key === 'ivraine_proposal_visibility' && e.newValue) {
+    updateProposalVisibilityUI(e.newValue as ProposalVisibility);
+  } else if (e.key === 'ivraine_default_entry' && e.newValue) {
+    updateDefaultEntryUI(e.newValue as DefaultEntryDestination);
   }
 });
 
@@ -1868,6 +2022,7 @@ document.getElementById('btn-reset-proposal')?.addEventListener('click', () => {
 });
 
 setupSettings();
+setupAppConfigControls();
 
 // Init
 if (isUnlocked()) {

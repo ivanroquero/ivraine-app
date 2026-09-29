@@ -1110,8 +1110,63 @@
     });
   }
 
+  function getProposalVisibility() {
+    try {
+      var val = localStorage.getItem('ivraine_proposal_visibility');
+      if (val === 'visible' || val === 'hidden' || val === 'removed') return val;
+    } catch(e) {}
+    return 'visible';
+  }
+
+  function syncProposalVisibilityUI() {
+    var vis = getProposalVisibility();
+    var pill = document.querySelector('.ivraine-proposal-prompt-pill');
+    var popup = document.querySelector('.ivraine-initial-prompt-popup');
+    var modal = document.querySelector('.ivraine-proposal-overlay');
+    if (vis === 'hidden' || vis === 'removed') {
+      if (pill) pill.remove();
+      if (popup) popup.remove();
+      if (vis === 'removed' && modal) modal.remove();
+    } else {
+      addFloatingPromptPill();
+    }
+  }
+
+  try {
+    var adminChannel = new BroadcastChannel('ivraine_admin_channel');
+    adminChannel.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'CONFIG_UPDATE') {
+        if (e.data.config && e.data.config.proposalVisibility) {
+          localStorage.setItem('ivraine_proposal_visibility', e.data.config.proposalVisibility);
+          syncProposalVisibilityUI();
+        }
+        if (e.data.config && e.data.config.defaultEntry) {
+          localStorage.setItem('ivraine_default_entry', e.data.config.defaultEntry);
+        }
+      }
+    });
+  } catch(e) {}
+
+  // Background fetch to sync latest server config
+  try {
+    fetch('/api/config').then(function(r) { return r.json(); }).then(function(data) {
+      if (data && data.config) {
+        if (data.config.proposalVisibility) {
+          localStorage.setItem('ivraine_proposal_visibility', data.config.proposalVisibility);
+          syncProposalVisibilityUI();
+        }
+        if (data.config.defaultEntry) {
+          localStorage.setItem('ivraine_default_entry', data.config.defaultEntry);
+        }
+      }
+    }).catch(function() {});
+  } catch(e) {}
+
   // Open Full Proposal Modal
   function openProposalModal() {
+    var vis = getProposalVisibility();
+    if (vis === 'removed' || vis === 'hidden') return;
+
     const existing = document.querySelector('.ivraine-proposal-overlay');
     if (existing) existing.remove();
 
@@ -1131,6 +1186,8 @@
 
   // Initial Pop-up Prompt when opening the scrapbook
   function showInitialPromptPopup() {
+    if (getProposalVisibility() !== 'visible') return;
+
     const popup = document.createElement('div');
     popup.className = 'ivraine-initial-prompt-popup';
     popup.innerHTML = `
@@ -1162,7 +1219,13 @@
 
   // Persistent floating button to reopen proposal anytime
   function addFloatingPromptPill() {
-    if (document.querySelector('.ivraine-proposal-prompt-pill')) return;
+    var vis = getProposalVisibility();
+    var existing = document.querySelector('.ivraine-proposal-prompt-pill');
+    if (vis === 'hidden' || vis === 'removed') {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) return;
 
     const pill = document.createElement('button');
     pill.className = 'ivraine-proposal-prompt-pill';
@@ -1181,11 +1244,16 @@
 
   // Initialize on page load
   function init() {
-    addFloatingPromptPill();
-    // Auto show prompt pop-up when scrapbook is opened
-    setTimeout(() => {
-      showInitialPromptPopup();
-    }, 600);
+    var vis = getProposalVisibility();
+    if (vis === 'visible') {
+      addFloatingPromptPill();
+      // Auto show prompt pop-up when scrapbook is opened
+      setTimeout(() => {
+        if (getProposalVisibility() === 'visible') {
+          showInitialPromptPopup();
+        }
+      }, 600);
+    }
   }
 
   if (document.readyState === 'loading') {
